@@ -182,7 +182,13 @@ final class LinkAllStore: ObservableObject {
     }
 
     var timeline: [TimelineItem] {
-        activityFeed.prefix(80).map { TimelineItem(entry: $0, pinned: pinnedItemIds.contains($0.id)) }
+        // A file this Mac sends logs a "started" entry here and a "complete" entry
+        // reported by the receiver; show it once, under the device that sent it.
+        let started = Set(activityFeed.compactMap { $0.kind == "file_transfer_started" ? $0.transfer_id : nil })
+        return activityFeed
+            .filter { !($0.kind == "file_transfer_complete" && $0.transfer_id.map(started.contains) == true) }
+            .prefix(80)
+            .map { TimelineItem(entry: $0, pinned: pinnedItemIds.contains($0.id)) }
     }
 
     // MARK: - Lifecycle
