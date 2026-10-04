@@ -948,6 +948,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func showPanel(_ controller: NSWindowController?) {
         guard let window = controller?.window else { return }
+        NSApp.unhide(nil)
         NSApp.activate(ignoringOtherApps: true)
         Self.fit(window: window)
         window.makeKeyAndOrderFront(nil)
@@ -1210,6 +1211,9 @@ extension AppDelegate: MenuBarDropViewDelegate {
             let y = screenRect.minY - panelHeight - 2
             
             menuPanel.setFrame(NSRect(x: x, y: y, width: panelWidth, height: panelHeight), display: true)
+            // A hidden app (Hide Others, or ⌘H in the dashboard) shows none of its
+            // windows, so the panel stayed invisible until the app was unhidden.
+            NSApp.unhide(nil)
             menuPanel.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             
