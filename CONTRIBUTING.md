@@ -22,7 +22,7 @@ This document covers how to set up the development environment, project conventi
 
 ```bash
 git clone https://github.com/ChinmayyK/Link-All
-cd deskdrop
+cd Link-All
 
 # Core library + daemon + CLI
 cargo build
