@@ -37,6 +37,8 @@ struct MenuBarPopoverView: View {
                             .font(.system(size: 14, weight: .bold, design: .rounded))
                             .foregroundStyle(Color.primary)
                             .lineLimit(1)
+                            // "4 devices connected" is a little wider than the space beside the buttons.
+                            .minimumScaleFactor(0.8)
                         
                         if let status = store.dashboardStatus, let sync = status.lastSyncAt {
                             Text("Last sync: \(sync.relativeTimeString())")
