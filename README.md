@@ -130,8 +130,8 @@ To clean, recompile the core Rust daemon, and install both the macOS application
 
 ```bash
 # Clone repository
-git clone https://github.com/ChinmayyK/Deskdrop.git
-cd Deskdrop
+git clone https://github.com/ChinmayyK/Link-All.git
+cd Link-All
 
 # Compile and install targets in Debug mode
 ./scripts/reinstall-all.sh --debug

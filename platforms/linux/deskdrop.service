@@ -9,7 +9,7 @@
 
 [Unit]
 Description=Link All — files, clipboard and more between your devices
-Documentation=https://github.com/deskdrop/deskdrop
+Documentation=https://github.com/ChinmayyK/Link-All
 # Network must be available before we start (mDNS discovery won't work otherwise).
 After=network-online.target
 Wants=network-online.target

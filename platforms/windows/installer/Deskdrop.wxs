@@ -39,12 +39,12 @@
     <!-- Icons -->
     <Icon Id="DeskdropIco" SourceFile="Assets\deskdrop.ico" />
     <Property Id="ARPPRODUCTICON" Value="DeskdropIco" />
-    <Property Id="ARPHELPLINK"    Value="https://github.com/ChinmayyK/Deskdrop" />
+    <Property Id="ARPHELPLINK"    Value="https://github.com/ChinmayyK/Link-All" />
     <!-- Installed apps: the details pane under Settings > Apps. -->
     <Property Id="ARPCOMMENTS"      Value="Share your clipboard, files and folders between your devices over your own network." />
-    <Property Id="ARPCONTACT"       Value="https://github.com/ChinmayyK/Deskdrop/issues" />
-    <Property Id="ARPURLINFOABOUT"  Value="https://github.com/ChinmayyK/Deskdrop" />
-    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/ChinmayyK/Deskdrop/releases" />
+    <Property Id="ARPCONTACT"       Value="https://github.com/ChinmayyK/Link-All/issues" />
+    <Property Id="ARPURLINFOABOUT"  Value="https://github.com/ChinmayyK/Link-All" />
+    <Property Id="ARPURLUPDATEINFO" Value="https://github.com/ChinmayyK/Link-All/releases" />
 
     <!-- AUTOSTART=1 on the msiexec command line (IT deployment) starts
          Deskdrop in the tray at sign-in. Off by default: the app's Settings
