@@ -992,7 +992,7 @@ final class DeskdropStore: ObservableObject {
             let tempRoot = FileManager.default.temporaryDirectory
                 .appendingPathComponent("deskdrop-clipboard-archives", isDirectory: true)
             let stagingDir = tempRoot.appendingPathComponent(UUID().uuidString, isDirectory: true)
-            let archiveURL = tempRoot.appendingPathComponent("Deskdrop Bundle \(stamp).zip")
+            let archiveURL = tempRoot.appendingPathComponent("Link All Bundle \(stamp).zip")
 
             do {
                 try FileManager.default.createDirectory(

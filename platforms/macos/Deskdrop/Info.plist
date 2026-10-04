@@ -5,19 +5,19 @@
 	<key>ATSApplicationFontsPath</key>
 	<string>Fonts</string>
 	<key>CFBundleDisplayName</key>
-	<string>Deskdrop</string>
+	<string>Link All</string>
 	<key>CFBundleExecutable</key>
-	<string>Deskdrop</string>
+	<string>Link All</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.deskdrop.Deskdrop</string>
+	<string>app.linkall.mac</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>Deskdrop</string>
+	<string>Link All</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -39,11 +39,11 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Deskdrop uses your local network to sync clipboard content between your nearby devices.</string>
+	<string>Link All uses your local network to sync clipboard content between your nearby devices.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
 	<true/>
 	<key>NSUserNotificationsUsageDescription</key>
-	<string>Deskdrop shows notifications when clipboard content is received from another device.</string>
+	<string>Link All shows notifications when clipboard content is received from another device.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Inter-Regular.ttf</string>
@@ -57,12 +57,12 @@
 			<key>NSMenuItem</key>
 			<dict>
 				<key>default</key>
-				<string>Send via Deskdrop</string>
+				<string>Send via Link All</string>
 			</dict>
 			<key>NSMessage</key>
 			<string>handleDropService</string>
 			<key>NSPortName</key>
-			<string>Deskdrop</string>
+			<string>Link All</string>
 			<key>NSSendTypes</key>
 			<array>
 				<string>public.file-url</string>

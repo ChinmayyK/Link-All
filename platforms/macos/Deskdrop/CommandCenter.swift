@@ -875,7 +875,7 @@ struct TransferAnalyticsWidget: View {
                     }
                     
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("DESKDROP WRAPPED")
+                        Text("LINK ALL WRAPPED")
                             .font(.system(size: 10, weight: .bold, design: .rounded))
                             .foregroundStyle(Color.secondary)
                             .tracking(0.5)
@@ -985,7 +985,7 @@ struct RadarEmptyStateView: View {
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(CRTheme.ink)
                 
-                Text("Make sure your phone is on the same Wi-Fi and Deskdrop is open.")
+                Text("Make sure your phone is on the same Wi-Fi and Link All is open.")
                     .font(.system(size: 14))
                     .foregroundStyle(CRTheme.inkSoft)
                     .multilineTextAlignment(.center)

@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         startMacScreenshotObserver()
         
         // Prevent App Nap to ensure background daemon and network sync stay responsive
-        activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Deskdrop Background Sync")
+        activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Link All Background Sync")
     }
 
     /// Copies Deskdrop into ~/Applications and relaunches from there if it's
@@ -238,7 +238,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             dropView.delegate  = self
             button.addSubview(dropView)
             menuBarDropView = dropView
-            button.toolTip  = "Deskdrop — Drag files or folders here to send to your device"
+            button.toolTip  = "Link All — Drag files or folders here to send to your device"
             
             button.window?.registerForDraggedTypes([
                 .fileURL,
@@ -290,16 +290,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         mainMenu.addItem(appMenuItem)
         let appMenu = NSMenu()
         appMenuItem.submenu = appMenu
-        appMenu.addItem(withTitle: "About Deskdrop", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About Link All", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
         appMenu.addItem(withTitle: "Preferences...", action: #selector(openPreferencesFromMenu), keyEquivalent: ",")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Hide Deskdrop", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "Hide Link All", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
         let hideOthers = appMenu.addItem(withTitle: "Hide Others", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
         hideOthers.keyEquivalentModifierMask = [.command, .option]
         appMenu.addItem(withTitle: "Show All", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
         appMenu.addItem(NSMenuItem.separator())
-        appMenu.addItem(withTitle: "Quit Deskdrop", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit Link All", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
 
         // 2. File Menu
         let fileMenuItem = NSMenuItem()
@@ -373,7 +373,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let size = NSSize(width: 16, height: 16)
         let image = NSImage(size: size)
         
-        guard let symbol = NSImage(systemSymbolName: "arrow.down.doc.fill", accessibilityDescription: "Deskdrop") else { return nil }
+        guard let symbol = NSImage(systemSymbolName: "arrow.down.doc.fill", accessibilityDescription: "Link All") else { return nil }
         
         let config = NSImage.SymbolConfiguration(pointSize: 14, weight: .regular)
         let configuredSymbol = symbol.withSymbolConfiguration(config) ?? symbol
@@ -397,7 +397,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let size = NSSize(width: 18, height: 16)
         let image = NSImage(size: size)
         
-        guard let symbol = NSImage(systemSymbolName: "laptopcomputer.and.iphone", accessibilityDescription: "Deskdrop") else {
+        guard let symbol = NSImage(systemSymbolName: "laptopcomputer.and.iphone", accessibilityDescription: "Link All") else {
             return statusBarImageOriginal()
         }
         
@@ -422,7 +422,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     private func setupWindows() {
         dashboardController = Self.makeWindow(
-            title: "Deskdrop",
+            title: "Link All",
             size:  NSSize(width: 1200, height: 760),
             rootView: RootContainerView(store: store)
         )
@@ -445,7 +445,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         store.$statusLine
             .receive(on: RunLoop.main)
             .sink { [weak self] banner in
-                self?.statusItem.button?.toolTip = "Deskdrop • \(banner)"
+                self?.statusItem.button?.toolTip = "Link All • \(banner)"
             }
             .store(in: &cancellables)
 
@@ -559,7 +559,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             let content = UNMutableNotificationContent()
             content.title = "\(device.name) wants to pair"
             content.body = code.isEmpty
-                ? "Open Deskdrop to compare the security code."
+                ? "Open Link All to compare the security code."
                 : "Code \(code). Accept only if \(device.name) shows the same code."
             content.sound = .default
             content.categoryIdentifier = Self.pairingCategory
@@ -685,7 +685,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 Task.detached {
                     let currentUrl = URL(fileURLWithPath: destPath)
                     guard let downloadsDir = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first else { return }
-                    let deskdropDir = downloadsDir.appendingPathComponent("Deskdrop")
+                    let deskdropDir = downloadsDir.appendingPathComponent("Link All")
                     let screenshotsDir = deskdropDir.appendingPathComponent("android_screenshot")
                     
                     try? FileManager.default.createDirectory(at: screenshotsDir, withIntermediateDirectories: true)
@@ -834,7 +834,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard pendingCount > 0 else {
             button.image = baseImage
             button.imageScaling = .scaleProportionallyUpOrDown
-            button.toolTip = "Deskdrop"
+            button.toolTip = "Link All"
             return
         }
 
@@ -868,7 +868,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         badged.isTemplate = false
         button.image = badged
         button.imageScaling = .scaleProportionallyUpOrDown
-        button.toolTip = "Deskdrop • \(pendingCount) clipboard item\(pendingCount == 1 ? "" : "s") waiting — click to apply"
+        button.toolTip = "Link All • \(pendingCount) clipboard item\(pendingCount == 1 ? "" : "s") waiting — click to apply"
         menuBarDropView?.badgeCount = pendingCount
     }
 

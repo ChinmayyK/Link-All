@@ -137,7 +137,7 @@ final class CallBannerWindowManager: NSObject {
 private final class CallBannerHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let view = super.hitTest(point)
-        NSLog("Deskdrop DEBUG: CallBannerHostingView hitTest at point: \(point), returned: \(String(describing: view))")
+        NSLog("Link All DEBUG: CallBannerHostingView hitTest at point: \(point), returned: \(String(describing: view))")
         return view
     }
 }
@@ -166,7 +166,7 @@ private final class CallBannerPanel: NSPanel {
 
     override func sendEvent(_ event: NSEvent) {
         if event.type == .leftMouseDown {
-            NSLog("Deskdrop DEBUG: Window received leftMouseDown event at location: \(event.locationInWindow)")
+            NSLog("Link All DEBUG: Window received leftMouseDown event at location: \(event.locationInWindow)")
         }
         super.sendEvent(event)
     }

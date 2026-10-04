@@ -153,7 +153,7 @@ private struct StepOneFindDevice: View {
                     .font(.system(size: 36, weight: .bold, design: .rounded))
                     .foregroundStyle(CRTheme.ink)
                 
-                Text("Make sure Deskdrop is open on your phone or tablet.")
+                Text("Make sure Link All is open on your phone or tablet.")
                     .font(.system(size: 16))
                     .foregroundStyle(CRTheme.inkSoft)
             }
@@ -366,7 +366,7 @@ private struct StepTwoVerify: View {
                         Text("Connection timed out.")
                             .foregroundStyle(CRTheme.ink)
                         
-                        Text("Make sure both devices are on the same Wi-Fi network and Deskdrop is running.")
+                        Text("Make sure both devices are on the same Wi-Fi network and Link All is running.")
                             .font(.system(size: 12, weight: .regular))
                             .foregroundStyle(CRTheme.inkSoft)
                             .multilineTextAlignment(.center)

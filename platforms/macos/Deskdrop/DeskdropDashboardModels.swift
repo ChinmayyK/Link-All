@@ -253,7 +253,7 @@ struct ManagedDevice: Identifiable {
         case "declined": return "Declined · try again"
         case "expired": return "No answer · try again"
         case "cancelled": return "Request withdrawn"
-        case "update_needed": return "Update Deskdrop on it, then try again"
+        case "update_needed": return "Update Link All on it, then try again"
         default: return nil
         }
     }

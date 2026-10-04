@@ -50,16 +50,16 @@ else
 fi
 
 echo -e "${BLUE}▶ [macOS] Uninstalling old version...${NC}"
-rm -rf /Applications/Deskdrop.app
+rm -rf /Applications/Link\ All.app
 
 echo -e "${BLUE}▶ [macOS] Installing new version to /Applications...${NC}"
-cp -a platforms/macos/build/Deskdrop.app /Applications/
+cp -a platforms/macos/build/Link\ All.app /Applications/
 
 echo -e "${BLUE}▶ [macOS] Deleting local build bundle to keep repository clean...${NC}"
-rm -rf platforms/macos/build/Deskdrop.app
+rm -rf platforms/macos/build/Link\ All.app
 
 echo -e "${GREEN}▶ [macOS] ✅ Installed! Launching...${NC}"
-open /Applications/Deskdrop.app
+open /Applications/Link\ All.app
 
 echo -e "\n----------------------------------------\n"
 

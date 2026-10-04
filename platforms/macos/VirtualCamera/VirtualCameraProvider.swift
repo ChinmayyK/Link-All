@@ -11,7 +11,7 @@ class ProviderSource: NSObject, CMIOExtensionProviderSource {
     init(clientQueue: DispatchQueue?) {
         super.init()
         provider = CMIOExtensionProvider(source: self, clientQueue: clientQueue)
-        deviceSource = DeviceSource(localizedName: "Deskdrop Camera")
+        deviceSource = DeviceSource(localizedName: "Link All Camera")
         
         do {
             try provider.addDevice(deviceSource.device)
@@ -35,7 +35,7 @@ class ProviderSource: NSObject, CMIOExtensionProviderSource {
     func providerProperties(forProperties properties: Set<CMIOExtensionProperty>) throws -> CMIOExtensionProviderProperties {
         let providerProperties = CMIOExtensionProviderProperties(dictionary: [:])
         if properties.contains(.providerManufacturer) {
-            providerProperties.setPropertyState(CMIOExtensionPropertyState(value: "Deskdrop" as NSString), forProperty: .providerManufacturer)
+            providerProperties.setPropertyState(CMIOExtensionPropertyState(value: "Link All" as NSString), forProperty: .providerManufacturer)
         }
         return providerProperties
     }
@@ -55,7 +55,7 @@ class DeviceSource: NSObject, CMIOExtensionDeviceSource {
         device = CMIOExtensionDevice(localizedName: localizedName, deviceID: deviceID, legacyDeviceID: nil, source: self)
         
         let videoDimensions = CMVideoDimensions(width: 1920, height: 1080)
-        streamSource = StreamSource(localizedName: "Deskdrop Video Stream", videoDimensions: videoDimensions)
+        streamSource = StreamSource(localizedName: "Link All Video Stream", videoDimensions: videoDimensions)
         
         do {
             try device.addStream(streamSource.stream)
@@ -74,7 +74,7 @@ class DeviceSource: NSObject, CMIOExtensionDeviceSource {
             deviceProperties.setPropertyState(CMIOExtensionPropertyState(value: 0x76697274 as NSNumber), forProperty: .deviceTransportType)
         }
         if properties.contains(.deviceModel) {
-            deviceProperties.setPropertyState(CMIOExtensionPropertyState(value: "Deskdrop Virtual Camera" as NSString), forProperty: .deviceModel)
+            deviceProperties.setPropertyState(CMIOExtensionPropertyState(value: "Link All Virtual Camera" as NSString), forProperty: .deviceModel)
         }
         return deviceProperties
     }

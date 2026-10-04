@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-macos.sh — Build the Deskdrop.app bundle for macOS
+# build-macos.sh — Build the Link All.app bundle for macOS
 #
 # Requirements:
 #   - Rust toolchain (cargo)
@@ -16,7 +16,7 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CORE_DIR="${REPO_ROOT}/deskdrop-core"
 MACOS_DIR="${REPO_ROOT}/platforms/macos"
 SOURCE_DIR_NAME="Deskdrop"
-PRODUCT_NAME="Deskdrop"
+PRODUCT_NAME="Link All"
 BUILD_TYPE="${1:---release}"
 APP_BUNDLE="${MACOS_DIR}/build/${PRODUCT_NAME}.app"
 TARGET_DIR="${REPO_ROOT}/target/release"
@@ -82,7 +82,7 @@ swiftc \
 # ── 3.5. Compile Virtual Camera Extension ────────────────────────────────────
 
 log "Compiling Virtual Camera System Extension..."
-EXT_DIR="${APP_BUNDLE}/Contents/Library/SystemExtensions/com.deskdrop.VirtualCamera.systemextension"
+EXT_DIR="${APP_BUNDLE}/Contents/Library/SystemExtensions/app.linkall.mac.VirtualCamera.systemextension"
 mkdir -p "${EXT_DIR}/Contents/MacOS"
 
 swiftc \
@@ -96,7 +96,7 @@ swiftc \
     -framework CoreVideo \
     -framework CoreMedia \
     -framework ImageIO \
-    -o "${EXT_DIR}/Contents/MacOS/com.deskdrop.VirtualCamera"
+    -o "${EXT_DIR}/Contents/MacOS/app.linkall.mac.VirtualCamera"
 
 cp "${MACOS_DIR}/VirtualCamera/Info.plist" "${EXT_DIR}/Contents/Info.plist"
 
@@ -217,17 +217,17 @@ if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     # relocateToUserApplicationsIfNeeded), so users just double-click it
     # straight from the mounted DMG.
     create-dmg \
-        --volname "Deskdrop" \
+        --volname "Link All" \
         --window-size 600 400 \
         --icon-size 128 \
-        "${MACOS_DIR}/build/Deskdrop.dmg" \
+        "${MACOS_DIR}/build/LinkAll.dmg" \
         "${APP_BUNDLE}" || {
             log "create-dmg failed (headless CI), falling back to zip..."
-            (cd "${MACOS_DIR}/build" && zip -rq "Deskdrop-macOS.zip" "${PRODUCT_NAME}.app")
+            (cd "${MACOS_DIR}/build" && zip -rq "LinkAll-macOS.zip" "${PRODUCT_NAME}.app")
         }
     log "✅ DMG (or zip fallback) created."
 else
     log "Creating zip archive..."
-    (cd "${MACOS_DIR}/build" && zip -rq "Deskdrop-macOS.zip" "${PRODUCT_NAME}.app")
-    log "✅ ZIP: ${MACOS_DIR}/build/Deskdrop-macOS.zip"
+    (cd "${MACOS_DIR}/build" && zip -rq "LinkAll-macOS.zip" "${PRODUCT_NAME}.app")
+    log "✅ ZIP: ${MACOS_DIR}/build/LinkAll-macOS.zip"
 fi

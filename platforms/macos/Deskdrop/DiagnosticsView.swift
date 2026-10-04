@@ -40,7 +40,7 @@ struct DiagnosticsView: View {
                         title: "Local Network",
                         status: store.connectedCount > 0 ? "Connected to \(store.connectedCount) peers" : "Looking for peers",
                         isOk: store.connectedCount > 0,
-                        suggestion: store.connectedCount > 0 ? nil : "Ensure devices are on the same Wi-Fi network and no firewall is blocking Deskdrop.",
+                        suggestion: store.connectedCount > 0 ? nil : "Ensure devices are on the same Wi-Fi network and no firewall is blocking Link All.",
                         actionLabel: store.connectedCount > 0 ? nil : "Scan Again",
                         onAction: { store.rescanNetwork() }
                     )

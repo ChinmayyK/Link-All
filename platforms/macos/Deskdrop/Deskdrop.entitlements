@@ -15,7 +15,7 @@
     <!-- Clipboard access (required for monitoring pasteboard) -->
     <key>com.apple.security.application-groups</key>
     <array>
-        <string>$(TeamIdentifierPrefix)com.deskdrop</string>
+        <string>$(TeamIdentifierPrefix)app.linkall</string>
     </array>
 
     <!-- Hardened runtime — allow loading the Rust dylib -->

@@ -228,12 +228,12 @@ private struct GeneralPane: View {
     var body: some View {
         PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
             PrefsRow(icon: "tag.fill", label: "Device name",
-                     description: "How this Mac appears to other Deskdrop peers.") {
+                     description: "How this Mac appears to other Link All peers.") {
                 TextField("MacBook Pro", text: $copy.deviceName).crInput().frame(maxWidth: 220)
             }
             PrefsDivider()
             PrefsRow(icon: "power", label: "Start on login",
-                     description: "Launch Deskdrop automatically at login.") {
+                     description: "Launch Link All automatically at login.") {
                 Toggle("", isOn: $copy.startOnLogin).labelsHidden()
             }
             PrefsDivider()

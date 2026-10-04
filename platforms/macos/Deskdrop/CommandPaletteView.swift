@@ -92,7 +92,7 @@ struct CommandPaletteView: View {
 
                 cmd(id: "net.scan", icon: "antenna.radiowaves.left.and.right",
                     label: "Scan for Devices",
-                    hint: "Search the local network for Deskdrop peers",
+                    hint: "Search the local network for Link All peers",
                     tint: CRTheme.accentTeal)
                 { store.scanForDevices() },
             ]),

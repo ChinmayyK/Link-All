@@ -882,7 +882,7 @@ struct MagicLinkPairingCard: View {
                 Text("Magic Link Pairing")
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(CRTheme.ink)
-                Text("Scan QR code with your phone camera or Deskdrop mobile app to pair securely without typing IPs.")
+                Text("Scan QR code with your phone camera or Link All mobile app to pair securely without typing IPs.")
                     .font(.system(size: 12.5))
                     .foregroundStyle(CRTheme.inkSoft)
                     .lineSpacing(2)
@@ -940,7 +940,7 @@ struct QRCodePairingSheet: View {
                 .buttonStyle(PlainButtonStyle())
             }
 
-            Text("Scan the QR code below from the Deskdrop Android app to pair instantly, or use the 6-digit confirmation PIN.")
+            Text("Scan the QR code below from the Link All Android app to pair instantly, or use the 6-digit confirmation PIN.")
                 .font(.system(size: 12))
                 .foregroundStyle(CRTheme.inkSoft)
                 .multilineTextAlignment(.center)
@@ -1442,7 +1442,7 @@ struct QRCodeSheetView: View {
                 Text("Pair Device")
                     .font(.system(size: 20, weight: .bold))
                 
-                Text("Scan this QR code from the Deskdrop Android app to pair securely.")
+                Text("Scan this QR code from the Link All Android app to pair securely.")
                     .multilineTextAlignment(.center)
                     .foregroundStyle(.secondary)
                     .font(.system(size: 13))

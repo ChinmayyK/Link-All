@@ -9,7 +9,7 @@ class VirtualCameraInstaller: NSObject, OSSystemExtensionRequestDelegate, Observ
     @Published var status: String = "Not Installed"
     
     func install() {
-        let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: "com.deskdrop.VirtualCamera", queue: .main)
+        let request = OSSystemExtensionRequest.activationRequest(forExtensionWithIdentifier: "app.linkall.mac.VirtualCamera", queue: .main)
         request.delegate = self
         OSSystemExtensionManager.shared.submitRequest(request)
         self.status = "Installing..."
