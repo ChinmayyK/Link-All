@@ -251,17 +251,18 @@ struct TimelineCard: View {
                             }
                         }
                         HStack(spacing: 4) {
+                            // The device name gives way first, so tag, size and time stay whole.
                             CRTag(text: item.typeLabel, tint: accent)
                             if let cc = charCount {
                                 Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 9))
-                                Text(cc).foregroundStyle(CRTheme.inkSubtle)
+                                Text(cc).foregroundStyle(CRTheme.inkSubtle).lineLimit(1).layoutPriority(1)
                             }
                             Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 9))
                             Image(systemName: "desktopcomputer").font(.system(size: 9))
                                 .foregroundStyle(CRTheme.inkSubtle)
                             Text(item.sourceDevice).lineLimit(1).truncationMode(.middle)
                             Text("·").foregroundStyle(CRTheme.inkFaint).font(.system(size: 9))
-                            Text(item.timestamp.relativeTimeString())
+                            Text(item.timestamp.relativeTimeString()).lineLimit(1).layoutPriority(1)
                         }
                         .font(.system(size: 10.5)).foregroundStyle(CRTheme.inkSoft)
                     }
