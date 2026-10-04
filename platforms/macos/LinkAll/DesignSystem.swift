@@ -426,6 +426,8 @@ struct CRTag: View {
         Text(text)
             .font(.system(size: 10, weight: .semibold))
             .tracking(0.10)
+            .lineLimit(1)
+            .fixedSize()
             .foregroundStyle(filled ? .white : tint.opacity(0.88))
             .padding(.horizontal, 6.5).padding(.vertical, 2.5)
             .background { Capsule().fill(filled ? tint : tint.opacity(0.10)) }
