@@ -145,7 +145,7 @@ impl IdentityStore {
         #[cfg(not(target_os = "android"))]
         let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
 
-        base.join("deskdrop").join("identity.key")
+        crate::settings::app_dir(&base).join("identity.key")
     }
 
     /// Load an existing key, or generate and persist a new one.

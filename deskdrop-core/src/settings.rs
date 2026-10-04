@@ -424,6 +424,21 @@ fn json_merge(target: &mut serde_json::Value, patch: &serde_json::Value) {
 
 // ── Platform config paths ─────────────────────────────────────────────────────
 
+/// The app's own folder under `base`. The app was called Deskdrop before it
+/// became Link All; an install from then keeps its pairings, settings and
+/// history by having its old `deskdrop` folder moved here the first time.
+pub fn app_dir(base: &Path) -> PathBuf {
+    let dir = base.join("linkall");
+    let old = base.join("deskdrop");
+    if !dir.exists() && old.is_dir() {
+        if let Err(err) = std::fs::rename(&old, &dir) {
+            tracing::warn!(error = %err, from = ?old, to = ?dir, "could not move the old Deskdrop folder; using it as is");
+            return old;
+        }
+    }
+    dir
+}
+
 pub fn default_settings_path() -> PathBuf {
     #[cfg(target_os = "android")]
     let base = PathBuf::from("/data/user/0/com.deskdrop.debug/files");
@@ -433,7 +448,7 @@ pub fn default_settings_path() -> PathBuf {
     let base = dirs::config_dir()
         .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")));
 
-    base.join("deskdrop").join("settings.json")
+    app_dir(&base).join("settings.json")
 }
 
 pub fn default_trust_store_path() -> PathBuf {
@@ -442,7 +457,7 @@ pub fn default_trust_store_path() -> PathBuf {
     #[cfg(not(target_os = "android"))]
     let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
 
-    base.join("deskdrop").join("trust.json")
+    app_dir(&base).join("trust.json")
 }
 
 pub fn default_peer_store_path() -> PathBuf {
@@ -451,7 +466,7 @@ pub fn default_peer_store_path() -> PathBuf {
     #[cfg(not(target_os = "android"))]
     let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
 
-    base.join("deskdrop").join("peers.json")
+    app_dir(&base).join("peers.json")
 }
 
 pub fn default_history_path() -> PathBuf {
@@ -460,7 +475,7 @@ pub fn default_history_path() -> PathBuf {
     #[cfg(not(target_os = "android"))]
     let base = dirs::data_local_dir().unwrap_or_else(|| PathBuf::from("."));
 
-    base.join("deskdrop").join("history.json")
+    app_dir(&base).join("history.json")
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -468,6 +483,20 @@ pub fn default_history_path() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_old_deskdrop_folder_moves_to_linkall_once() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir(tmp.path().join("deskdrop")).unwrap();
+        std::fs::write(tmp.path().join("deskdrop").join("trust.json"), b"{}").unwrap();
+
+        let dir = app_dir(tmp.path());
+        assert_eq!(dir, tmp.path().join("linkall"));
+        assert!(dir.join("trust.json").exists(), "pairings came along");
+        assert!(!tmp.path().join("deskdrop").exists());
+        // A fresh install has nothing to move.
+        assert_eq!(app_dir(tmp.path()), tmp.path().join("linkall"));
+    }
     use tempfile::NamedTempFile;
 
     #[test]

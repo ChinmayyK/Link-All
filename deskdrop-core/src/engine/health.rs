@@ -82,14 +82,14 @@ async fn evaluate(shared: &EngineShared) -> Vec<HealthIssue> {
         issues.push(HealthIssue::new(
             "no_network",
             "Not connected to a network",
-            "Connect to Wi-Fi or Ethernet. Deskdrop works between devices on the same network.",
+            "Connect to Wi-Fi or Ethernet. Link All works between devices on the same network.",
         ));
     } else if listener_error.is_some() {
         issues.push(HealthIssue::new(
             "listener_down",
             "Other devices can't reach this one",
-            "Deskdrop couldn't start listening after the network changed. It tries again on the \
-             next network change; restarting Deskdrop fixes it now.",
+            "Link All couldn't start listening after the network changed. It tries again on the \
+             next network change; restarting Link All fixes it now.",
         ));
     }
 
@@ -122,7 +122,7 @@ async fn evaluate(shared: &EngineShared) -> Vec<HealthIssue> {
         .filter(|p| recently(p.last_discovery_at) || recently(p.last_seen))
         .collect();
 
-    // Discovery only hears a device while Deskdrop runs on it, so one heard
+    // Discovery only hears a device while Link All runs on it, so one heard
     // again after a connection to it failed is running but being blocked on
     // the way. (Heard before the failure proves nothing: it may have quit.)
     let heard_after_failure = |p: &&&crate::peer_manager::PeerRecord| matches!((p.last_failure_at, p.last_discovery_at), (Some(failed), Some(heard)) if heard > failed);
@@ -132,7 +132,7 @@ async fn evaluate(shared: &EngineShared) -> Vec<HealthIssue> {
             ..HealthIssue::new(
                 "connection_blocked",
                 format!("{} is nearby but can't connect", peer.friendly_name),
-                "A firewall or the network may be blocking Deskdrop. Allow Deskdrop through \
+                "A firewall or the network may be blocking Link All. Allow Link All through \
                  the firewall on both devices.",
             )
         });
@@ -140,7 +140,7 @@ async fn evaluate(shared: &EngineShared) -> Vec<HealthIssue> {
         issues.push(HealthIssue::new(
             "devices_not_found",
             "Can't find your devices",
-            "Open Deskdrop on them and check they're on the same Wi-Fi. Guest and office \
+            "Open Link All on them and check they're on the same Wi-Fi. Guest and office \
              networks often stop devices from seeing each other.",
         ));
     }
