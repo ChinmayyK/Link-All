@@ -517,8 +517,15 @@ impl Engine {
             // ever idling. Back off per peer, exponentially, to a cap;
             // network changes still reconnect at once via
             // reconnect_known_peers, which doesn't go through here.
+            // Computers don't run on a battery radio budget, and when one
+            // side's firewall blocks incoming connections the other side's
+            // retries are the only way back, so they cap at 30 s instead.
             const RETRY_BASE: Duration = Duration::from_secs(5);
-            const RETRY_CAP: Duration = Duration::from_secs(5 * 60);
+            const RETRY_CAP: Duration = if cfg!(any(target_os = "android", target_os = "ios")) {
+                Duration::from_secs(5 * 60)
+            } else {
+                Duration::from_secs(30)
+            };
             let mut interval = tokio::time::interval(Duration::from_secs(5));
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             // Per peer: earliest next attempt and attempts made so far.
