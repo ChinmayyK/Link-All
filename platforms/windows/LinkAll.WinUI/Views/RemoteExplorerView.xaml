@@ -1,0 +1,479 @@
+<Page
+    x:Class="LinkAll.WinUI.Views.RemoteExplorerView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:LinkAll.WinUI.Views"
+    xmlns:winui="using:LinkAll.WinUI"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:services="using:LinkAll.WinUI.Services"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <Page.Resources>
+        <!-- Shared by the grid tile and the list row, so both views offer
+             the same actions from right-click. -->
+        <MenuFlyout x:Key="FileContextMenu" Opening="OnFileMenuOpening">
+            <MenuFlyoutItem Text="Download to this PC" Click="OnDownloadClicked">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE896;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutSeparator />
+            <MenuFlyoutItem Text="Rename" Click="OnRenameRemoteFileClicked">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE8AC;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+            <MenuFlyoutItem Text="Delete" Click="OnDeleteRemoteFileClicked">
+                <MenuFlyoutItem.Icon>
+                    <FontIcon Glyph="&#xE74D;" />
+                </MenuFlyoutItem.Icon>
+            </MenuFlyoutItem>
+        </MenuFlyout>
+    </Page.Resources>
+
+    <Grid Padding="24,18,28,0" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header spans both columns: page title, then which device, how
+             much is here and how much room is left on it. -->
+        <StackPanel Grid.Row="0" Spacing="6">
+            <TextBlock Text="Remote files" Style="{StaticResource AppDisplayText}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock x:Name="DeviceNameText"
+                           Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay}"
+                           Style="{StaticResource AppSecondary}"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center" />
+                <!-- Shown instead of the plain name once more than one device
+                     is connected; populated from code-behind (SyncDeviceSwitcher).
+                     Its items are PeerViewModel, which has
+                     [GeneratedBindableCustomProperty], so DisplayMemberPath is
+                     AOT-safe even though the XAML compiler can't see the type. -->
+                <ComboBox x:Name="DeviceSwitcher"
+                          x:SuppressXamlTrimWarnings="True"
+                          Visibility="Collapsed"
+                          MinWidth="180"
+                          VerticalAlignment="Center"
+                          DisplayMemberPath="DisplayName"
+                          AutomationProperties.Name="Device to browse"
+                          ToolTipService.ToolTip="Switch device"
+                          SelectionChanged="OnDeviceSwitcherSelectionChanged" />
+                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" VerticalAlignment="Center" />
+                <!-- Set from UpdateEmptyStates(); x:Bind to RemoteFiles.Count
+                     would never hear CollectionChanged. -->
+                <TextBlock x:Name="ItemCountText" Text="" Style="{StaticResource AppCaption}" VerticalAlignment="Center" />
+                <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" VerticalAlignment="Center"
+                           Visibility="{x:Bind mgr.SelectedPeer.ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                <TextBlock Text="{x:Bind mgr.SelectedPeer.StorageFreeText, Mode=OneWay}"
+                           Style="{StaticResource AppCaption}" VerticalAlignment="Center"
+                           Visibility="{x:Bind mgr.SelectedPeer.ShowStorage, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+            </StackPanel>
+        </StackPanel>
+
+        <Grid Grid.Row="1" ColumnSpacing="20">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="172" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <!--
+                Library shortcuts. Deliberately monochrome: colour is reserved
+                for state, so the only tinted row is the one being browsed.
+                Tag carries the path each row loads (see OnShortcutClicked).
+            -->
+            <StackPanel x:Name="LibraryList" Grid.Column="0" Spacing="2">
+                <TextBlock Text="Libraries" Style="{StaticResource AppOverline}" Margin="10,8,0,8" />
+
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE8B7;" FontSize="15" />
+                        <TextBlock Text="All files" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/source/Camera" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE722;" FontSize="15" />
+                        <TextBlock Text="Camera" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/category/Images" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xEB9F;" FontSize="15" />
+                        <TextBlock Text="Pictures" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/source/Downloads" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE896;" FontSize="15" />
+                        <TextBlock Text="Downloads" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/category/Documents" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE8A5;" FontSize="15" />
+                        <TextBlock Text="Documents" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/category/Audio" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE8D6;" FontSize="15" />
+                        <TextBlock Text="Music" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppNavRowButton}" Tag="/category/Videos" Click="OnShortcutClicked">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <FontIcon Glyph="&#xE714;" FontSize="15" />
+                        <TextBlock Text="Videos" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <!-- ================================ BROWSER -->
+            <Grid Grid.Column="1" RowSpacing="14">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <!--
+                    Explorer-style command bar: navigation on the left,
+                    location in the middle, view switch and the one write
+                    action on the right. Typing a path stays available behind
+                    the location button, the way Explorer keeps it behind
+                    Ctrl+L.
+                -->
+                <Grid Grid.Row="0" ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2">
+                        <Button Style="{StaticResource AppIconButton}"
+                                ToolTipService.ToolTip="Up one folder"
+                                AutomationProperties.Name="Up one folder"
+                                Click="OnBackClicked">
+                            <FontIcon Glyph="&#xE72B;" FontSize="14" />
+                        </Button>
+                        <Button Style="{StaticResource AppIconButton}"
+                                ToolTipService.ToolTip="Refresh this folder"
+                                AutomationProperties.Name="Refresh this folder"
+                                Click="OnRefreshClicked">
+                            <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                        </Button>
+                    </StackPanel>
+
+                    <Border Grid.Column="1"
+                            Background="{ThemeResource AppSurfaceBrush}"
+                            BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSmall}"
+                            Padding="10,2"
+                            MinHeight="32">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <controls:BreadcrumbBar x:Name="PathBreadcrumb"
+                                                    Grid.Column="0"
+                                                    VerticalAlignment="Center"
+                                                    ItemsSource="{x:Bind PathSegments, Mode=OneWay}"
+                                                    ItemClicked="OnBreadcrumbItemClicked" />
+
+                            <Button Grid.Column="1"
+                                    Style="{StaticResource AppIconButtonSmall}"
+                                    ToolTipService.ToolTip="Go to a path"
+                                    AutomationProperties.Name="Go to a path">
+                                <FontIcon Glyph="&#xE8AC;" FontSize="12" />
+                                <Button.Flyout>
+                                    <Flyout Placement="Bottom">
+                                        <StackPanel Width="320" Spacing="10">
+                                            <TextBlock Text="Go to path" Style="{StaticResource AppBodyStrong}" />
+                                            <TextBox x:Name="PathBox" Text="/" FontSize="13"
+                                                     KeyDown="OnPathKeyDown"
+                                                     AutomationProperties.Name="Remote path" />
+                                            <Button Style="{StaticResource AppPrimaryButton}"
+                                                    HorizontalAlignment="Right"
+                                                    Content="Go"
+                                                    Click="OnGoClicked" />
+                                        </StackPanel>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Grid / list switch. Active state is applied from
+                         code-behind (ApplyViewMode). -->
+                    <Border Grid.Column="2"
+                            Background="{ThemeResource AppSurfaceBrush}"
+                            BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                            BorderThickness="1"
+                            CornerRadius="{StaticResource RadiusSmall}"
+                            Padding="2">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <Button x:Name="GridViewButton"
+                                    Style="{StaticResource AppIconButtonSmall}"
+                                    ToolTipService.ToolTip="Large previews"
+                                    AutomationProperties.Name="Large previews"
+                                    Click="OnGridViewClicked">
+                                <FontIcon Glyph="&#xF0E2;" FontSize="13" />
+                            </Button>
+                            <Button x:Name="ListViewButton"
+                                    Style="{StaticResource AppIconButtonSmall}"
+                                    ToolTipService.ToolTip="Details list"
+                                    AutomationProperties.Name="Details list"
+                                    Click="OnListViewClicked">
+                                <FontIcon Glyph="&#xE8FD;" FontSize="13" />
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <Button Grid.Column="3" Style="{StaticResource AppAccentSubtleButton}"
+                            ToolTipService.ToolTip="Send files to this device"
+                            Click="OnSendFilesClicked">
+                        <StackPanel Orientation="Horizontal" Spacing="7" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE898;" FontSize="13" />
+                            <TextBlock Text="Upload" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+
+                <Grid Grid.Row="1">
+                    <!-- Two distinct empty states: no device to browse, versus a
+                         folder that is genuinely empty. They call for different
+                         actions, so they can't share one message. -->
+                    <Border x:Name="NoDeviceState"
+                            Style="{StaticResource AppCard}"
+                            Background="Transparent"
+                            Padding="28,32"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center" Spacing="12" MaxWidth="380">
+                            <Border Style="{StaticResource AppIconTile}"
+                                    Background="{ThemeResource AppAccentSubtleBrush}"
+                                    HorizontalAlignment="Center">
+                                <FontIcon Glyph="&#xE8EA;" FontSize="19"
+                                          Foreground="{ThemeResource AppAccentBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="No device to browse"
+                                           Style="{StaticResource AppSectionTitle}" HorizontalAlignment="Center" />
+                                <TextBlock Style="{StaticResource AppSecondary}"
+                                           HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                                           Text="Connect a device on the Devices page, then come back to browse its files from here." />
+                            </StackPanel>
+                            <Button Style="{StaticResource AppPrimaryButton}"
+                                    Content="Go to Devices"
+                                    HorizontalAlignment="Center"
+                                    Click="OnGoToDevicesClicked" />
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="EmptyFolderState"
+                            Style="{StaticResource AppCard}"
+                            Background="Transparent"
+                            Padding="20,28"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed">
+                        <StackPanel HorizontalAlignment="Center" Spacing="8">
+                            <FontIcon Glyph="&#xE8B7;" FontSize="22"
+                                      Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                      HorizontalAlignment="Center" />
+                            <TextBlock Text="Nothing here yet"
+                                       Style="{StaticResource AppSecondary}" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+
+                    <!--
+                        Large previews. Tile width is recomputed on resize
+                        (OnFileGridSizeChanged) so tiles always fill the row
+                        instead of leaving a ragged gap on the right. The name
+                        gets two fixed lines so every tile in a row lines up
+                        whether its name is short or long.
+                    -->
+                    <GridView x:Name="FileGrid"
+                              Padding="0,0,0,20"
+                              SelectionMode="None"
+                              IsItemClickEnabled="False"
+                              ItemContainerStyle="{StaticResource AppPlainGridItem}"
+                              ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}"
+                              SizeChanged="OnFileGridSizeChanged"
+                              ContainerContentChanging="OnFileContainerContentChanging">
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal" ItemWidth="190" ItemHeight="240" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="winui:RemoteFile">
+                                <Border Background="{ThemeResource AppSurfaceBrush}"
+                                        BorderBrush="{ThemeResource AppBorderSubtleBrush}"
+                                        BorderThickness="1"
+                                        CornerRadius="{StaticResource RadiusMedium}"
+                                        Padding="6"
+                                        ContextFlyout="{StaticResource FileContextMenu}"
+                                        DoubleTapped="OnFileRowDoubleTapped"
+                                        ToolTipService.ToolTip="{x:Bind display_name, Mode=OneWay}"
+                                        services:HoverEffects.EnableCardHover="True">
+                                    <Grid RowSpacing="8">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="*" />
+                                            <RowDefinition Height="Auto" />
+                                        </Grid.RowDefinitions>
+
+                                        <!-- A Grid rather than a Border on purpose: RevealEffects
+                                             binds to the nearest Border ancestor, which must be
+                                             the tile so hovering anywhere on it shows actions. -->
+                                        <Grid Grid.Row="0"
+                                              CornerRadius="{StaticResource RadiusSmall}"
+                                              Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8"
+                                                        Visibility="{x:Bind HasThumbnail, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}">
+                                                <FontIcon Glyph="{x:Bind display_name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}"
+                                                          FontSize="34"
+                                                          Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                          HorizontalAlignment="Center" />
+                                                <TextBlock Text="{x:Bind ExtensionLabel, Mode=OneWay}"
+                                                           Style="{StaticResource AppCaption}"
+                                                           FontWeight="SemiBold"
+                                                           HorizontalAlignment="Center" />
+                                            </StackPanel>
+                                            <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   Visibility="{x:Bind HasThumbnail, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+
+                                            <Grid HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6"
+                                                  Background="{ThemeResource AppSurfaceBrush}"
+                                                  CornerRadius="{StaticResource RadiusSmall}"
+                                                  services:RevealEffects.RevealOnHover="True">
+                                                <StackPanel Orientation="Horizontal" Spacing="0">
+                                                    <Button Style="{StaticResource AppIconButtonSmall}"
+                                                            ToolTipService.ToolTip="Download to this PC"
+                                                            AutomationProperties.Name="Download to this PC"
+                                                            Click="OnDownloadClicked">
+                                                        <FontIcon Glyph="&#xE896;" FontSize="12" />
+                                                    </Button>
+                                                    <Button Style="{StaticResource AppIconButtonSmall}"
+                                                            ToolTipService.ToolTip="More actions"
+                                                            AutomationProperties.Name="More actions for this item"
+                                                            Flyout="{StaticResource FileContextMenu}">
+                                                        <FontIcon Glyph="&#xE712;" FontSize="12" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Grid>
+
+                                        <StackPanel Grid.Row="1" Spacing="3" Padding="4,0,4,4">
+                                            <TextBlock Text="{x:Bind display_name, Mode=OneWay}"
+                                                       Style="{StaticResource AppBody}"
+                                                       TextWrapping="Wrap"
+                                                       MaxLines="2"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       LineHeight="18"
+                                                       LineStackingStrategy="BlockLineHeight"
+                                                       Height="36" />
+                                            <TextBlock Text="{x:Bind SummaryText, Mode=OneWay}"
+                                                       Style="{StaticResource AppCaption}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+
+                    <!--
+                        Details list. Name and metadata are stacked rather than
+                        split into columns so the name keeps the full row width
+                        at any window size, instead of being squeezed to a few
+                        characters by fixed date/size columns.
+                    -->
+                    <Border x:Name="FilePanel"
+                            Style="{StaticResource AppGroupCard}"
+                            VerticalAlignment="Top"
+                            Margin="0,0,0,20">
+                        <ListView x:Name="FileList"
+                                  Margin="0,-1,0,0"
+                                  SelectionMode="None"
+                                  Padding="0"
+                                  IsItemClickEnabled="False"
+                                  ItemContainerStyle="{StaticResource AppPlainListItem}"
+                                  ItemsSource="{x:Bind RemoteFiles, Mode=OneWay}"
+                                  ContainerContentChanging="OnFileContainerContentChanging">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="winui:RemoteFile">
+                                    <Border Background="Transparent"
+                                            BorderThickness="0,1,0,0"
+                                            BorderBrush="{ThemeResource AppDividerBrush}"
+                                            CornerRadius="0"
+                                            Padding="14,8"
+                                            ContextFlyout="{StaticResource FileContextMenu}"
+                                            DoubleTapped="OnFileRowDoubleTapped"
+                                            services:HoverEffects.EnableCardHover="True">
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Grid Grid.Column="0" Width="52" Height="52"
+                                                  CornerRadius="{StaticResource RadiusSmall}"
+                                                  Background="{ThemeResource AppSurfaceSubtleBrush}">
+                                                <FontIcon Glyph="{x:Bind display_name, Converter={StaticResource FileTypeToGlyphConverter}, Mode=OneWay}"
+                                                          FontSize="20"
+                                                          Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                          HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                          Visibility="{x:Bind HasThumbnail, Converter={StaticResource InverseBoolToVisibilityConverter}, Mode=OneWay}" />
+                                                <Image Source="{x:Bind Thumbnail, Mode=OneWay}" Stretch="UniformToFill"
+                                                       Visibility="{x:Bind HasThumbnail, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
+                                            </Grid>
+
+                                            <StackPanel Grid.Column="1" Spacing="3" VerticalAlignment="Center">
+                                                <TextBlock Text="{x:Bind display_name, Mode=OneWay}"
+                                                           Style="{StaticResource AppBody}"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           ToolTipService.ToolTip="{x:Bind display_name, Mode=OneWay}" />
+                                                <TextBlock Text="{x:Bind DetailText, Mode=OneWay}"
+                                                           Style="{StaticResource AppCaption}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
+                                                        VerticalAlignment="Center"
+                                                        services:RevealEffects.RevealOnHover="True">
+                                                <Button Style="{StaticResource AppIconButtonSmall}"
+                                                        ToolTipService.ToolTip="Download to this PC"
+                                                        AutomationProperties.Name="Download to this PC"
+                                                        Click="OnDownloadClicked">
+                                                    <FontIcon Glyph="&#xE896;" FontSize="12" />
+                                                </Button>
+                                                <Button Style="{StaticResource AppIconButtonSmall}"
+                                                        ToolTipService.ToolTip="More actions"
+                                                        AutomationProperties.Name="More actions for this item"
+                                                        Flyout="{StaticResource FileContextMenu}">
+                                                    <FontIcon Glyph="&#xE712;" FontSize="12" />
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Grid>
+    </Grid>
+</Page>
