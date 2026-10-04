@@ -35,6 +35,7 @@ async fn run() -> Result<()> {
         ["send", target, text] => cmd_send(target, text).await,
         ["send-file", path] => cmd_send_file(path, None).await,
         ["send-file", target, path] => cmd_send_file(path, Some(target)).await,
+        ["send-folder", target, path] => cmd_send_folder(path, target).await,
         ["send-file", "--path", path, "--target", target] => {
             cmd_send_file(path, Some(target)).await
         }
@@ -256,6 +257,31 @@ async fn cmd_send(target: &str, text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+async fn cmd_send_folder(path: &str, target: &str) -> Result<()> {
+    let p = std::path::Path::new(path);
+    if !p.is_dir() {
+        bail!("folder not found: {}", path);
+    }
+    let abs_path = std::fs::canonicalize(p)?.to_string_lossy().to_string();
+    match ipc(&IpcRequest::SendFolder {
+        path: abs_path,
+        target_device: Some(target.to_string()),
+    })
+    .await?
+    {
+        IpcResponse::Ok { data: Some(data) } => {
+            println!("Folder transfer initiated: {}", data);
+            Ok(())
+        }
+        IpcResponse::Ok { data: None } => {
+            println!("Folder transfer initiated");
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        other => bail!("unexpected response: {:?}", other),
+    }
 }
 
 async fn cmd_send_file(path: &str, target: Option<&str>) -> Result<()> {
@@ -1217,6 +1243,8 @@ DAEMON CONTROL
   ping                            Check daemon health / measure IPC round-trip time
   push "<text>"                   Push text to all connected peers
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
+  send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
+  send-folder <uuid> <path>       Send a folder and everything in it
   connect <ip> [port]             Manually connect to a peer by IP address
   sync on|off                     Enable or disable clipboard syncing globally
   stop                            Gracefully stop the daemon
