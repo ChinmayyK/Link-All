@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Single source of truth for Deskdrop's release version.
+# Single source of truth for Link All's release version.
 #
 # Every shippable artifact carries its own version string, and they all have to
 # agree: a tag that says v1.3.0 must not produce an APK labelled 1.2.4. That is
 # exactly the drift that accumulated across 1.2.5-1.2.8. The previous Python
-# version of this script pointed at platforms/windows/Deskdrop.Windows/, a path
+# version of this script pointed at platforms/windows/LinkAll.Windows/, a path
 # that does not exist, and skipped it silently because the write was guarded by
 # an existence check. Nothing verified the result afterwards, so the drift was
 # invisible until release time.
@@ -35,9 +35,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CARGO="$ROOT/Cargo.toml"
 GRADLE="$ROOT/platforms/android/app/build.gradle"
-WXS="$ROOT/platforms/windows/installer/Deskdrop.wxs"
+WXS="$ROOT/platforms/windows/installer/LinkAll.wxs"
 PLISTS=(
-  "$ROOT/platforms/macos/Deskdrop/Info.plist"
+  "$ROOT/platforms/macos/LinkAll/Info.plist"
   "$ROOT/platforms/macos/ShareExtension/Info.plist"
   "$ROOT/platforms/macos/VirtualCamera/Info.plist"
 )

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Automated IPC Socket Test Script for Deskdrop Remote File Queries.
+Automated IPC Socket Test Script for Link All Remote File Queries.
 
 Tests local IPC JSON serialization and socket protocol handling for `IpcRequest::RemoteFilesQuery`.
 Runs in-process Unix domain socket server and client to verify JSON request encoding, socket transport,
@@ -125,7 +125,7 @@ class TestRemoteFilesIpc(unittest.TestCase):
 
     def setUp(self):
         self.tmp_dir = tempfile.TemporaryDirectory()
-        self.socket_path = os.path.join(self.tmp_dir.name, "deskdrop.sock")
+        self.socket_path = os.path.join(self.tmp_dir.name, "linkall.sock")
         self.server = MockIpcServer(self.socket_path)
         self.server.start()
         time.sleep(0.05)
@@ -196,7 +196,7 @@ class TestRemoteFilesIpc(unittest.TestCase):
         self.assertEqual(len(resp["data"]["files"]), 0)
 
     def test_ipc_serialization_schema_validation(self):
-        """Verify client JSON request payload matches Deskdrop IpcRequest schema."""
+        """Verify client JSON request payload matches Link All IpcRequest schema."""
         req = {
             "cmd": "remote_files_query",
             "target_device": "12345678-1234-1234-1234-123456789abc",

@@ -37,14 +37,14 @@ cargo bench
 ### Run the daemon locally
 
 ```bash
-DESKDROP_LOG=debug cargo run --bin deskdrop-daemon -- --name "Dev Machine" --port 47823
+LINKALL_LOG=debug cargo run --bin linkall-daemon -- --name "Dev Machine" --port 47823
 ```
 
 Then in another terminal:
 
 ```bash
-cargo run --bin deskdrop-cli -- status
-cargo run --bin deskdrop-cli -- ping
+cargo run --bin linkall-cli -- status
+cargo run --bin linkall-cli -- ping
 ```
 
 ---
@@ -52,8 +52,8 @@ cargo run --bin deskdrop-cli -- ping
 ## Project Layout
 
 ```
-deskdrop/
-├── deskdrop-core/        # Rust engine — all platform-independent logic
+linkall/
+├── linkall-core/        # Rust engine — all platform-independent logic
 │   └── src/
 │       ├── protocol.rs     # Wire types
 │       ├── crypto.rs       # X25519 + HKDF + ChaCha20-Poly1305
@@ -74,7 +74,7 @@ deskdrop/
 │       ├── sim.rs          # In-process test harness
 │       ├── ffi.rs          # C ABI exports (macOS / Windows)
 │       └── jni_android.rs  # JNI exports (Android)
-├── deskdrop-cli/         # Management CLI tool
+├── linkall-cli/         # Management CLI tool
 ├── platforms/
 │   ├── macos/              # Swift menu-bar app
 │   ├── windows/            # C# tray app
@@ -99,7 +99,7 @@ deskdrop/
 
 ### Platform code (Swift / Kotlin / C#)
 
-- Keep platform layers thin — they should only translate between the OS clipboard API and `deskdrop_*` FFI calls. Business logic belongs in the Rust core.
+- Keep platform layers thin — they should only translate between the OS clipboard API and `linkall_*` FFI calls. Business logic belongs in the Rust core.
 - Follow the platform's naming conventions (Swift: camelCase types; Kotlin: PascalCase classes; C#: PascalCase).
 - Handle all FFI call failures gracefully — null handles, error codes, etc.
 
@@ -116,13 +116,13 @@ deskdrop/
 ## Adding a New Platform
 
 1. Create `platforms/<name>/` directory.
-2. Load `libdeskdrop_core` (`.dylib`, `.dll`, `.so`) appropriate for the OS.
-3. Call `deskdrop_start()` to get a handle.
+2. Load `liblinkall_core` (`.dylib`, `.dll`, `.so`) appropriate for the OS.
+3. Call `linkall_start()` to get a handle.
 4. Implement:
-   - Outgoing: watch the OS clipboard → call `deskdrop_push_text/image/file()`
-   - Incoming: poll `deskdrop_poll_event()` at 20–50 ms → apply to clipboard
+   - Outgoing: watch the OS clipboard → call `linkall_push_text/image/file()`
+   - Incoming: poll `linkall_poll_event()` at 20–50 ms → apply to clipboard
    - TOFU: on `PB_EVENT_TOFU_PROMPT`, show a dialog with the fingerprint
-5. Call `deskdrop_stop()` on clean shutdown.
+5. Call `linkall_stop()` on clean shutdown.
 6. Add the platform to `release.yml` so CI builds it.
 
 ---
@@ -152,7 +152,7 @@ cargo cyclonedx --format json
 ## Release Process
 
 1. Update `CHANGELOG.md` — move `[Unreleased]` items to a new version section.
-2. Bump version in `deskdrop-core/Cargo.toml` and `deskdrop-cli/Cargo.toml`.
+2. Bump version in `linkall-core/Cargo.toml` and `linkall-cli/Cargo.toml`.
 3. Commit: `chore: release v0.x.y`
 4. Tag: `git tag v0.x.y && git push --tags`
 5. The `release.yml` workflow builds all platform artifacts and creates a GitHub Release automatically.

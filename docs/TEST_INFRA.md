@@ -1,8 +1,8 @@
-# Deskdrop Remote File Queries — Test Infrastructure & Specifications (`TEST_INFRA.md`)
+# Link All Remote File Queries — Test Infrastructure & Specifications (`TEST_INFRA.md`)
 
 ## 1. Overview & Architecture
 
-This document specifies the automated 4-tier End-to-End (E2E) testing framework for **Deskdrop Remote File Queries** (Phase 3 Remote Media Explorer).
+This document specifies the automated 4-tier End-to-End (E2E) testing framework for **Link All Remote File Queries** (Phase 3 Remote Media Explorer).
 
 ### Architecture Stack
 ```
@@ -20,7 +20,7 @@ This document specifies the automated 4-tier End-to-End (E2E) testing framework 
                                       | In-Process Async Channel / Engine Call
                                       v
 +-------------------------------------------------------------------------------+
-|                         DESKDROP CORE ENGINE (`engine/mod.rs`)               |
+|                         LINKALL CORE ENGINE (`engine/mod.rs`)               |
 |   - `query_remote_files_sync()` async waiter map management                  |
 |   - `EngineEvent::RemoteFilesQueryReceived` & `RemoteFilesResponseReceived`   |
 +-------------------------------------------------------------------------------+
@@ -38,9 +38,9 @@ This document specifies the automated 4-tier End-to-End (E2E) testing framework 
 ## 2. Test Runner Commands
 
 ### 2.1 Rust Integration Test Suite
-To run the full Rust 4-tier integration test suite inside `deskdrop-core`:
+To run the full Rust 4-tier integration test suite inside `linkall-core`:
 ```bash
-cd /Users/chinmayk/Projects/Deskdrop/deskdrop-core
+cd /Users/chinmayk/Projects/LinkAll/linkall-core
 cargo test --test remote_files_e2e_test
 ```
 
@@ -52,7 +52,7 @@ cargo test --test remote_files_e2e_test test_tier1_feature_query_images_category
 ### 2.2 Python IPC Test Harness
 To run the Python local IPC JSON serialization test script:
 ```bash
-cd /Users/chinmayk/Projects/Deskdrop
+cd /Users/chinmayk/Projects/LinkAll
 python3 scripts/test_remote_files_ipc.py
 ```
 

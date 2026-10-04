@@ -1,4 +1,4 @@
-# Deskdrop Future Roadmap and Feature List
+# Link All Future Roadmap and Feature List
 
 Date: May 27, 2026
 
@@ -28,7 +28,7 @@ git show v1.2.8:docs/cross-platform-feature-parity-audit-2026-05-27.md
 
 ## Product Direction
 
-Deskdrop should keep leaning into the same core thesis:
+Link All should keep leaning into the same core thesis:
 
 - local-first
 - zero-cloud
@@ -137,7 +137,7 @@ Target outcome:
 
 Target outcome:
 
-- the main Deskdrop promise feels equally strong on every supported GUI platform
+- the main Link All promise feels equally strong on every supported GUI platform
 
 ### Must-ship items
 
@@ -166,7 +166,7 @@ Target outcome:
 
 Target outcome:
 
-- Deskdrop feels like a polished, dependable cross-device utility rather than a smart technical tool
+- Link All feels like a polished, dependable cross-device utility rather than a smart technical tool
 
 ### Must-ship items
 
@@ -197,7 +197,7 @@ Target outcome:
 
 Target outcome:
 
-- Deskdrop starts winning not only on reliability, but on delight and unique value
+- Link All starts winning not only on reliability, but on delight and unique value
 
 ### Candidate items
 
@@ -525,7 +525,7 @@ Key success signals:
 
 ## Bottom Line
 
-The next roadmap for Deskdrop should be about making the product dependable first, then expansive.
+The next roadmap for Link All should be about making the product dependable first, then expansive.
 
 That means:
 
@@ -535,4 +535,4 @@ That means:
 - better transfer truthfulness
 - clearer recovery
 
-If we execute in that order, Deskdrop can become not just a technically impressive cross-device tool, but a product people are comfortable relying on every day.
+If we execute in that order, Link All can become not just a technically impressive cross-device tool, but a product people are comfortable relying on every day.

@@ -43,7 +43,7 @@
 
 Link All bridges disparate operating systems (macOS, Windows, Android, Linux) without relying on intermediate cloud infrastructure, proprietary ecosystem lock-in, or external routing servers. All communication takes place point-to-point over local wireless networks (Wi-Fi, LAN, or standalone Wi-Fi Direct / Mobile Hotspot connections).
 
-At its core sits an event-driven asynchronous **Rust daemon (`deskdrop-core`)**, designed for zero idle resource consumption and low-latency local IPC communication with platform-native graphical frontends. Whether transferring multi-gigabyte payloads or synchronizing high-frequency clipboard updates, Link All relies strictly on local system primitives and explicit end-to-end encryption.
+At its core sits an event-driven asynchronous **Rust daemon (`linkall-core`)**, designed for zero idle resource consumption and low-latency local IPC communication with platform-native graphical frontends. Whether transferring multi-gigabyte payloads or synchronizing high-frequency clipboard updates, Link All relies strictly on local system primitives and explicit end-to-end encryption.
 
 ---
 
@@ -142,72 +142,72 @@ cd Link-All
 
 ### 2. Platform-Specific Manual Builds
 
-#### macOS App Bundle (`Deskdrop.app`)
+#### macOS App Bundle (`LinkAll.app`)
 ```bash
 # Compile macOS universal target and stage to /Applications
 ./scripts/build-macos.sh --debug
-cp -a platforms/macos/build/Deskdrop.app /Applications/
-open /Applications/Deskdrop.app
+cp -a platforms/macos/build/LinkAll.app /Applications/
+open /Applications/LinkAll.app
 ```
 
-#### Android APK (`com.deskdrop.debug`)
+#### Android APK (`app.linkall.debug`)
 ```bash
 # Assemble debugging APK and deploy to a USB-connected Android device via ADB
 ./scripts/build-android.sh --debug --fast-abi
 adb install -r platforms/android/app/build/outputs/apk/full/debug/app-full-debug.apk
-adb shell monkey -p com.deskdrop.debug -c android.intent.category.LAUNCHER 1
+adb shell monkey -p app.linkall.debug -c android.intent.category.LAUNCHER 1
 ```
 
-#### Linux Desktop (`deskdrop-linux`)
+#### Linux Desktop (`linkall-linux`)
 ```bash
 # Launch GTK native client directly via Cargo
-cargo run -p deskdrop-linux
+cargo run -p linkall-linux
 ```
 
-#### Windows Client (`Deskdrop.WinUI`, WinUI 3)
+#### Windows Client (`LinkAll.WinUI`, WinUI 3)
 ```bash
 # Compile native core dynamic library for Windows
-cargo build --release -p deskdrop-core
+cargo build --release -p linkall-core
 
 # Build and register desktop client using PowerShell installer script
-powershell -ExecutionPolicy Bypass -File platforms/windows/Deskdrop.WinUI/install_and_run.ps1
+powershell -ExecutionPolicy Bypass -File platforms/windows/LinkAll.WinUI/install_and_run.ps1
 ```
 
 ---
 
 ## Command-Line Interface (CLI)
 
-For headless operations, system administration, and custom terminal script automation, Link All offers a native command-line utility (`deskdrop-cli`) communicating directly with the background daemon over low-latency IPC sockets:
+For headless operations, system administration, and custom terminal script automation, Link All offers a native command-line utility (`linkall-cli`) communicating directly with the background daemon over low-latency IPC sockets:
 
 ```bash
 # Print daemon health, version, and active listening ports
-cargo run -p deskdrop-cli -- status
+cargo run -p linkall-cli -- status
 
 # Benchmark IPC domain socket round-trip latency
-cargo run -p deskdrop-cli -- ping
+cargo run -p linkall-cli -- ping
 # Output: PONG (1.1ms)
 
 # Display real-time throughput metrics, transfer counters, and latency percentiles
-cargo run -p deskdrop-cli -- metrics
+cargo run -p linkall-cli -- metrics
 
 # Query recent local clipboard history records
-cargo run -p deskdrop-cli -- history --last 15
+cargo run -p linkall-cli -- history --last 15
 
 # Lock a history record to prevent automatic buffer eviction
-cargo run -p deskdrop-cli -- history pin <id>
+cargo run -p linkall-cli -- history pin <id>
 
 # Enumerate active discovered and trusted peer nodes on local subnet
-cargo run -p deskdrop-cli -- devices list
+cargo run -p linkall-cli -- devices list
 
 # Ask a device to pair, then answer or withdraw requests (handy on Linux)
-cargo run -p deskdrop-cli -- pair <device-id>
-cargo run -p deskdrop-cli -- pair accept <device-id>
-cargo run -p deskdrop-cli -- pair decline <device-id>
-cargo run -p deskdrop-cli -- pair cancel <device-id>
+cargo run -p linkall-cli -- pair <device-id>
+cargo run -p linkall-cli -- pair accept <device-id>
+cargo run -p linkall-cli -- pair decline <device-id>
+cargo run -p linkall-cli -- pair cancel <device-id>
 
 # Toggle sync permissions for specific hardware UUIDs
-cargo run -p deskdrop-cli -- devices peer-settings <device-id> pause
-cargo run -p deskdrop-cli -- devices peer-settings <device-id> resume
+cargo run -p linkall-cli -- devices peer-settings <device-id> pause
+cargo run -p linkall-cli -- devices peer-settings <device-id> resume
 ```
 
 ---

@@ -13,8 +13,8 @@
 
 **Please do not file public GitHub issues for security vulnerabilities.**
 
-Email: **security@deskdrop.example** (replace with real address before shipping)
-PGP key: published at `https://deskdrop.example/security.asc`
+Email: **security@linkall.example** (replace with real address before shipping)
+PGP key: published at `https://linkall.example/security.asc`
 
 We aim to:
 - Acknowledge receipt within **48 hours**
@@ -46,7 +46,7 @@ for evaluating its security posture.
 
 | Threat | Reasoning |
 |--------|-----------|
-| **Malicious device you have already trusted** | After trust is established, a compromised peer can push arbitrary clipboard content to your devices. Revoke compromised devices via `deskdrop-cli devices revoke`. |
+| **Malicious device you have already trusted** | After trust is established, a compromised peer can push arbitrary clipboard content to your devices. Revoke compromised devices via `linkall-cli devices revoke`. |
 | **Physical access to your device** | If an attacker can read the trust store (`trust.json`, mode 0600) or the running process memory, they can impersonate trusted devices. Full-disk encryption is assumed. |
 | **Network-level MITM after trust** | The current implementation does not re-verify the peer's long-term identity on every session beyond fingerprint pinning. A sophisticated MITM who can re-use the pinned fingerprint is not defended against. Future versions will add certificate-pinned long-term identity keys. |
 | **Local privilege escalation** | If an attacker gains OS-level access to your machine, they can read clipboard content directly. Link All does not add any protection beyond what the OS provides. |
@@ -61,7 +61,7 @@ for evaluating its security posture.
 | Primitive | Algorithm | Key size | Notes |
 |-----------|-----------|----------|-------|
 | Key exchange | X25519 ECDH | 256-bit | Ephemeral per session (forward secrecy) |
-| Key derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "deskdrop-v1-session" |
+| Key derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "linkall-v1-session" |
 | Symmetric encryption | AES-256-GCM | 256-bit | nonce = 96-bit counter |
 | PIN derivation | HKDF-SHA256 | — | IKM = ECDH shared secret; context = "deskdrop-pin" |
 | Key fingerprint | SHA-256 | 256-bit | Of the peer's ephemeral public key bytes |

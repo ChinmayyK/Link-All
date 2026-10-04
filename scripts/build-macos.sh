@@ -13,9 +13,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CORE_DIR="${REPO_ROOT}/deskdrop-core"
+CORE_DIR="${REPO_ROOT}/linkall-core"
 MACOS_DIR="${REPO_ROOT}/platforms/macos"
-SOURCE_DIR_NAME="Deskdrop"
+SOURCE_DIR_NAME="LinkAll"
 PRODUCT_NAME="Link All"
 BUILD_TYPE="${1:---release}"
 APP_BUNDLE="${MACOS_DIR}/build/${PRODUCT_NAME}.app"
@@ -29,10 +29,10 @@ log() { echo "▶ $*"; }
 
 log "Building Rust core (${BUILD_TYPE})..."
 cd "${REPO_ROOT}"
-cargo build --release -p deskdrop-core --features compress --lib --bin deskdrop-daemon
+cargo build --release -p linkall-core --features compress --lib --bin linkall-daemon
 
-DYLIB_SRC="${TARGET_DIR}/libdeskdrop_core.dylib"
-DAEMON_SRC="${TARGET_DIR}/deskdrop-daemon"
+DYLIB_SRC="${TARGET_DIR}/liblinkall_core.dylib"
+DAEMON_SRC="${TARGET_DIR}/linkall-daemon"
 
 # ── 2. Create .app bundle skeleton ───────────────────────────────────────────
 
@@ -41,14 +41,14 @@ rm -rf "${APP_BUNDLE}"
 mkdir -p "${APP_BUNDLE}/Contents/"{MacOS,Frameworks,Resources,Library/SystemExtensions}
 
 # Copy dylib.
-cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
-cp "${DAEMON_SRC}" "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
-chmod +x "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
+cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
+cp "${DAEMON_SRC}" "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
+chmod +x "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
 
 # Fix dylib install name.
 install_name_tool \
-    -id "@rpath/libdeskdrop_core.dylib" \
-    "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
+    -id "@rpath/liblinkall_core.dylib" \
+    "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
 
 # ── 3. Compile Swift app ─────────────────────────────────────────────────────
 
@@ -65,7 +65,7 @@ MACRO_PLUGIN_DIR="${REPO_ROOT}/.build-tools/swift-plugins"
 
 swiftc \
     "${SWIFT_FILES[@]}" \
-    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/DeskdropBridge.h" \
+    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/LinkAllBridge.h" \
     -sdk "${SDK_PATH}" \
     -target "${MACOS_TARGET}" \
     $( [[ -d "${MACRO_PLUGIN_DIR}" ]] && echo "-plugin-path ${MACRO_PLUGIN_DIR}" ) \
@@ -75,7 +75,7 @@ swiftc \
     -framework UserNotifications \
     -F "${APP_BUNDLE}/Contents/Frameworks" \
     -L "${APP_BUNDLE}/Contents/Frameworks" \
-    -ldeskdrop_core \
+    -llinkall_core \
     -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -o "${APP_BUNDLE}/Contents/MacOS/${PRODUCT_NAME}"
 
@@ -132,7 +132,7 @@ done
 # Generate AppIcon.icns from the bundled source PNG.
 if [[ -f "${ICON_SRC}" ]]; then
     log "Generating app icon..."
-    ICON_TMP_DIR="$(mktemp -d /tmp/deskdrop-icon.XXXXXX)"
+    ICON_TMP_DIR="$(mktemp -d /tmp/linkall-icon.XXXXXX)"
     ICONSET_DIR="${ICON_TMP_DIR}/AppIcon.iconset"
     mkdir -p "${ICONSET_DIR}"
     for size in 16 32 128 256 512; do
@@ -156,7 +156,7 @@ elif [[ -x /Applications/Xcode.app/Contents/Developer/usr/bin/actool ]]; then
 fi
 if [[ -d "${ICON_BUNDLE}" && -n "${ACTOOL}" ]]; then
     log "Compiling themed app icon..."
-    ICON_OUT="$(mktemp -d /tmp/deskdrop-appicon.XXXXXX)"
+    ICON_OUT="$(mktemp -d /tmp/linkall-appicon.XXXXXX)"
     if ${ACTOOL} "${ICON_BUNDLE}" --compile "${ICON_OUT}" --platform macosx --target-device mac \
            --minimum-deployment-target 26.0 --app-icon AppIcon --include-all-app-icons \
            --output-partial-info-plist "${ICON_OUT}/partial.plist" >/dev/null 2>&1 \
@@ -176,12 +176,12 @@ log "Code signing with identity: ${IDENTITY}"
 codesign \
     --force \
     --sign "${IDENTITY}" \
-    "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
+    "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
 
 codesign \
     --force \
     --sign "${IDENTITY}" \
-    "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
+    "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
 
 codesign \
     --force \
@@ -193,7 +193,7 @@ codesign \
 codesign \
     --force \
     --sign "${IDENTITY}" \
-    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/Deskdrop.entitlements" \
+    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/LinkAll.entitlements" \
     --options runtime \
     "${APP_BUNDLE}"
 
@@ -212,7 +212,7 @@ if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     log "Creating DMG..."
     # No --app-drop-link: that symlink points at the shared /Applications,
     # which non-admin (e.g. managed corporate) users can't write to without
-    # an administrator password. Deskdrop relocates itself to the per-user
+    # an administrator password. Link All relocates itself to the per-user
     # ~/Applications on first launch instead (see AppDelegate.
     # relocateToUserApplicationsIfNeeded), so users just double-click it
     # straight from the mounted DMG.

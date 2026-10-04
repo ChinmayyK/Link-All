@@ -22,13 +22,13 @@ obj/
 *.sln.docstates
 platforms/windows/**/bin/
 platforms/windows/**/obj/
-platforms/windows/**/deskdrop_core.dll
+platforms/windows/**/linkall_core.dll
 *.msi
 *.wixpdb
 
-# Allow Rust source bins under deskdrop-core
-!deskdrop-core/src/bin/
-!deskdrop-core/src/bin/**
+# Allow Rust source bins under linkall-core
+!linkall-core/src/bin/
+!linkall-core/src/bin/**
 
 # Android
 *.apk
@@ -87,11 +87,11 @@ bom.json
 # Never commit these: they go stale, and a tracked .pdb leaks local build paths.
 release/
 build/
-/libdeskdrop_core.dylib
+/liblinkall_core.dylib
 
 # Swift macro plugins pulled from a local Xcode install for CLT-only builds —
 # Apple-proprietary binaries, must never be committed.
 /.build-tools/
 
-# cargo-ndk copies dependency cdylibs next to the core; only libdeskdrop_core.so ships
+# cargo-ndk copies dependency cdylibs next to the core; only liblinkall_core.so ships
 platforms/android/app/src/main/jniLibs/**/libandroid_native_keyring_store-*.so

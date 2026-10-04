@@ -1,4 +1,4 @@
-# Deskdrop Cross-Device Moat Features Roadmap
+# Link All Cross-Device Moat Features Roadmap
 
 Date: May 27, 2026
 
@@ -6,7 +6,7 @@ Date: May 27, 2026
 
 This document focuses on one question:
 
-- what cross-device features could make Deskdrop so useful, so integrated, and so habit-forming that a basic clone would feel shallow by comparison
+- what cross-device features could make Link All so useful, so integrated, and so habit-forming that a basic clone would feel shallow by comparison
 
 This is not just a feature brainstorm.
 
@@ -17,11 +17,11 @@ The goal is to identify cross-device experiences that are:
 - genuinely useful
 - hard to replace once adopted
 - difficult to execute well across operating systems
-- aligned with Deskdrop's local-first, privacy-first identity
+- aligned with Link All's local-first, privacy-first identity
 
 ## Core Thesis
 
-If Deskdrop wants to become hard to compete with, it should not try to win by having:
+If Link All wants to become hard to compete with, it should not try to win by having:
 
 - more buttons
 - more platform checkboxes
@@ -29,7 +29,7 @@ If Deskdrop wants to become hard to compete with, it should not try to win by ha
 
 It should win by becoming the best system for **personal device continuity outside closed ecosystems**.
 
-That means Deskdrop should feel like:
+That means Link All should feel like:
 
 - the cross-device nervous system for your own devices
 - the place where context, files, actions, and handoffs move naturally
@@ -48,7 +48,7 @@ The moat will come from combining five things better than anyone else:
 A cross-device feature is moat-worthy if it has at least three of these properties:
 
 - it depends on deep platform integration
-- it compounds with other Deskdrop features
+- it compounds with other Link All features
 - it creates habitual daily use
 - it benefits from a shared timeline/history model
 - it becomes more valuable as the user's device graph grows
@@ -68,7 +68,7 @@ Far fewer can copy:
 
 ## Strategic Positioning
 
-Deskdrop should aim to own this category:
+Link All should aim to own this category:
 
 - private cross-device continuity for people with mixed ecosystems
 
@@ -88,7 +88,7 @@ Users should feel like every device is an extension of the same working environm
 
 ## 2. Context
 
-Deskdrop should not only move raw payloads.
+Link All should not only move raw payloads.
 
 It should move the meaning around them:
 
@@ -109,7 +109,7 @@ They are:
 
 ## 4. Trust
 
-Users need to feel that Deskdrop understands:
+Users need to feel that Link All understands:
 
 - what is safe to move
 - what should stay local
@@ -122,7 +122,7 @@ The feature set only becomes a moat if it feels operationally bulletproof.
 
 ## North Star Product Idea
 
-The strongest version of Deskdrop is not a clipboard app.
+The strongest version of Link All is not a clipboard app.
 
 It is a **cross-device continuity layer** with these capabilities:
 
@@ -173,7 +173,7 @@ Examples:
 
 ## B. Cross-Device Command Relay
 
-This could make Deskdrop feel uniquely capable.
+This could make Link All feel uniquely capable.
 
 ### Concept
 
@@ -199,7 +199,7 @@ Examples:
 
 ### Why it is powerful
 
-- turns Deskdrop into an action layer, not just a sync layer
+- turns Link All into an action layer, not just a sync layer
 - creates strong power-user stickiness
 
 ### Why it is hard to clone well
@@ -272,7 +272,7 @@ Examples:
 
 ### Why it is powerful
 
-- makes Deskdrop adapt to the user's life instead of forcing one sync model
+- makes Link All adapt to the user's life instead of forcing one sync model
 
 ### Why it is hard to clone well
 
@@ -314,7 +314,7 @@ Done carefully, this can be a major differentiator.
 
 ### Concept
 
-Deskdrop becomes the trusted cross-device layer for attention management.
+Link All becomes the trusted cross-device layer for attention management.
 
 Examples:
 
@@ -346,7 +346,7 @@ Examples:
 
 Most competitors stop at "file sent."
 
-Deskdrop can go further.
+Link All can go further.
 
 ### Concept
 
@@ -372,11 +372,11 @@ Transfers should feel like coordinated sessions, not dumb pipes.
 
 ## H. Session-Based Workflows
 
-This can make Deskdrop feel more premium and less utility-like.
+This can make Link All feel more premium and less utility-like.
 
 ### Concept
 
-Deskdrop recognizes short-lived work sessions across devices.
+Link All recognizes short-lived work sessions across devices.
 
 Examples:
 
@@ -403,11 +403,11 @@ Examples:
 
 ## I. Device Presence and Nearby Intelligence
 
-This can make Deskdrop feel alive.
+This can make Link All feel alive.
 
 ### Concept
 
-Deskdrop should understand:
+Link All should understand:
 
 - which devices are nearby
 - which are active
@@ -474,7 +474,7 @@ If we want the highest leverage features that could define the category, these a
 
 ## Features That Create Habit
 
-The moat gets stronger when users touch Deskdrop many times a day.
+The moat gets stronger when users touch Link All many times a day.
 
 These are the highest-habit feature types:
 
@@ -508,7 +508,7 @@ These are the features that make people talk about the product:
 
 ## Roadmap by Horizon
 
-## Horizon 1: Turn Deskdrop Into the Best Private Continuity Utility
+## Horizon 1: Turn Link All Into the Best Private Continuity Utility
 
 Focus:
 
@@ -525,9 +525,9 @@ Focus:
 
 ### Goal
 
-- user starts relying on Deskdrop for daily continuity
+- user starts relying on Link All for daily continuity
 
-## Horizon 2: Make Deskdrop the Cross-Device Context Layer
+## Horizon 2: Make Link All the Cross-Device Context Layer
 
 Focus:
 
@@ -543,9 +543,9 @@ Focus:
 
 ### Goal
 
-- Deskdrop becomes the place users return to when switching devices
+- Link All becomes the place users return to when switching devices
 
-## Horizon 3: Make Deskdrop the Private Cross-Device Control Plane
+## Horizon 3: Make Link All the Private Cross-Device Control Plane
 
 Focus:
 
@@ -561,7 +561,7 @@ Focus:
 
 ### Goal
 
-- Deskdrop becomes the user's personal mixed-device continuity system
+- Link All becomes the user's personal mixed-device continuity system
 
 ## Priority Feature List
 
@@ -590,7 +590,7 @@ Examples:
 - cloud-like collaboration layers that weaken the local-first identity
 - too many isolated one-off tools
 
-## How Deskdrop Actually Becomes Hard to Compete With
+## How Link All Actually Becomes Hard to Compete With
 
 Not by making cloning impossible.
 
@@ -634,7 +634,7 @@ If we wanted to turn this document into delivery work, the best order would be:
 
 ## Bottom Line
 
-The path to making Deskdrop feel untouchable is not "more sync."
+The path to making Link All feel untouchable is not "more sync."
 
 It is:
 
@@ -644,4 +644,4 @@ It is:
 - safer automation
 - more reliable mixed-device workflows
 
-If Deskdrop becomes the best privacy-first continuity system for people who live across Android, macOS, Windows, and Linux, a simple clone will always feel like a toy next to it.
+If Link All becomes the best privacy-first continuity system for people who live across Android, macOS, Windows, and Linux, a simple clone will always feel like a toy next to it.

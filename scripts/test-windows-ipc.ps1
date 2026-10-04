@@ -1,13 +1,13 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "Deskdrop IPC Smoke Test" -ForegroundColor Cyan
+Write-Host "Link All IPC Smoke Test" -ForegroundColor Cyan
 Write-Host "-----------------------"
 
-$pipeName = "DeskdropIPC"
+$pipeName = "LinkAllIPC"
 $pipePath = "\\.\pipe\$pipeName"
 
 if (!(Test-Path $pipePath)) {
-    Write-Host "Pipe $pipePath not found! Is Deskdrop running?" -ForegroundColor Red
+    Write-Host "Pipe $pipePath not found! Is Link All running?" -ForegroundColor Red
     exit 1
 }
 

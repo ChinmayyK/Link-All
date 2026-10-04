@@ -16,7 +16,7 @@ rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8"]
 [target.aarch64-pc-windows-msvc]
 rustflags = ["--cfg", "aes_armv8", "--cfg", "polyval_armv8", "-C", "target-feature=+aes,+sha2,+crt-static"]
 
-# Link the C runtime statically on Windows so deskdrop_core.dll and the tray
+# Link the C runtime statically on Windows so linkall_core.dll and the tray
 # exe do not need vcruntime140.dll, which a clean Windows install may lack.
 [target.x86_64-pc-windows-msvc]
 rustflags = ["-C", "target-feature=+crt-static"]

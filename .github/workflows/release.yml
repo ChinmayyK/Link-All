@@ -72,22 +72,22 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Build Rust DLL
-        run: cargo build --release -p deskdrop-core
+        run: cargo build --release -p linkall-core
 
       - name: Build C# app
         run: |
-          Copy-Item target\release\deskdrop_core.dll `
-                    platforms\windows\Deskdrop.WinUI\
-          # Native AOT (PublishAot in the csproj): Deskdrop.exe is compiled to native code,
+          Copy-Item target\release\linkall_core.dll `
+                    platforms\windows\LinkAll.WinUI\
+          # Native AOT (PublishAot in the csproj): LinkAll.exe is compiled to native code,
           # with no .NET runtime shipped. Still a folder publish, since the Windows App SDK
-          # runtime, deskdrop_core.dll and tray\ sit next to the exe.
-          dotnet publish platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj `
+          # runtime, linkall_core.dll and tray\ sit next to the exe.
+          dotnet publish platforms\windows\LinkAll.WinUI\LinkAll.WinUI.csproj `
             -c Release -r win-x64 --self-contained true `
             -o publish\windows
 
       - name: Check Windows publish
         run: |
-          foreach ($f in 'Deskdrop.exe', 'deskdrop_core.dll', 'tray\Deskdrop.Tray.exe') {
+          foreach ($f in 'LinkAll.exe', 'linkall_core.dll', 'tray\LinkAll.Tray.exe') {
             if (-not (Test-Path "publish\windows\$f")) { throw "missing $f in publish output" }
           }
           pwsh scripts\windows-size.ps1 publish\windows
@@ -95,7 +95,7 @@ jobs:
       - name: Build MSI
         run: |
           dotnet tool install -g wix --version 5.*
-          wix build platforms\windows\installer\Deskdrop.wxs `
+          wix build platforms\windows\installer\LinkAll.wxs `
             -d "AppDir=$PWD\publish\windows" -bindpath platforms\windows\installer -arch x64 `
             -o LinkAll-windows-x64.msi
           Compress-Archive -Path publish\windows\* -DestinationPath LinkAll-windows-x64.zip
@@ -104,7 +104,7 @@ jobs:
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
-          name: deskdrop-windows
+          name: linkall-windows
           path: |
             LinkAll-windows-x64.msi
             LinkAll-windows-x64.zip
@@ -142,7 +142,7 @@ jobs:
             -t armv7-linux-androideabi \
             -t x86_64-linux-android \
             -o platforms/android/app/src/main/jniLibs \
-            build --lib --release -p deskdrop-core
+            build --lib --release -p linkall-core
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
 
@@ -159,10 +159,10 @@ jobs:
         run: ./gradlew :app:assembleFullRelease :app:bundlePlayRelease
         working-directory: platforms/android
         env:
-          DESKDROP_KEYSTORE: release.keystore
-          DESKDROP_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          DESKDROP_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          DESKDROP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          LINKALL_KEYSTORE: release.keystore
+          LINKALL_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          LINKALL_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          LINKALL_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
       - name: Name the APK
         run: mv platforms/android/app/build/outputs/apk/full/release/app-full-release.apk LinkAll-android.apk
@@ -170,13 +170,13 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: deskdrop-android
+          name: linkall-android
           path: LinkAll-android.apk
 
       - name: Upload Play bundle
         uses: actions/upload-artifact@v4
         with:
-          name: deskdrop-android-play
+          name: linkall-android-play
           path: platforms/android/app/build/outputs/bundle/playRelease/*.aab
 
   # ── macOS DMG ─────────────────────────────────────────────────────────────
@@ -197,7 +197,7 @@ jobs:
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
-          name: deskdrop-macos
+          name: linkall-macos
           path: platforms/macos/build/LinkAll.dmg
 
   # ── Linux x86_64 binary + deb ─────────────────────────────────────────────
@@ -216,25 +216,25 @@ jobs:
 
       - name: Build daemon + CLI + GTK
         run: |
-          cargo build --release --bin deskdrop-daemon -p deskdrop-core
-          cargo build --release --bin deskdrop-cli -p deskdrop-cli
-          cargo build --release --bin deskdrop-gtk -p deskdrop-linux
+          cargo build --release --bin linkall-daemon -p linkall-core
+          cargo build --release --bin linkall-cli -p linkall-cli
+          cargo build --release --bin linkall-gtk -p linkall-linux
 
       - name: Package .tar.gz
         run: |
-          mkdir -p dist/deskdrop/usr/local/bin
-          cp target/release/deskdrop-daemon dist/deskdrop/usr/local/bin/
-          cp target/release/deskdrop-cli    dist/deskdrop/usr/local/bin/
-          cp target/release/deskdrop-gtk    dist/deskdrop/usr/local/bin/
-          cp platforms/linux/deskdrop.service dist/deskdrop/
-          cp platforms/linux/deskdrop.desktop dist/deskdrop/
-          cp README.md LICENSE dist/deskdrop/
-          tar czf LinkAll-linux-x86_64.tar.gz -C dist deskdrop
+          mkdir -p dist/linkall/usr/local/bin
+          cp target/release/linkall-daemon dist/linkall/usr/local/bin/
+          cp target/release/linkall-cli    dist/linkall/usr/local/bin/
+          cp target/release/linkall-gtk    dist/linkall/usr/local/bin/
+          cp platforms/linux/linkall.service dist/linkall/
+          cp platforms/linux/linkall.desktop dist/linkall/
+          cp README.md LICENSE dist/linkall/
+          tar czf LinkAll-linux-x86_64.tar.gz -C dist linkall
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
-          name: deskdrop-linux
+          name: linkall-linux
           path: LinkAll-linux-x86_64.tar.gz
 
   # ── Create GitHub Release ─────────────────────────────────────────────────

@@ -21,7 +21,7 @@ for arg in "$@"; do
     esac
 done
 
-echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE})...${NC}\n"
+echo -e "${BLUE}▶ Starting total clean and rebuild for Link All (${BUILD_TYPE})...${NC}\n"
 
 # ==========================================
 # 0. Version Bump & Clean
@@ -30,16 +30,16 @@ echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE}
 # scripts/bump-version.sh --patch
 
 
-echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/deskdrop)...${NC}"
-rm -rf ~/Library/Application\ Support/deskdrop
+echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/linkall)...${NC}"
+rm -rf ~/Library/Application\ Support/linkall
 
 # ==========================================
 # 1. macOS Reinstall
 # ==========================================
 echo -e "${BLUE}▶ [macOS] Stopping existing processes...${NC}"
-pkill -x Deskdrop || true
-pkill -x Deskdrop || true
-pkill -x deskdrop-daemon || true
+pkill -x Link All || true
+pkill -x Link All || true
+pkill -x linkall-daemon || true
 
 echo -e "${BLUE}▶ [macOS] Building latest version...${NC}"
 export SKIP_DMG=true
