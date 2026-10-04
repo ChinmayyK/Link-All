@@ -1,6 +1,6 @@
-# Contributing to Deskdrop
+# Contributing to Link All
 
-Thank you for your interest in improving Deskdrop!
+Thank you for your interest in improving Link All!
 This document covers how to set up the development environment, project conventions, and the PR process.
 
 ---
