@@ -36,6 +36,18 @@ async fn run() -> Result<()> {
         ["send-file", path] => cmd_send_file(path, None).await,
         ["send-file", target, path] => cmd_send_file(path, Some(target)).await,
         ["send-folder", target, path] => cmd_send_folder(path, target).await,
+        ["pause", id] => {
+            cmd_transfer(IpcRequest::PauseFileTransfer {
+                transfer_id: id.to_string(),
+            })
+            .await
+        }
+        ["resume", id] => {
+            cmd_transfer(IpcRequest::ResumeFileTransfer {
+                transfer_id: id.to_string(),
+            })
+            .await
+        }
         ["send-file", "--path", path, "--target", target] => {
             cmd_send_file(path, Some(target)).await
         }
@@ -257,6 +269,13 @@ async fn cmd_send(target: &str, text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+async fn cmd_transfer(req: IpcRequest) -> Result<()> {
+    match ipc(&req).await? {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => Ok(()),
+    }
 }
 
 async fn cmd_send_folder(path: &str, target: &str) -> Result<()> {
@@ -1245,6 +1264,8 @@ DAEMON CONTROL
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it
+  pause <transfer-id>             Pause a file transfer
+  resume <transfer-id>            Resume a paused file transfer
   connect <ip> [port]             Manually connect to a peer by IP address
   sync on|off                     Enable or disable clipboard syncing globally
   stop                            Gracefully stop the daemon
