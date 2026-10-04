@@ -379,18 +379,19 @@ struct CommandCenterView: View {
                         .padding(.horizontal, 40)
                     
                     VStack(alignment: .leading, spacing: 0) {
-                        let recent = Array(store.activityFeed.filter { $0.isApplicable }.prefix(4))
+                        // Latest clipboard items and files, the same list as the Clipboard page.
+                        let recent = Array(store.timeline.filter { $0.typeLabel != "Connection" }.prefix(4))
                         if recent.isEmpty {
                             Text("Copy something on either device, or send a file. It shows up here.")
                                 .font(.system(size: 14))
                                 .foregroundStyle(CRTheme.inkSoft)
                                 .padding(16)
                         } else {
-                            ForEach(Array(recent.enumerated()), id: \.offset) { index, entry in
+                            ForEach(Array(recent.enumerated()), id: \.offset) { index, item in
                                 ActivityRow(
-                                    action: entry.summary,
-                                    time: "Just now", // Since we don't have a relative time formatter readily available, we can just use the timestamp if needed, but for simplicity let's use the summary.
-                                    icon: iconFor(kind: entry.kind)
+                                    action: item.title,
+                                    time: item.timestamp.relativeTimeString(),
+                                    icon: item.iconName
                                 )
                                 if index < recent.count - 1 {
                                     Divider().padding(.horizontal, 16)
@@ -465,17 +466,7 @@ struct CommandCenterView: View {
             withAnimation(.crSpring) { store.selectedSection = .settings }
         }
     }
-    
-    private func iconFor(kind: String) -> String {
-        switch kind {
-        case "clipboard": return "doc.on.clipboard"
-        case "file_transfer_started", "file_transfer_complete": return "paperplane.fill"
-        case "folder_transfer_complete": return "folder.fill"
-        case "app_installed": return "app.dashed"
-        case "photo_synced": return "photo"
-        default: return "bolt.fill"
-        }
-    }
+
 }
 
 // Subcomponents
@@ -586,6 +577,7 @@ struct ActivityRow: View {
             Text(action)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(CRTheme.ink)
+                .lineLimit(1)
             Spacer()
             Text(time)
                 .font(.system(size: 12))
