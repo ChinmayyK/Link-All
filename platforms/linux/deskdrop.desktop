@@ -6,7 +6,7 @@
 
 [Desktop Entry]
 Type=Application
-Name=Deskdrop
+Name=Link All
 GenericName=Clipboard Sync
 Comment=Proximity-Based Shared Clipboard — sync text, images and files across your devices on LAN
 Exec=/usr/local/bin/deskdrop-gtk %U
@@ -39,6 +39,6 @@ Exec=/usr/local/bin/deskdrop-cli settings
 Icon=preferences-system
 
 [Desktop Action Quit]
-Name=Quit Deskdrop
+Name=Quit Link All
 Exec=/usr/local/bin/deskdrop-cli stop
 Icon=application-exit

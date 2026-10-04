@@ -97,17 +97,17 @@ jobs:
           dotnet tool install -g wix --version 5.*
           wix build platforms\windows\installer\Deskdrop.wxs `
             -d "AppDir=$PWD\publish\windows" -bindpath platforms\windows\installer -arch x64 `
-            -o Deskdrop-windows-x64.msi
-          Compress-Archive -Path publish\windows\* -DestinationPath Deskdrop-windows-x64.zip
-          pwsh scripts\windows-size.ps1 publish\windows Deskdrop-windows-x64.msi
+            -o LinkAll-windows-x64.msi
+          Compress-Archive -Path publish\windows\* -DestinationPath LinkAll-windows-x64.zip
+          pwsh scripts\windows-size.ps1 publish\windows LinkAll-windows-x64.msi
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-windows
           path: |
-            Deskdrop-windows-x64.msi
-            Deskdrop-windows-x64.zip
+            LinkAll-windows-x64.msi
+            LinkAll-windows-x64.zip
 
   # ── Android APK ───────────────────────────────────────────────────────────
   release-android:
@@ -164,11 +164,14 @@ jobs:
           DESKDROP_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           DESKDROP_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
 
+      - name: Name the APK
+        run: mv platforms/android/app/build/outputs/apk/full/release/app-full-release.apk LinkAll-android.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-android
-          path: platforms/android/app/build/outputs/apk/full/release/*.apk
+          path: LinkAll-android.apk
 
       - name: Upload Play bundle
         uses: actions/upload-artifact@v4
@@ -195,7 +198,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-macos
-          path: platforms/macos/build/Deskdrop.dmg
+          path: platforms/macos/build/LinkAll.dmg
 
   # ── Linux x86_64 binary + deb ─────────────────────────────────────────────
   release-linux:
@@ -226,13 +229,13 @@ jobs:
           cp platforms/linux/deskdrop.service dist/deskdrop/
           cp platforms/linux/deskdrop.desktop dist/deskdrop/
           cp README.md LICENSE dist/deskdrop/
-          tar czf deskdrop-linux-x86_64.tar.gz -C dist deskdrop
+          tar czf LinkAll-linux-x86_64.tar.gz -C dist deskdrop
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v4
         with:
           name: deskdrop-linux
-          path: deskdrop-linux-x86_64.tar.gz
+          path: LinkAll-linux-x86_64.tar.gz
 
   # ── Create GitHub Release ─────────────────────────────────────────────────
   create-release:
@@ -257,19 +260,19 @@ jobs:
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          name: "Deskdrop ${{ github.ref_name }}"
+          name: "Link All ${{ github.ref_name }}"
           body: |
-            ## Deskdrop ${{ github.ref_name }}
+            ## Link All ${{ github.ref_name }}
 
             Proximity-Based Shared Clipboard — no account, no cloud, no setup.
 
             ### Downloads
             | Platform | File |
             |---|---|
-            | Windows 10/11 x64 | `Deskdrop-windows-x64.msi` (installer) or `Deskdrop-windows-x64.zip` (portable) |
-            | Android 8.0+      | `app-full-release.apk` |
-            | Linux x86_64      | `deskdrop-linux-x86_64.tar.gz` |
-            | macOS (Apple Silicon) | `Deskdrop.dmg` |
+            | Windows 10/11 x64 | `LinkAll-windows-x64.msi` (installer) or `LinkAll-windows-x64.zip` (portable) |
+            | Android 8.0+      | `LinkAll-android.apk` |
+            | Linux x86_64      | `LinkAll-linux-x86_64.tar.gz` |
+            | macOS (Apple Silicon) | `LinkAll.dmg` |
 
             ### What's new
             See [CHANGELOG.md](CHANGELOG.md).

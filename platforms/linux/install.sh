@@ -25,7 +25,7 @@ bold()   { echo -e "\033[1m$*\033[0m"; }
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-    bold "Uninstalling Deskdrop…"
+    bold "Uninstalling Link All…"
     systemctl --user stop    deskdrop.service 2>/dev/null || true
     systemctl --user disable deskdrop.service 2>/dev/null || true
     rm -f "$SERVICE_DIR/deskdrop.service"
@@ -35,13 +35,13 @@ if [[ "${1:-}" == "--uninstall" ]]; then
     rm -f "$INSTALL_DIR/$CLI_NAME"
     systemctl --user daemon-reload 2>/dev/null || true
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-    green "Deskdrop uninstalled."
+    green "Link All uninstalled."
     exit 0
 fi
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
 
-bold "Deskdrop Linux Installer"
+bold "Link All Linux Installer"
 echo ""
 
 # Check for required tools.
@@ -107,10 +107,10 @@ sed "s|/usr/local/bin/deskdrop-gtk|$INSTALL_DIR/$BIN_NAME|g;s|/usr/local/bin/des
 systemctl --user daemon-reload
 
 if systemctl --user is-active deskdrop.service &>/dev/null; then
-    echo "Restarting Deskdrop service…"
+    echo "Restarting Link All service…"
     systemctl --user restart deskdrop.service
 else
-    echo "Enabling and starting Deskdrop service…"
+    echo "Enabling and starting Link All service…"
     systemctl --user enable --now deskdrop.service
 fi
 
@@ -120,12 +120,12 @@ xdg-mime default deskdrop.desktop x-scheme-handler/deskdrop 2>/dev/null || true
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
-green "✅ Deskdrop installed successfully."
+green "✅ Link All installed successfully."
 echo ""
 echo "  Status: systemctl --user status deskdrop"
 echo "  Logs:   journalctl --user -u deskdrop -f"
 echo "  Stop:   systemctl --user stop deskdrop"
 echo "  Remove: $SCRIPT_DIR/install.sh --uninstall"
 echo ""
-echo "Deskdrop is now running in the background."
+echo "Link All is now running in the background."
 echo "It will discover nearby devices automatically via mDNS."

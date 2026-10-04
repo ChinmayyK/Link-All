@@ -8,7 +8,7 @@
 # Status:  systemctl --user status deskdrop
 
 [Unit]
-Description=Deskdrop — Proximity-Based Shared Clipboard
+Description=Link All — files, clipboard and more between your devices
 Documentation=https://github.com/deskdrop/deskdrop
 # Network must be available before we start (mDNS discovery won't work otherwise).
 After=network-online.target

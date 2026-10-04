@@ -207,7 +207,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                 match apply_clipboard_content(&content) {
                     Ok(()) => rate_limited_notify(
                         last_notify,
-                        "Deskdrop",
+                        "Link All",
                         &format!("Clipboard from {from_name}"),
                     ),
                     Err(e) => {
@@ -243,7 +243,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
             tracing::info!("connected to {}", device_name);
             rate_limited_notify(
                 last_notify,
-                "Deskdrop",
+                "Link All",
                 &format!("Connected to {device_name}"),
             );
         }
