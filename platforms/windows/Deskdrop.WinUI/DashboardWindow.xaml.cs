@@ -30,7 +30,7 @@ namespace Deskdrop.WinUI
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             _appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             Deskdrop.WinUI.Services.WindowIconHelper.Apply(_appWindow);
-            _appWindow.Title = "Deskdrop";
+            _appWindow.Title = "Link All";
 
             // Taskbar presence tracks actual visibility rather than being
             // fixed at construction time: the window starts visible (Show()

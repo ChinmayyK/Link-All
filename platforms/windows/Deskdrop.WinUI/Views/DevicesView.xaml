@@ -376,7 +376,7 @@
                         <TextBlock Text="Link this PC to your phone" Style="{StaticResource AppDisplayText}" TextWrapping="Wrap" />
                         <TextBlock Style="{StaticResource AppBody}" TextWrapping="Wrap" MaxWidth="460" HorizontalAlignment="Left"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                   Text="Share your clipboard and send files over your own network. Open Deskdrop on the other device, then pair it here. Nothing goes through a cloud." />
+                                   Text="Share your clipboard and send files over your own network. Open Link All on the other device, then pair it here. Nothing goes through a cloud." />
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
                             <Button Style="{StaticResource AppPrimaryButton}" Padding="20,8"
                                     Content="Pair a device" Click="OnShowQRCodeClicked" />

@@ -60,7 +60,7 @@ namespace Deskdrop.WinUI
             QrCodeImage.Visibility = Visibility.Collapsed;
             QrErrorPanel.Visibility = Visibility.Collapsed;
             RetryButton.Visibility = Visibility.Collapsed;
-            TxtCaption.Text = "Scan with Deskdrop on your other device to connect.";
+            TxtCaption.Text = "Scan with Link All on your other device to connect.";
 
             string? fp = null;
             string? token = null;
@@ -110,7 +110,7 @@ namespace Deskdrop.WinUI
                 QrLoadingRing.Visibility = Visibility.Collapsed;
                 QrErrorPanel.Visibility = Visibility.Visible;
                 RetryButton.Visibility = Visibility.Visible;
-                TxtCaption.Text = "Deskdrop's local service isn't responding yet.";
+                TxtCaption.Text = "Link All's local service isn't responding yet.";
                 return;
             }
 

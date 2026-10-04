@@ -51,7 +51,7 @@
 
         <TextBlock Style="{StaticResource AppSecondary}"
                    TextWrapping="Wrap"
-                   Text="Open Deskdrop on your phone or another computer and scan this code. Nothing leaves your local network." />
+                   Text="Open Link All on your phone or another computer and scan this code. Nothing leaves your local network." />
 
         <!-- The QR needs a white quiet zone to stay scannable in either theme. -->
         <Border Background="White"

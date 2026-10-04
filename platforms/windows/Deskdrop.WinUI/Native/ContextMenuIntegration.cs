@@ -17,7 +17,7 @@ namespace Deskdrop.WinUI.Native
                 // Register for all files
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\*\shell\Deskdrop"))
                 {
-                    key.SetValue("", "Send via Deskdrop");
+                    key.SetValue("", "Send via Link All");
                     key.SetValue("Icon", $"\"{exePath}\",0");
                     using (RegistryKey commandKey = key.CreateSubKey("command"))
                     {
@@ -28,7 +28,7 @@ namespace Deskdrop.WinUI.Native
                 // Register for directories
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\Directory\shell\Deskdrop"))
                 {
-                    key.SetValue("", "Send via Deskdrop");
+                    key.SetValue("", "Send via Link All");
                     key.SetValue("Icon", $"\"{exePath}\",0");
                     using (RegistryKey commandKey = key.CreateSubKey("command"))
                     {
@@ -56,7 +56,7 @@ namespace Deskdrop.WinUI.Native
 
                 using (RegistryKey key = Registry.CurrentUser.CreateSubKey(@"Software\Classes\deskdrop"))
                 {
-                    key.SetValue("", "URL:Deskdrop Protocol");
+                    key.SetValue("", "URL:Link All Protocol");
                     key.SetValue("URL Protocol", "");
                     using (RegistryKey iconKey = key.CreateSubKey("DefaultIcon"))
                     {

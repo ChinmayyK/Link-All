@@ -182,8 +182,8 @@
                 </Button>
                 <Button Style="{StaticResource AppGhostButton}"
                         Click="BtnHeaderQuit_Click"
-                        ToolTipService.ToolTip="Quit Deskdrop"
-                        AutomationProperties.Name="Quit Deskdrop">
+                        ToolTipService.ToolTip="Quit Link All"
+                        AutomationProperties.Name="Quit Link All">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon Glyph="&#xE711;" FontSize="13" />
                         <TextBlock Text="Quit" />

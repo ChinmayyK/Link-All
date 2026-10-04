@@ -241,7 +241,7 @@ namespace Deskdrop.WinUI.Services
                                     ? eventPin
                                     : DeskdropStore.Shared.Peers?.FirstOrDefault(p => p.device_id == deviceId)?.pairingPin;
                                 var codeLine = string.IsNullOrWhiteSpace(pin)
-                                    ? "Open Deskdrop to compare the security code."
+                                    ? "Open Link All to compare the security code."
                                     : $"Security code {pin} - accept only if it matches.";
                                 NotificationHelper.ShowToastWithActions(
                                     $"{device} wants to pair",
@@ -292,7 +292,7 @@ namespace Deskdrop.WinUI.Services
                             if (ShouldToastWarning(message))
                             {
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                    NotificationHelper.ShowToast(string.IsNullOrEmpty(device) ? "Deskdrop Warning" : $"Warning from {device}", message);
+                                    NotificationHelper.ShowToast(string.IsNullOrEmpty(device) ? "Link All Warning" : $"Warning from {device}", message);
                                 });
                             }
                             break;

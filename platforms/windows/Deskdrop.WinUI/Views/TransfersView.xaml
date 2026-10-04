@@ -231,7 +231,7 @@
                         <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                             <TextBlock Text="Nothing transferring" Style="{StaticResource AppBodyStrong}" />
                             <TextBlock Style="{StaticResource AppSecondary}" TextWrapping="Wrap"
-                                       Text="Send files from here, drop them on the Deskdrop window, or use the right-click menu in File Explorer." />
+                                       Text="Send files from here, drop them on the Link All window, or use the right-click menu in File Explorer." />
                         </StackPanel>
                     </Grid>
                 </Border>

@@ -17,8 +17,8 @@
 
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package
-    Name="Deskdrop"
-    Manufacturer="Deskdrop"
+    Name="Link All"
+    Manufacturer="Link All"
     Version="1.4.0"
     UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
     Scope="perUser">
@@ -30,7 +30,7 @@
 
     <!-- AllowSameVersionUpgrades: a rebuilt MSI with the same version replaces the
          installed one instead of registering a second Deskdrop product. -->
-    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of Deskdrop is already installed." />
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of Link All is already installed." />
 
     <!-- One embedded cabinet at the highest compression: a smaller download,
          at the cost of a slower MSI build. -->
@@ -51,7 +51,7 @@
          owns the choice for everyone else. -->
     <Property Id="AUTOSTART" Value="0" />
 
-    <Feature Id="ProductFeature" Title="Deskdrop" Level="1">
+    <Feature Id="ProductFeature" Title="Link All" Level="1">
       <ComponentGroupRef Id="ProductComponents" />
       <ComponentGroupRef Id="Shortcuts" />
     </Feature>
@@ -72,11 +72,13 @@
   <Fragment>
     <StandardDirectory Id="LocalAppDataFolder">
       <Directory Id="ProgramsFolder" Name="Programs">
+        <!-- Keeps its pre-rename name so an update installs in place and the
+             sign-in entry, file associations and context menu stay valid. -->
         <Directory Id="INSTALLFOLDER" Name="Deskdrop" />
       </Directory>
     </StandardDirectory>
     <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="ApplicationProgramsFolder" Name="Deskdrop" />
+      <Directory Id="ApplicationProgramsFolder" Name="Link All" />
     </StandardDirectory>
     <StandardDirectory Id="DesktopFolder" />
   </Fragment>
@@ -131,8 +133,8 @@
     <ComponentGroup Id="Shortcuts" Directory="ApplicationProgramsFolder">
       <Component Id="StartMenuShortcut" Guid="d4e5f6a7-b8c9-0123-def0-234567890123">
         <Shortcut Id="AppShortcut"
-                  Name="Deskdrop"
-                  Description="Share your clipboard and files between your devices"
+                  Name="Link All"
+                  Description="Files, clipboard, calls and camera between your devices"
                   Target="[INSTALLFOLDER]Deskdrop.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="DeskdropIco" />
@@ -146,8 +148,8 @@
            HKCU value is its key path (a per-user component cannot use a file). -->
       <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="e5f6a7b8-c9d0-1234-ef01-345678901234">
         <Shortcut Id="DesktopAppShortcut"
-                  Name="Deskdrop"
-                  Description="Share your clipboard and files between your devices"
+                  Name="Link All"
+                  Description="Files, clipboard, calls and camera between your devices"
                   Target="[INSTALLFOLDER]Deskdrop.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="DeskdropIco" />

@@ -1,5 +1,5 @@
 <!--
-    Deskdrop design tokens.
+    Link All design tokens.
 
     Shared visual language with the Android app: one cobalt accent (the
     Mac app's brand blue, #0055CC), neutral surfaces, lists grouped by
@@ -17,7 +17,7 @@
          bottom and is consumed with {StaticResource ...}.
 
     We also re-point the WinUI *system* accent ramp (SystemAccentColor and
-    its Light/Dark variants) at Deskdrop's accent. Every stock control -
+    its Light/Dark variants) at Link All's accent. Every stock control -
     ToggleSwitch, ProgressBar, RadioButton, CheckBox, NavigationView's
     selection indicator, ContentDialog's primary button, text-box focus
     underline - derives its accent from that ramp, so one override keeps the

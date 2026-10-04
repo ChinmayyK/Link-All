@@ -29,7 +29,7 @@
                 <TextBlock Style="{StaticResource AppSecondary}"
                            TextWrapping="Wrap"
                            Margin="0,8,0,0"
-                           Text="Scan this code with Deskdrop on your phone or another computer." />
+                           Text="Scan this code with Link All on your phone or another computer." />
 
                 <!-- The QR needs a white quiet zone to stay scannable in either theme. -->
                 <Border Background="White"

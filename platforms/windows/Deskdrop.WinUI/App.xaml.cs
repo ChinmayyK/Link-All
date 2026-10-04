@@ -180,7 +180,7 @@ public partial class App : Application
             {
                 TraceLog.Write("Secondary instance detected. Redirecting activation to existing instance.");
                 _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
-                var existingHwnd = FindWindowW(null, "Deskdrop");
+                var existingHwnd = FindWindowW(null, "Link All");
                 if (existingHwnd == IntPtr.Zero) existingHwnd = FindWindowW(null, "DeskDrop Dashboard");
                 if (existingHwnd != IntPtr.Zero)
                 {

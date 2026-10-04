@@ -1,5 +1,5 @@
 <!--
-    Deskdrop control library.
+    Link All control library.
 
     Buttons here carry full ControlTemplates rather than plain Setters.
     That is deliberate: the stock Button template resolves its own

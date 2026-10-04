@@ -17,7 +17,7 @@
   <mp:PhoneIdentity PhoneProductId="476CC0A7-1560-4FB5-8218-1661E1E6B021" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
 
   <Properties>
-    <DisplayName>Deskdrop.WinUI</DisplayName>
+    <DisplayName>Link All</DisplayName>
     <PublisherDisplayName>AppPublisher</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <!-- Keep the device identity, trust store and settings in the real
@@ -43,8 +43,8 @@
       Executable="$targetnametoken$.exe"
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
-        DisplayName="Deskdrop.WinUI"
-        Description="Deskdrop.WinUI"
+        DisplayName="Link All"
+        Description="Files, clipboard, calls and camera between your devices"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">

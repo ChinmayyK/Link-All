@@ -29,13 +29,13 @@ namespace Deskdrop.WinUI
                 {
                     if (!RuleExists(name))
                     {
-                        System.Diagnostics.Debug.WriteLine($"[Deskdrop] Firewall rule missing: {name} ({protocol}/{port}). Not auto-elevating - LAN discovery/transfer may be blocked until this is added manually or by an admin.");
+                        System.Diagnostics.Debug.WriteLine($"[Link All] Firewall rule missing: {name} ({protocol}/{port}). Not auto-elevating - LAN discovery/transfer may be blocked until this is added manually or by an admin.");
                     }
                 }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[Deskdrop] Firewall rule check failed (non-fatal): {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[Link All] Firewall rule check failed (non-fatal): {ex.Message}");
             }
         }
 

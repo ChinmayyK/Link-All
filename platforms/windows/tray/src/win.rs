@@ -85,7 +85,7 @@ pub fn run() {
 
         // A hidden top-level window, not a message-only one: message-only
         // windows don't receive the TaskbarCreated broadcast.
-        let title = wide("Deskdrop Tray");
+        let title = wide("Link All Tray");
         let hwnd = CreateWindowExW(
             0,
             class.as_ptr(),
@@ -112,7 +112,7 @@ pub fn run() {
         nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
         nid.uCallbackMessage = WM_TRAY;
         nid.hIcon = load_icon();
-        copy_wide(&mut nid.szTip, "Deskdrop");
+        copy_wide(&mut nid.szTip, "Link All");
         Shell_NotifyIconW(NIM_ADD, &nid);
 
         let taskbar_created = RegisterWindowMessageW(wide("TaskbarCreated").as_ptr());
@@ -122,7 +122,7 @@ pub fn run() {
                 taskbar_created,
             })
         });
-        balloon("Deskdrop is running in your system tray.");
+        balloon("Link All is running in your system tray.");
 
         let hwnd_addr = hwnd as usize;
         std::thread::spawn(move || pipe_server(hwnd_addr));
@@ -209,7 +209,7 @@ fn balloon(text: &str) {
         if let Some(tray) = t.borrow_mut().as_mut() {
             tray.nid.uFlags = NIF_INFO;
             tray.nid.dwInfoFlags = NIIF_INFO;
-            copy_wide(&mut tray.nid.szInfoTitle, "Deskdrop");
+            copy_wide(&mut tray.nid.szInfoTitle, "Link All");
             copy_wide(&mut tray.nid.szInfo, text);
             unsafe { Shell_NotifyIconW(NIM_MODIFY, &tray.nid) };
         }
@@ -222,7 +222,7 @@ unsafe fn show_menu(hwnd: HWND) {
         return;
     }
     let items: [(usize, &str); 4] = [
-        (ID_OPEN, "Open Deskdrop"),
+        (ID_OPEN, "Open Link All"),
         (ID_QUICK_ACCESS, "Quick Access"),
         (ID_SETTINGS, "Settings..."),
         (ID_RESCAN, "Rescan Network"),
@@ -231,7 +231,7 @@ unsafe fn show_menu(hwnd: HWND) {
         AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr());
     }
     AppendMenuW(menu, MF_SEPARATOR, 0, null());
-    AppendMenuW(menu, MF_STRING, ID_QUIT, wide("Quit Deskdrop").as_ptr());
+    AppendMenuW(menu, MF_STRING, ID_QUIT, wide("Quit Link All").as_ptr());
     SetMenuDefaultItem(menu, ID_OPEN as u32, 0);
 
     // Without the foreground call the menu doesn't close when clicking
@@ -392,7 +392,7 @@ fn open_main_window() {
         }
         let mut found = search.found;
         if found.is_null() && !search.pids.is_empty() {
-            found = FindWindowW(null(), wide("Deskdrop").as_ptr());
+            found = FindWindowW(null(), wide("Link All").as_ptr());
             if found.is_null() {
                 found = FindWindowW(null(), wide("DeskDrop Dashboard").as_ptr());
             }

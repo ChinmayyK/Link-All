@@ -89,7 +89,7 @@ namespace Deskdrop.WinUI
             : (!string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary);
         public string Preview => !string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary;
         [JsonIgnore]
-        public string Source => string.IsNullOrWhiteSpace(device_name) ? "Deskdrop" : device_name;
+        public string Source => string.IsNullOrWhiteSpace(device_name) ? "Link All" : device_name;
         public string TypeLabel => kind switch
         {
             "remote_clipboard_available" => "Clipboard",
@@ -457,7 +457,7 @@ namespace Deskdrop.WinUI
             "declined" => "Declined - try again",
             "expired" => "No answer - try again",
             "cancelled" => "Request withdrawn",
-            "update_needed" => "Update Deskdrop on it, then try again",
+            "update_needed" => "Update Link All on it, then try again",
             _ => null,
         };
 
@@ -1351,7 +1351,7 @@ namespace Deskdrop.WinUI
         {
             get
             {
-                if (!IsDaemonRunning) return "Local service stopped  ·  Deskdrop can't reach the network";
+                if (!IsDaemonRunning) return "Local service stopped  ·  Link All can't reach the network";
                 if (ConnectedCount == 1) return "1 device connected  ·  Encrypted local network";
                 if (ConnectedCount > 1) return $"{ConnectedCount} devices connected  ·  Encrypted local network";
                 if (HasKnownDevices) return "No devices connected  ·  Listening on the local network";

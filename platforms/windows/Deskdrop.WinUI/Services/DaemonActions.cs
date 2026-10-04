@@ -22,7 +22,7 @@ namespace Deskdrop.WinUI
         {
             if (response == null)
             {
-                NotificationHelper.ShowToast($"{actionLabel} Failed", "Couldn't reach the Deskdrop service.");
+                NotificationHelper.ShowToast($"{actionLabel} Failed", "Couldn't reach the Link All service.");
                 return;
             }
             if (response.RootElement.TryGetProperty("status", out var status) && status.GetString() == "error")

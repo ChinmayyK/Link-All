@@ -159,9 +159,9 @@ namespace Deskdrop.WinUI.Services
                     status.Text = peer.pairingOutcome switch
                     {
                         "declined" => $"{peer.DisplayName} declined.",
-                        "expired" => $"No answer from {peer.DisplayName}. Check Deskdrop is open there.",
+                        "expired" => $"No answer from {peer.DisplayName}. Check Link All is open there.",
                         "cancelled" => $"{peer.DisplayName} withdrew its request.",
-                        "update_needed" => $"{peer.DisplayName} runs an older Deskdrop that turns pairing requests down on its own. Update it, then try again.",
+                        "update_needed" => $"{peer.DisplayName} runs an older Link All that turns pairing requests down on its own. Update it, then try again.",
                         _ => "Request closed.",
                     };
                     dialog.PrimaryButtonText = "Try again";

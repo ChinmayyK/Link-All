@@ -17,7 +17,7 @@
 
         <TextBlock Style="{StaticResource AppSecondary}"
                    TextWrapping="Wrap"
-                   Text="Enter the IP address shown in Deskdrop on the other device. Both devices need to be on the same network." />
+                   Text="Enter the IP address shown in Link All on the other device. Both devices need to be on the same network." />
 
         <StackPanel Spacing="6">
             <TextBox x:Name="AddressBox"

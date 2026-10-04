@@ -8,7 +8,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d"
-    Title="Deskdrop">
+    Title="Link All">
 
     <!--
         Mica on the window, a transparent navigation pane, and a solid
@@ -172,7 +172,7 @@
                                     </MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutSeparator />
-                                <MenuFlyoutItem Text="Quit Deskdrop" Click="Quit_Click">
+                                <MenuFlyoutItem Text="Quit Link All" Click="Quit_Click">
                                     <MenuFlyoutItem.Icon>
                                         <FontIcon Glyph="&#xE7E8;" />
                                     </MenuFlyoutItem.Icon>
@@ -323,7 +323,7 @@
                         VerticalAlignment="Center" Margin="16,0,0,0">
                 <Image Width="20" Height="20" Stretch="Uniform"
                        Source="{ThemeResource BrandMarkSource}" />
-                <TextBlock Text="Deskdrop" Style="{StaticResource AppSectionTitle}"
+                <TextBlock Text="Link All" Style="{StaticResource AppSectionTitle}"
                            FontSize="15" VerticalAlignment="Center" />
             </StackPanel>
 

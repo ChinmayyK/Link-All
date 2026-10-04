@@ -202,12 +202,12 @@ namespace Deskdrop.WinUI
                 ConnectTimeoutMs);
 
             if (response == null)
-                return $"No answer from {address}. Make sure Deskdrop is open on that device.";
+                return $"No answer from {address}. Make sure Link All is open on that device.";
             var root = response.RootElement;
             if (root.TryGetProperty("status", out var status) && status.GetString() == "error")
             {
                 var message = root.TryGetProperty("message", out var m) ? m.GetString() : null;
-                return $"Couldn't reach {address}. Check both devices are on the same network and Deskdrop is open on the other one."
+                return $"Couldn't reach {address}. Check both devices are on the same network and Link All is open on the other one."
                        + (string.IsNullOrEmpty(message) ? "" : $"\n({message})");
             }
             return null;

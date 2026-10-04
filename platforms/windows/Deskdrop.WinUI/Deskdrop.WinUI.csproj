@@ -17,6 +17,10 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>Deskdrop</AssemblyName>
+    <!-- The exe keeps its file name; these are what Task Manager, Settings and file properties show. -->
+    <Product>Link All</Product>
+    <AssemblyTitle>Link All</AssemblyTitle>
+    <Company>Link All</Company>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ErrorOnDuplicatePublishOutputFiles>false</ErrorOnDuplicatePublishOutputFiles>
