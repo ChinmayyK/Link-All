@@ -2122,17 +2122,12 @@ class LinkAllService : Service() {
             putExtra(PairingActivity.EXTRA_DEVICE_NAME, name)
             putExtra(PairingActivity.EXTRA_PIN, pin)
         }
-        val optionsBundle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            android.app.ActivityOptions.makeBasic().apply {
-                pendingIntentBackgroundActivityStartMode = android.app.ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
-            }.toBundle()
-        } else {
-            null
-        }
+        // No ActivityOptions here: the system starts content and full-screen intents itself,
+        // and Android 16 rejects a sender-side background start mode on a PendingIntent
+        // being created, which crashed the service on every pairing request.
         val fullScreenPi = PendingIntent.getActivity(
             this, deviceId.hashCode(), pairingIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            optionsBundle
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
         val acceptIntent = Intent(this, LinkAllService::class.java).apply {
