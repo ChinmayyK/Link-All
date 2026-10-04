@@ -124,8 +124,12 @@ struct CommandSidebarView: View {
                         .padding(.vertical, 8)
                 } else {
                     ForEach(store.connectedDevices) { device in
+                        // Only the device the dashboard is showing is highlighted.
+                        let isSelected = store.selectedSection == .devices && store.selectedPendingDevice == nil
+                            && store.defaultTargetDevice?.id == device.id
                         Button(action: {
                             withAnimation(.crSpring) {
+                                store.selectDevice(device.id)
                                 store.selectedSection = .devices
                                 store.selectedPendingDevice = nil
                             }
@@ -136,15 +140,15 @@ struct CommandSidebarView: View {
                                     .frame(width: 8, height: 8)
                                 OSIcon(device.os, size: 13)
                                 Text(device.name)
-                                    .font(.system(size: 13, weight: (store.selectedSection == .devices && store.selectedPendingDevice == nil) ? .bold : .medium))
+                                    .font(.system(size: 13, weight: isSelected ? .bold : .medium))
                                 Spacer()
                             }
-                            .foregroundStyle((store.selectedSection == .devices && store.selectedPendingDevice == nil) ? Color.white : CRTheme.ink)
+                            .foregroundStyle(isSelected ? Color.white : CRTheme.ink)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                             .background(
                                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                    .fill((store.selectedSection == .devices && store.selectedPendingDevice == nil) ? CRTheme.brandElectric : Color.clear)
+                                    .fill(isSelected ? CRTheme.brandElectric : Color.clear)
                             )
                             .padding(.horizontal, 12)
                             .contentShape(Rectangle())
@@ -594,7 +598,7 @@ struct LiveDevicePanel: View {
     @State private var isPulsing = false
     
     private var device: ManagedDevice? {
-        store.connectedDevices.first
+        store.defaultTargetDevice
     }
     
     var body: some View {

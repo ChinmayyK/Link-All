@@ -140,7 +140,12 @@ final class LinkAllStore: ObservableObject {
     // outgoingPairingWaiting on a trusted, connected peer means the session
     // is up but the peer no longer trusts us - nothing works until they
     // approve, so it must not be presented as connected.
-    var connectedDevices: [ManagedDevice] { devices.filter { $0.isConnected && $0.trustState == .trusted && !$0.outgoingPairingWaiting } }
+    // Sorted by name so the sidebar doesn't reshuffle each time a device reconnects.
+    var connectedDevices: [ManagedDevice] {
+        devices
+            .filter { $0.isConnected && $0.trustState == .trusted && !$0.outgoingPairingWaiting }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
     var pendingDevices: [ManagedDevice] { 
         devices.filter { device in
             if device.trustState == .trusted { return false } // Trusted devices go to connectedDevices or are hidden when disconnected
@@ -172,6 +177,12 @@ final class LinkAllStore: ObservableObject {
         }
     }
     var status: StatusSnapshot? { dashboardStatus }
+
+    /// Make a device the one the dashboard shows and sends to.
+    func selectDevice(_ id: String) {
+        objectWillChange.send() // @AppStorage inside an ObservableObject doesn't publish.
+        lastUsedDeviceId = id
+    }
 
     var defaultTargetDevice: ManagedDevice? {
         let connected = connectedDevices
