@@ -109,9 +109,10 @@ struct MenuBarPopoverView: View {
             // Secondary Actions
             HStack(spacing: 0) {
                 Button(action: { onAction(.commandPalette) }) {
-                    Text("Command Palette ⌘K")
+                    Text("Commands ⌘K")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                 }
@@ -123,6 +124,7 @@ struct MenuBarPopoverView: View {
                     Text("Scan Network")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                 }
@@ -135,6 +137,7 @@ struct MenuBarPopoverView: View {
                     Text("Connect by IP")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(Color.secondary)
+                        .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                 }
