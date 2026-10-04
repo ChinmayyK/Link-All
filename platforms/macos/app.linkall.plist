@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Link All macOS LaunchAgent
+  ============================
+  This file is a reference/manual-install template only. The shipped app
+  registers itself as a login item at runtime via SMAppService (macOS 13+,
+  see LinkAllStore.applyLoginItemState) using its actual running bundle
+  path, wherever that is - it does not require this file or /Applications.
+
+  Link All installs itself to ~/Applications (not the shared /Applications)
+  so that non-admin users never need an administrator password, so this
+  template targets that per-user location. Substitute $HOME manually if you
+  install by hand.
+
+  Manual install:
+    cp app.linkall.plist ~/Library/LaunchAgents/
+    launchctl load -w ~/Library/LaunchAgents/app.linkall.plist
+
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/app.linkall.plist
+    rm ~/Library/LaunchAgents/app.linkall.plist
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>app.linkall</string>
+
+    <!-- The .app bundle wraps the Swift AppDelegate which starts the engine. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>~/Applications/LinkAll.app/Contents/MacOS/LinkAll</string>
+    </array>
+
+    <!-- Start immediately when loaded. -->
+    <key>RunAtLoad</key>
+    <true/>
+
+    <!-- Restart automatically if it crashes. -->
+    <key>KeepAlive</key>
+    <dict>
+        <key>Crashed</key>
+        <true/>
+    </dict>
+
+    <!-- Throttle rapid restart loops. -->
+    <key>ThrottleInterval</key>
+    <integer>10</integer>
+
+    <!-- Log to unified logging. -->
+    <key>StandardOutPath</key>
+    <string>/tmp/linkall.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/linkall.err.log</string>
+
+    <!-- Environment: set log level. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>LINKALL_LOG</key>
+        <string>info</string>
+    </dict>
+
+    <!-- Process type: interactive so the app can access the pasteboard. -->
+    <key>ProcessType</key>
+    <string>Interactive</string>
+
+    <!-- Require network before starting. -->
+    <key>LaunchOnlyOnce</key>
+    <false/>
+</dict>
+</plist>

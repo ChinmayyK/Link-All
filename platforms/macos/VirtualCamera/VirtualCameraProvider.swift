@@ -2,7 +2,7 @@ import Foundation
 import CoreMediaIO
 import os.log
 
-fileprivate let logger = OSLog(subsystem: "com.deskdrop.VirtualCamera", category: "Provider")
+fileprivate let logger = OSLog(subsystem: "app.linkall.VirtualCamera", category: "Provider")
 
 class ProviderSource: NSObject, CMIOExtensionProviderSource {
     private(set) var provider: CMIOExtensionProvider!

@@ -2,7 +2,7 @@ import Foundation
 import CoreMediaIO
 import os.log
 
-fileprivate let logger = OSLog(subsystem: "com.deskdrop.VirtualCamera", category: "main")
+fileprivate let logger = OSLog(subsystem: "app.linkall.VirtualCamera", category: "main")
 
 // Wait for the provider source to start
 let providerSource = ProviderSource(clientQueue: nil)
