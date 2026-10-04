@@ -317,7 +317,7 @@ class MainActivity : ComponentActivity() {
                             }
                             if (enabled) confirmDataSharing(
                                 "Show calls on your computer?",
-                                "When your phone rings, Deskdrop sends the caller's number and name, when Android provides them, to your paired devices. It goes directly over your network, never through a server.",
+                                "When your phone rings, Link All sends the caller's number and name, when Android provides them, to your paired devices. It goes directly over your network, never through a server.",
                                 apply
                             ) else apply()
                         },
@@ -329,7 +329,7 @@ class MainActivity : ComponentActivity() {
                             }
                             if (enabled) confirmDataSharing(
                                 "Mirror notifications?",
-                                "Deskdrop sends the notifications this phone receives, including their text, to your paired devices. It goes directly over your network, never through a server.",
+                                "Link All sends the notifications this phone receives, including their text, to your paired devices. It goes directly over your network, never through a server.",
                                 apply
                             ) else apply()
                         },
@@ -661,8 +661,8 @@ class MainActivity : ComponentActivity() {
         if (notFound < 0 || pm.isIgnoringBatteryOptimizations(packageName)) return engineIssues
         val battery = HealthIssue(
             "battery_restricted",
-            "Android may be pausing Deskdrop",
-            "To save battery your phone can stop Deskdrop in the background, and your devices can't reach it. Let it run in the background.",
+            "Android may be pausing Link All",
+            "To save battery your phone can stop Link All in the background, and your devices can't reach it. Let it run in the background.",
             null
         )
         return engineIssues.toMutableList().apply { add(notFound, battery) }
@@ -744,7 +744,7 @@ class MainActivity : ComponentActivity() {
             prompt.value = Prompt(
                 icon = Icons.Outlined.Security,
                 title = "A few permissions",
-                message = "Deskdrop needs storage to save and send files, notifications to show transfer progress, and phone state for calls on your computer. Android asks for each one next.",
+                message = "Link All needs storage to save and send files, notifications to show transfer progress, and phone state for calls on your computer. Android asks for each one next.",
                 confirm = "Continue",
                 dismiss = null,
                 onConfirm = { requestPermissions(needed.toTypedArray(), 1001) },
@@ -848,7 +848,7 @@ class MainActivity : ComponentActivity() {
         val enabledListeners = android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
         val hasPermission = enabledListeners?.contains(packageName) == true
         if (!hasPermission) {
-            Toast.makeText(this, "Please allow Deskdrop to read notifications", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Please allow Link All to read notifications", Toast.LENGTH_LONG).show()
             startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
         }
     }
@@ -889,7 +889,7 @@ class MainActivity : ComponentActivity() {
                 else Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
             )
             if (!BuildConfig.FULL_PERMISSIONS) {
-                Toast.makeText(this, "Find Deskdrop and choose \"Don't optimize\"", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Find Link All and choose \"Don't optimize\"", Toast.LENGTH_LONG).show()
             }
         }.onFailure {
             runCatching {
@@ -897,7 +897,7 @@ class MainActivity : ComponentActivity() {
                     android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS))
             }.onFailure {
                 Toast.makeText(this,
-                    "Open Settings -> Battery -> Deskdrop -> disable optimisation",
+                    "Open Settings -> Battery -> Link All -> disable optimisation",
                     Toast.LENGTH_LONG).show()
             }
         }
@@ -940,7 +940,7 @@ class MainActivity : ComponentActivity() {
                     putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
                 })
             }.onFailure {
-                Toast.makeText(this, "Long-press Deskdrop notification -> Settings -> Minimize", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Long-press Link All notification -> Settings -> Minimize", Toast.LENGTH_LONG).show()
             }
         }
     }

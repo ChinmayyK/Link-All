@@ -21,7 +21,7 @@ class FeedScrollBenchmark {
     @Test
     fun scrollFeed() {
         benchmarkRule.measureRepeated(
-            packageName = "com.deskdrop",
+            packageName = "app.linkall",
             metrics = listOf(FrameTimingMetric()),
             compilationMode = CompilationMode.DEFAULT,
             startupMode = StartupMode.COLD,
@@ -31,8 +31,8 @@ class FeedScrollBenchmark {
             }
         ) {
             val intent = Intent("android.intent.action.MAIN")
-            intent.setPackage("com.deskdrop")
-            intent.setClassName("com.deskdrop", "com.deskdrop.MainActivity")
+            intent.setPackage("app.linkall")
+            intent.setClassName("app.linkall", "com.deskdrop.MainActivity")
             intent.putExtra("benchmark", true)
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
             

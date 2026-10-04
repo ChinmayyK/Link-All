@@ -2,7 +2,7 @@
 <!--
   Google Play build: strip what Play policy rejects or restricts for this app.
   - SMS/Call Log and All Files Access: only for default SMS/dialer apps and file managers.
-    Received files still land in Downloads/Deskdrop through MediaStore (scoped storage).
+    Received files still land in Downloads/Link All through MediaStore (scoped storage).
   - Photos and videos: only for apps built around broad media access (galleries).
     Browsing the phone's files from the computer is off; sharing files still works.
   - Contacts: without the call log there is no caller number to look up.

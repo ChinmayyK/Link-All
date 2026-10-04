@@ -200,7 +200,7 @@ fun ShareSheet(
 
                 // Header: what is being sent.
                 Column(Modifier.padding(horizontal = PageGutter)) {
-                    Text("Send with Deskdrop", style = DdType.title, color = c.text)
+                    Text("Send with Link All", style = DdType.title, color = c.text)
                     val total = items.mapNotNull { it.sizeBytes }.takeIf { it.size == items.size && it.isNotEmpty() }?.sum()
                     val summary = buildString {
                         append(describe(items, sharedUris.size))
@@ -396,13 +396,13 @@ private fun NoDevices(c: DdColors, onOpenApp: () -> Unit) {
             Spacer(Modifier.height(10.dp))
             Text("No device connected", style = DdType.label, color = c.text)
             Text(
-                "Open Deskdrop on your computer, then try again.",
+                "Open Link All on your computer, then try again.",
                 style = DdType.small,
                 color = c.textMuted,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             )
             Spacer(Modifier.height(14.dp))
-            PillButton(c, "Open Deskdrop", filled = false, compact = true, onClick = onOpenApp)
+            PillButton(c, "Open Link All", filled = false, compact = true, onClick = onOpenApp)
         }
     }
 }

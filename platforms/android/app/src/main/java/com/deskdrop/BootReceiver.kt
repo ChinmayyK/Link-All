@@ -36,7 +36,7 @@ class BootReceiver : BroadcastReceiver() {
                     return
                 }
 
-                Log.i(TAG, "Boot received (${intent.action}) — starting Deskdrop")
+                Log.i(TAG, "Boot received (${intent.action}) — starting Link All")
                 startService(context)
             }
         }
@@ -53,7 +53,7 @@ class BootReceiver : BroadcastReceiver() {
                 context.startService(serviceIntent)
             }
         }.onFailure { ex ->
-            Log.e(TAG, "Failed to start Deskdrop service at boot", ex)
+            Log.e(TAG, "Failed to start Link All service at boot", ex)
         }
     }
 }

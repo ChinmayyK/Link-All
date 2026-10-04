@@ -152,7 +152,7 @@ internal fun ConnectByIpDialog(
     LaunchedEffect(connecting) {
         if (connecting == null) return@LaunchedEffect
         delay(CONNECT_TIMEOUT_MS)
-        state = ConnectState.Failed("No answer from ${connecting.address.label()}. Make sure Deskdrop is open on that device.")
+        state = ConnectState.Failed("No answer from ${connecting.address.label()}. Make sure Link All is open on that device.")
     }
 
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
@@ -173,7 +173,7 @@ internal fun ConnectByIpDialog(
                         putExtra("ip", parsed.host)
                         putExtra("port", parsed.port)
                     })
-                }.onFailure { state = ConnectState.Failed("Deskdrop's background service couldn't start.") }
+                }.onFailure { state = ConnectState.Failed("Link All's background service couldn't start.") }
             }
         }
     }

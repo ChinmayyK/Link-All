@@ -29,7 +29,7 @@
     <!-- ── Battery optimisation bypass request ───────────────────────── -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
-    <!-- ── External storage for Downloads/Deskdrop ──────────────────── -->
+    <!-- ── External storage for Downloads/Link All ──────────────────── -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
@@ -157,7 +157,7 @@
         <!-- ── Notification listener service ─────────────────────────── -->
         <service
             android:name=".DeskdropNotificationListener"
-            android:label="Deskdrop Notification Listener"
+            android:label="Link All Notification Listener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
             <intent-filter>
@@ -168,7 +168,7 @@
         <!-- ── Accessibility service (Clipboard fallback) ──────────────── -->
         <service
             android:name=".DeskdropAccessibilityService"
-            android:label="Deskdrop Clipboard Sync"
+            android:label="Link All Clipboard Sync"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
             <intent-filter>

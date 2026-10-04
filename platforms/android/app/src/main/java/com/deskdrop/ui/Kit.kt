@@ -468,7 +468,7 @@ internal fun AddDeviceButton(c: DdColors, onScanQr: () -> Unit, onManualIp: () -
             onDismiss = { sheetOpen = false }
         ) { close ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SheetOption(c, Icons.Outlined.QrCode2, "Show my pairing code", "Scan it from Deskdrop on your computer") {
+                SheetOption(c, Icons.Outlined.QrCode2, "Show my pairing code", "Scan it from Link All on your computer") {
                     close { showQr = true }
                 }
                 SheetOption(c, Icons.Outlined.QrCodeScanner, "Scan a pairing code", "Point the camera at the code on your computer") {
@@ -501,7 +501,7 @@ private fun PairQrSheet(c: DdColors, onDismiss: () -> Unit) {
     }
     DdSheet(
         c, icon = Icons.Outlined.QrCode2, title = "Scan from your computer",
-        subtitle = "Deskdrop on your computer → Add device → Scan",
+        subtitle = "Link All on your computer → Add device → Scan",
         onDismiss = onDismiss
     ) { close ->
         Box(

@@ -2,6 +2,6 @@
     
     <!-- Required to query the app package for the benchmark -->
     <queries>
-        <package android:name="com.deskdrop" />
+        <package android:name="app.linkall" />
     </queries>
 </manifest>

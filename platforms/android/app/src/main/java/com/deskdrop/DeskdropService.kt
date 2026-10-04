@@ -70,7 +70,7 @@ class DeskdropService : Service() {
 
 
     companion object {
-        private const val TAG = "Deskdrop"
+        private const val TAG = "LinkAll"
         const val PREFS_NAME = "deskdrop"
 
         // Expose engine handle for high-throughput zero-copy JNI calls (e.g. video frames)
@@ -736,10 +736,10 @@ class DeskdropService : Service() {
                         val result = DeskdropJni.applyClipboardByHash(engineHandle, hash)
                         if (result != 1 && !text.isNullOrBlank()) {
                             // Hash not found (e.g. engine restarted) — fall back to text.
-                            cm.setPrimaryClip(ClipData.newPlainText("Deskdrop", text))
+                            cm.setPrimaryClip(ClipData.newPlainText("Link All", text))
                         }
                     } else if (!text.isNullOrBlank()) {
-                        cm.setPrimaryClip(ClipData.newPlainText("Deskdrop", text))
+                        cm.setPrimaryClip(ClipData.newPlainText("Link All", text))
                     } else {
                         return START_STICKY
                     }
@@ -835,7 +835,7 @@ class DeskdropService : Service() {
                     android.os.Environment.getExternalStoragePublicDirectory(
                         android.os.Environment.DIRECTORY_DOWNLOADS
                     ),
-                    "Deskdrop"
+                    "Link All"
                 ).apply { mkdirs() }
                 DeskdropJni.initContext(applicationContext)
                 engineHandle = DeskdropJni.start(
@@ -1315,7 +1315,7 @@ class DeskdropService : Service() {
             // ── File received (legacy clipboard file) ─────────────────────────
             DeskdropJni.CR_EVENT_CLIPBOARD_FILE -> {
                 val bytes = DeskdropJni.eventBinaryData(ev) ?: return
-                val name  = DeskdropJni.eventFileName(ev) ?: "Deskdrop_file"
+                val name  = DeskdropJni.eventFileName(ev) ?: "LinkAll_file"
                 val from  = resolvePeerDisplayName(
                     DeskdropJni.eventDeviceId(ev),
                     DeskdropJni.eventDeviceName(ev)
@@ -1506,7 +1506,7 @@ class DeskdropService : Service() {
                 // Offload the heavy file copy to a background coroutine so we don't block the JNI thread and freeze the UI
                 serviceScope.launch {
                     val srcFile = File(destPath)
-                    val publicUriStr = if (srcFile.parentFile?.name == "Deskdrop") {
+                    val publicUriStr = if (srcFile.parentFile?.name == "Link All") {
                         android.media.MediaScannerConnection.scanFile(this@DeskdropService, arrayOf(destPath), null, null)
                         null
                     } else {
@@ -1819,7 +1819,7 @@ class DeskdropService : Service() {
                         DeskdropJni.sendRemoteFilesResponse(
                             engineHandle, requestId, targetDeviceId, null, null, 0,
                             if (BuildConfig.FULL_PERMISSIONS) "Permission Denied: Please grant storage permission on your Android device to browse files."
-                            else "Browsing phone files isn't available in the Google Play version of Deskdrop. Share files from the phone instead."
+                            else "Browsing phone files isn't available in the Google Play version of Link All. Share files from the phone instead."
                         )
                         return@executeInBackgroundWithWakeLock
                     }
@@ -2502,7 +2502,7 @@ class DeskdropService : Service() {
 
     private fun getDownloadsDir(): File {
         val base = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: filesDir
-        return File(base, "Deskdrop").also { it.mkdirs() }
+        return File(base, "Link All").also { it.mkdirs() }
     }
 
     private fun saveFileToPublicDownloads(sourceFile: File): String? {
@@ -2514,7 +2514,7 @@ class DeskdropService : Service() {
             val contentValues = android.content.ContentValues().apply {
                 put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, sourceFile.name)
                 put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mimeType)
-                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Deskdrop")
+                put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS + "/Link All")
             }
             val uri = resolver.insert(android.provider.MediaStore.Downloads.EXTERNAL_CONTENT_URI, contentValues) ?: return null
             try {
@@ -2530,7 +2530,7 @@ class DeskdropService : Service() {
             }
         } else {
             // For Android 9 and below, write directly using file system
-            val destDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Deskdrop")
+            val destDir = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "Link All")
             destDir.mkdirs()
             val destFile = File(destDir, sourceFile.name)
             try {
@@ -2615,7 +2615,7 @@ class DeskdropService : Service() {
 
     private fun imageNameForMime(mime: String): String {
         val ext = MimeTypeMap.getSingleton().getExtensionFromMimeType(mime.substringBefore(';')) ?: "png"
-        return "Deskdrop-image.$ext"
+        return "LinkAll-image.$ext"
     }
 
     private fun textContentHash(text: String): String {
@@ -2900,7 +2900,7 @@ class DeskdropService : Service() {
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle(if (received) "Folder received from $peer" else "Folder sent to $peer")
-            .setContentText(if (received) "$folder ($files) · Downloads/Deskdrop" else "$folder ($files)")
+            .setContentText(if (received) "$folder ($files) · Downloads/Link All" else "$folder ($files)")
             .setAutoCancel(true)
             .build()
         notificationManager.notify(NOTIF_ID_FILE_BASE + ("folder/$folder".hashCode() and 0xFFF), notif)
@@ -3229,7 +3229,7 @@ class DeskdropService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle("📞 Incoming call")
             .setContentText(callerLabel)
-            .setSubText("Deskdrop — relaying to your Mac")
+            .setSubText("Link All — relaying to your Mac")
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -3665,7 +3665,7 @@ class DeskdropService : Service() {
 
             val h = engineHandle
             if (h != 0L) {
-                val fallbackName = "Deskdrop Device" // Name is discovered during handshake
+                val fallbackName = "Link All Device" // Name is discovered during handshake
                 val result = DeskdropJni.reportDiscoveredPeer(h, peerDeviceId, fallbackName, ip, port)
                 if (result == 0) {
                     Log.i(TAG, "NSD: reportDiscoveredPeer($ip:$port, id=$peerDeviceId) pushed to DiscoveryManager")
@@ -4054,10 +4054,10 @@ class DeskdropService : Service() {
         // Channel A: persistent foreground indicator — must be as quiet as possible
         nm.createNotificationChannel(NotificationChannel(
             CHAN_SERVICE,
-            "Deskdrop",
+            "Link All",
             NotificationManager.IMPORTANCE_MIN          // no sound, no vibration, no heads-up
         ).apply {
-            description = "Deskdrop background sync indicator"
+            description = "Link All background sync indicator"
             setShowBadge(false)
             enableLights(false)
             enableVibration(false)
@@ -4067,7 +4067,7 @@ class DeskdropService : Service() {
         // Channel B: trust requests, file receives, critical failures
         nm.createNotificationChannel(NotificationChannel(
             CHAN_ALERTS,
-            "Deskdrop Alerts",
+            "Link All Alerts",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Trust requests, received files, connection failures"
@@ -4079,7 +4079,7 @@ class DeskdropService : Service() {
         // Channel C: incoming call relay banner — full heads-up priority
         nm.createNotificationChannel(NotificationChannel(
             CHAN_CALLS,
-            "Deskdrop Calls",
+            "Link All Calls",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Incoming call relay notifications from your phone"
@@ -4092,7 +4092,7 @@ class DeskdropService : Service() {
         // Channel D: dedicated pairing requests — full heads-up priority
         nm.createNotificationChannel(NotificationChannel(
             CHAN_PAIRING,
-            "Deskdrop Pairing Requests",
+            "Link All Pairing Requests",
             NotificationManager.IMPORTANCE_HIGH
         ).apply {
             description = "Pairing requests from your computer and devices"
@@ -4151,7 +4151,7 @@ class DeskdropService : Service() {
         return NotificationCompat.Builder(this, CHAN_SERVICE)
             // Calm and still: no running timer, no "active" wording, so a
             // service that mostly waits does not look like busy work.
-            .setContentTitle("Deskdrop")
+            .setContentTitle("Link All")
             .setContentText(description)
             .setSubText(if (syncEnabled) "Uses almost no battery" else null)
             .setShowWhen(false)
@@ -4264,7 +4264,7 @@ class DeskdropService : Service() {
         )
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
-            .setContentTitle("Deskdrop Connection Error")
+            .setContentTitle("Link All Connection Error")
             .setContentText(message.take(80))
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_LOW)
@@ -4351,7 +4351,7 @@ class DeskdropService : Service() {
                 ip == null -> "Couldn't find \"$host\" on this network."
                 getLocalIpAddresses().contains(ip) -> "That's this phone's own address. Enter the other device's IP."
                 DeskdropJni.connectToPeer(h, ip, port) != 0 ->
-                    "Couldn't reach $host:$port. Check both devices are on the same network and Deskdrop is open on the other one."
+                    "Couldn't reach $host:$port. Check both devices are on the same network and Link All is open on the other one."
                 else -> null
             }
             Log.i(TAG, "Manual connect to $host:$port (ip=$ip): ${error ?: "ok"}")
@@ -4411,7 +4411,7 @@ class DeskdropService : Service() {
 
         val notif = NotificationCompat.Builder(this, CHAN_ALERTS).setGroup("deskdrop_transfers")
             .setContentTitle("Permission Required")
-            .setContentText("Deskdrop needs storage access to browse files. Tap here to grant permission.")
+            .setContentText("Link All needs storage access to browse files. Tap here to grant permission.")
             .setSmallIcon(android.R.drawable.stat_notify_error)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ERROR)

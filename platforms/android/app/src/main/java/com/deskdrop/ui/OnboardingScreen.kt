@@ -125,7 +125,7 @@ private fun FindStep(
 
         SectionHeader(c, "On your network", if (peers.isEmpty()) null else "Tap to pair")
         if (peers.isEmpty()) {
-            EmptyBox(c, Icons.Outlined.Radar, "Looking for computers… Open Deskdrop on your computer and keep both on the same Wi-Fi.") {
+            EmptyBox(c, Icons.Outlined.Radar, "Looking for computers… Open Link All on your computer and keep both on the same Wi-Fi.") {
                 Spacer(Modifier.height(16.dp))
                 LinearProgressIndicator(
                     modifier = Modifier.fillMaxWidth().height(2.dp).clip(CircleShape),
@@ -174,7 +174,7 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onRetry: () -> Unit, onBac
         Text(
             when {
                 declined -> "${peer.name} declined"
-                outdated -> "Update Deskdrop on ${peer.name}"
+                outdated -> "Update Link All on ${peer.name}"
                 timedOut -> "No answer from ${peer.name}"
                 pin != null -> "Check the code"
                 else -> "Connecting to ${peer.name}"
@@ -186,8 +186,8 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onRetry: () -> Unit, onBac
         Text(
             when {
                 declined -> "Ask again if that was a mistake."
-                outdated -> "It runs an older Deskdrop that turns pairing requests down on its own. Update it, then try again."
-                timedOut -> "Make sure Deskdrop is open on it and both devices are on the same Wi-Fi."
+                outdated -> "It runs an older Link All that turns pairing requests down on its own. Update it, then try again."
+                timedOut -> "Make sure Link All is open on it and both devices are on the same Wi-Fi."
                 pin != null -> "${peer.name} shows a pairing request with a code. Accept it there if it matches this one."
                 else -> "A pairing request will appear on ${peer.name} in a moment."
             },

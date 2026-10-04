@@ -8,7 +8,7 @@ android {
     compileSdk 36
 
     defaultConfig {
-        applicationId "com.deskdrop"
+        applicationId "app.linkall"
         minSdk 26           // Android 8.0 — foreground service type requires 26+
         targetSdk 36
         versionCode 48

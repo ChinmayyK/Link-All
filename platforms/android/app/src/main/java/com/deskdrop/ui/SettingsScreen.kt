@@ -220,7 +220,7 @@ fun SettingsTab(
                     Hairline(c)
                     ListRow(
                         c, Icons.Outlined.PowerSettingsNew, "Stop service",
-                        detail = "Deskdrop stops until you open it again",
+                        detail = "Link All stops until you open it again",
                         iconTint = c.danger,
                         titleColor = c.danger,
                         onClick = onActionStopService
@@ -231,7 +231,7 @@ fun SettingsTab(
 
         item {
             Column(Modifier.fillMaxWidth().padding(top = 28.dp, start = 4.dp)) {
-                Text("Deskdrop ${version}".trim(), style = DdType.label, color = c.text)
+                Text("Link All ${version}".trim(), style = DdType.label, color = c.text)
                 Text("No cloud, no account, no telemetry.", style = DdType.small, color = c.textMuted)
                 if (deviceId.isNotBlank()) {
                     Spacer(Modifier.height(6.dp))

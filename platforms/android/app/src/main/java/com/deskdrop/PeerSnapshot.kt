@@ -51,7 +51,7 @@ data class PeerSnapshot(
         pairingOutcome == "declined" -> "Declined · try again"
         pairingOutcome == "expired" -> "No answer · try again"
         pairingOutcome == "cancelled" -> "Request withdrawn"
-        pairingOutcome == "update_needed" -> "Update Deskdrop on it, then try again"
+        pairingOutcome == "update_needed" -> "Update Link All on it, then try again"
         else -> null
     }
     val needsTrust: Boolean get() = !trusted && (needsAttention || status == "disconnected")

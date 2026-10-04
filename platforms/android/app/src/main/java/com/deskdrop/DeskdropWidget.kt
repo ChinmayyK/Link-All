@@ -132,8 +132,8 @@ class WidgetActionActivity : ComponentActivity() {
                     .setAction(if (enabled) DeskdropService.ACTION_PAUSE_SYNC else DeskdropService.ACTION_RESUME_SYNC)
             )
         }.onFailure {
-            android.util.Log.w("Deskdrop", "Widget: could not toggle sync", it)
-            Toast.makeText(this, "Couldn't reach Deskdrop. Open the app and try again.", Toast.LENGTH_SHORT).show()
+            android.util.Log.w("LinkAll", "Widget: could not toggle sync", it)
+            Toast.makeText(this, "Couldn't reach Link All. Open the app and try again.", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -165,7 +165,7 @@ class WidgetActionActivity : ComponentActivity() {
                     )
                 }.isSuccess
                 when {
-                    !sent -> "Couldn't send. Open Deskdrop and try again."
+                    !sent -> "Couldn't send. Open Link All and try again."
                     names.size == 1 -> "Clipboard sent to ${names.first()}"
                     else -> "Clipboard sent to ${names.size} devices"
                 }

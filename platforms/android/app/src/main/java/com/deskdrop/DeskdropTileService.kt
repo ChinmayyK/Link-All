@@ -108,7 +108,7 @@ class DeskdropTileService : TileService() {
         val count   = prefs.getInt("connected_count", 0)
 
         tile.state = if (isSyncEnabled) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
-        tile.label = "Deskdrop Sync"
+        tile.label = "Link All Sync"
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             tile.subtitle = if (isSyncEnabled) {
@@ -122,7 +122,7 @@ class DeskdropTileService : TileService() {
             }
         }
 
-        tile.contentDescription = "Toggle Deskdrop Discoverability"
+        tile.contentDescription = "Toggle Link All Discoverability"
         tile.updateTile()
     }
 
@@ -205,7 +205,7 @@ class DeskdropShareTarget : ComponentActivity() {
                     putExtra("text", sharedText)
                 })
             }
-            Toast.makeText(this, "Pushed to Deskdrop peers", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Pushed to Link All peers", Toast.LENGTH_SHORT).show()
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
             val peers = getSharedPreferences(DeskdropService.PREFS_NAME, MODE_PRIVATE)
@@ -277,11 +277,11 @@ class DeskdropShareTarget : ComponentActivity() {
             }
         }
         val started = runCatching { ContextCompat.startForegroundService(this@DeskdropShareTarget, svc) }
-            .onFailure { android.util.Log.w("Deskdrop", "Share: could not hand files to the service", it) }
+            .onFailure { android.util.Log.w("LinkAll", "Share: could not hand files to the service", it) }
             .isSuccess
         Toast.makeText(
             this@DeskdropShareTarget,
-            if (started) "Sending to Deskdrop" else "Couldn't send. Open Deskdrop and try again.",
+            if (started) "Sending to Link All" else "Couldn't send. Open Link All and try again.",
             Toast.LENGTH_SHORT
         ).show()
         finish()

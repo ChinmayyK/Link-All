@@ -17,7 +17,7 @@ class DeskdropAccessibilityService : AccessibilityService() {
         info.feedbackType = AccessibilityServiceInfo.FEEDBACK_GENERIC
         // We only want to run in the background to bypass Android 10+ clipboard restrictions if needed.
         this.serviceInfo = info
-        Log.d("Deskdrop", "AccessibilityService connected for clipboard fallback.")
+        Log.d("LinkAll", "AccessibilityService connected for clipboard fallback.")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
@@ -32,6 +32,6 @@ class DeskdropAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        Log.d("Deskdrop", "AccessibilityService interrupted.")
+        Log.d("LinkAll", "AccessibilityService interrupted.")
     }
 }

@@ -332,7 +332,7 @@ internal fun healthActionLabel(kind: String): String? = when (kind) {
     "no_network" -> "Wi-Fi settings"
     "sync_paused" -> "Resume sync"
     "devices_not_found", "connection_blocked" -> "Search again"
-    "listener_down" -> "Restart Deskdrop"
+    "listener_down" -> "Restart Link All"
     "battery_restricted" -> "Allow"
     else -> null
 }

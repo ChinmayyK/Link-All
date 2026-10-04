@@ -73,11 +73,11 @@ echo -e "${BLUE}▶ [Android] Building latest APK...${NC}"
 if [ "$BUILD_TYPE" = "release" ]; then
     bash scripts/build-android.sh --release --fast-abi
     APK_PATH="platforms/android/app/build/outputs/apk/full/release/app-full-release.apk"
-    APP_ID="com.deskdrop"
+    APP_ID="app.linkall"
 else
     bash scripts/build-android.sh --debug --fast-abi
     APK_PATH="platforms/android/app/build/outputs/apk/full/debug/app-full-debug.apk"
-    APP_ID="com.deskdrop.debug"
+    APP_ID="app.linkall"
 fi
 
 echo -e "${BLUE}▶ [Android] Uninstalling old version from connected device...${NC}"
