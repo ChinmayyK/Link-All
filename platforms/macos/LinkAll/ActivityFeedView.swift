@@ -531,7 +531,7 @@ struct FileTransferBanner: View {
                         StopwatchProgressView(progress: prog, tint: CRTheme.accentIndigo)
                             .animation(.linear(duration: 0.5), value: prog)
                         HStack {
-                            Text("From \(transfer.fromDeviceName)")
+                            Text("\(transfer.isOutbound ? "To" : "From") \(transfer.fromDeviceName)")
                             Spacer()
                         }
                         .font(.system(size: 11)).foregroundStyle(CRTheme.inkSoft)
@@ -542,7 +542,7 @@ struct FileTransferBanner: View {
                         StopwatchProgressView(progress: prog, tint: CRTheme.accentOrange)
                             .animation(.linear(duration: 0.5), value: prog)
                         HStack {
-                            Text("Paused - From \(transfer.fromDeviceName)")
+                            Text("Paused - \(transfer.isOutbound ? "To" : "From") \(transfer.fromDeviceName)")
                             Spacer()
                         }
                         .font(.system(size: 11)).foregroundStyle(CRTheme.inkSoft)

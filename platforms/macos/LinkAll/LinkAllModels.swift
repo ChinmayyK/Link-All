@@ -193,6 +193,13 @@ struct FileTransferState: Identifiable, Equatable {
     var speedBps: Int64? = nil
     var etaSecs: Int64? = nil
     var status: FileTransferStatus = .incoming
+    /// This Mac is sending the file; fromDeviceName is then the receiving device.
+    var isOutbound: Bool = false
+
+    /// "Receiving from X" or "Sending to X", for one-line status text.
+    var directionLabel: String {
+        isOutbound ? "Sending to \(fromDeviceName)" : "Receiving from \(fromDeviceName)"
+    }
 
     var exactRatio: Double {
         // Only a few files of a folder are in flight at once, so a folder's

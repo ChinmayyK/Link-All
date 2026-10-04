@@ -541,7 +541,19 @@ impl Engine {
     }
 
     pub async fn active_transfers(&self) -> Vec<serde_json::Value> {
-        self.shared.file_transfers.lock().await.active_transfers()
+        let mut transfers = self.shared.file_transfers.lock().await.active_transfers();
+        // Outbound rows name the device receiving the file, so apps can say who it goes to.
+        for t in &mut transfers {
+            let name = t["to_device_id"]
+                .as_str()
+                .and_then(|id| id.parse().ok())
+                .and_then(|id| self.shared.peer_manager.get(id))
+                .map(|peer| peer.friendly_name);
+            if let (Some(name), Some(obj)) = (name, t.as_object_mut()) {
+                obj.insert("from_device".into(), name.into());
+            }
+        }
+        transfers
     }
 
     pub async fn active_speed_tests(&self) -> Vec<serde_json::Value> {

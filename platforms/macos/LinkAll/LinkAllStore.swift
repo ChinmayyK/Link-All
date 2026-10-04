@@ -406,7 +406,10 @@ final class LinkAllStore: ObservableObject {
                         batchId: t.batch_id,
                         bytesReceived: t.bytes_received,
                         percent: t.percent,
-                        status: status
+                        speedBps: t.speed_bps,
+                        etaSecs: t.eta_secs,
+                        status: status,
+                        isOutbound: t.is_outbound ?? false
                     )
                 }
             } else {
@@ -1279,9 +1282,7 @@ final class LinkAllStore: ObservableObject {
     private func updateTransferStatus(id: String, status: FileTransferStatus) {
         guard let idx = activeTransfers.firstIndex(where: { $0.id == id }) else { return }
         var t = activeTransfers[idx]
-        t = FileTransferState(id: t.id, fromDeviceName: t.fromDeviceName, fileName: t.fileName,
-                              totalBytes: t.totalBytes, bytesReceived: t.bytesReceived,
-                              percent: t.percent, status: status)
+        t.status = status
         activeTransfers[idx] = t
         
         switch status {

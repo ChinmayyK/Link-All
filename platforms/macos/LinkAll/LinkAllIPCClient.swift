@@ -95,6 +95,9 @@ struct IpcFileTransferState: Codable {
     let is_directory: Bool?
     let item_count: Int?
     let batch_id: String?
+    let speed_bps: Int64?
+    let eta_secs: Int64?
+    let is_outbound: Bool?
 }
 
 /// Active call state from the daemon's status response.

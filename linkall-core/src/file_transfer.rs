@@ -1385,7 +1385,9 @@ impl FileTransferManager {
             };
             transfers.push(serde_json::json!({
                 "transfer_id": hex::encode(t.transfer_id),
-                "from_device": "Sending",
+                // The engine swaps this for the receiving device's name.
+                "from_device": "",
+                "to_device_id": t.target_device.map(|id| id.to_string()),
                 "file_name": t.meta.file_name.clone(),
                 "bytes_total": t.meta.size_bytes,
                 "bytes_received": bytes_sent.min(t.meta.size_bytes),

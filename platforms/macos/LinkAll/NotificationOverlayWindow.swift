@@ -205,7 +205,7 @@ private struct DynamicIslandTransferCard: View {
                         .foregroundStyle(Color.primary.opacity(0.7))
                         .lineLimit(1)
                 } else {
-                    Text("Receiving from \(transfer.fromDeviceName)")
+                    Text(transfer.directionLabel)
                         .font(.system(size: 12, weight: .medium, design: .default))
                         .foregroundStyle(Color.primary.opacity(0.7))
                         .lineLimit(1)
