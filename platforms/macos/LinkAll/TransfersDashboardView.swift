@@ -6,7 +6,17 @@ struct TransfersDashboardView: View {
     @Environment(\.colorScheme) var colorScheme
     
     var historyItems: [IpcActivityEntry] {
-        store.activityFeed.filter { $0.kind == "file_transfer_complete" || $0.kind == "file_transfer_started" || $0.kind == "folder_transfer_complete" }
+        // A transfer still in flight shows under Active, not as already sent.
+        // A file the Mac sent shows once, from its started entry, not again from
+        // the receiver's complete entry.
+        let active = Set(store.activeTransfers.map(\.id))
+        let started = Set(store.activityFeed.compactMap { $0.kind == "file_transfer_started" ? $0.transfer_id : nil })
+        return store.activityFeed.filter { entry in
+            guard entry.kind == "file_transfer_complete" || entry.kind == "file_transfer_started" || entry.kind == "folder_transfer_complete" else { return false }
+            guard let id = entry.transfer_id else { return true }
+            if active.contains(id) { return false }
+            return !(entry.kind == "file_transfer_complete" && started.contains(id))
+        }
     }
     
     @State private var quickLookURL: URL?
