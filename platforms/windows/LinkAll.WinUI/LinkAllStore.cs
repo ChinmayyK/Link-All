@@ -1267,7 +1267,7 @@ namespace LinkAll.WinUI
         }
 
         // This PC's name as other devices list it, for "Visible as".
-        private string _localDeviceName = Environment.MachineName;
+        private string _localDeviceName = LinkAll.WinUI.Services.LocalSettingsStore.DeviceName;
         public string LocalDeviceName
         {
             get => _localDeviceName;

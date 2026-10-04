@@ -217,7 +217,7 @@ namespace LinkAll.WinUI
 
             try
             {
-                var name = System.Net.WebUtility.UrlEncode(Environment.MachineName);
+                var name = System.Net.WebUtility.UrlEncode(LinkAll.WinUI.Services.LocalSettingsStore.DeviceName);
                 var ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName())
                     .AddressList
                     .FirstOrDefault(x => x.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
