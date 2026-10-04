@@ -13,6 +13,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Deskdrop"
+rootProject.name = "Link All"
 include ':app'
 include ':benchmark'

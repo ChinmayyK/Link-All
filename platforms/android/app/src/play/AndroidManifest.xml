@@ -29,6 +29,6 @@
     <uses-permission android:name="android.permission.READ_CLIPBOARD_IN_BACKGROUND" tools:node="remove" />
 
     <application>
-        <service android:name=".DeskdropAccessibilityService" tools:node="remove" />
+        <service android:name=".LinkAllAccessibilityService" tools:node="remove" />
     </application>
 </manifest>

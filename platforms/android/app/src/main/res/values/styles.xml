@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <style name="Theme.Deskdrop" parent="Theme.Material3.DayNight.NoActionBar">
+    <style name="Theme.LinkAll" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/cr_accent</item>
         <item name="colorOnPrimary">@color/cr_on_accent</item>
         <item name="colorSecondary">@color/cr_accent_dim</item>
@@ -21,10 +21,10 @@
         <item name="windowSplashScreenBackground">@color/cr_bg</item>
         <!-- Use clear and transparent colors if no animated icon is present to keep it simple -->
         <!-- Set the post-splash theme -->
-        <item name="postSplashScreenTheme">@style/Theme.Deskdrop</item>
+        <item name="postSplashScreenTheme">@style/Theme.LinkAll</item>
     </style>
 
-    <style name="Theme.Deskdrop.ShareTarget" parent="android:Theme.Translucent.NoTitleBar">
+    <style name="Theme.LinkAll.ShareTarget" parent="android:Theme.Translucent.NoTitleBar">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:colorBackgroundCacheHint">@null</item>
@@ -34,7 +34,7 @@
         <item name="android:windowIsFloating">false</item>
     </style>
 
-    <style name="Theme.Deskdrop.Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
+    <style name="Theme.LinkAll.Dialog" parent="Theme.Material3.DayNight.BottomSheetDialog">
         <item name="colorPrimary">@color/cr_accent</item>
         <item name="colorSurface">@color/cr_bg_card</item>
         <item name="bottomSheetStyle">@style/Widget.Material3.BottomSheet.Modal</item>

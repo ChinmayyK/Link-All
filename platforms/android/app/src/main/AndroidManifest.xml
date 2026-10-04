@@ -57,13 +57,13 @@
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
     <application
-        android:name=".DeskdropApp"
+        android:name=".LinkAllApp"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Deskdrop"
+        android:theme="@style/Theme.LinkAll"
         android:requestLegacyExternalStorage="false">
 
         <!-- ── Main activity ─────────────────────────────────────────── -->
@@ -99,13 +99,13 @@
             android:exported="false"
             android:launchMode="singleTask"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.Deskdrop" />
+            android:theme="@style/Theme.LinkAll" />
 
         <!-- ── Share target ──────────────────────────────────────────── -->
         <activity
-            android:name=".DeskdropShareTarget"
+            android:name=".LinkAllShareTarget"
             android:exported="true"
-            android:theme="@style/Theme.Deskdrop.ShareTarget">
+            android:theme="@style/Theme.LinkAll.ShareTarget">
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -123,7 +123,7 @@
 
         <!-- ── Home screen widget ─────────────────────────────────────── -->
         <receiver
-            android:name=".DeskdropWidget"
+            android:name=".LinkAllWidget"
             android:exported="true"
             android:label="@string/app_name">
             <intent-filter>
@@ -131,7 +131,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/deskdrop_widget_info" />
+                android:resource="@xml/linkall_widget_info" />
         </receiver>
 
         <activity
@@ -139,7 +139,7 @@
             android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity=""
-            android:theme="@style/Theme.Deskdrop.ShareTarget" />
+            android:theme="@style/Theme.LinkAll.ShareTarget" />
 
         <!-- ── Foreground service ─────────────────────────────────────── -->
         <!--
@@ -148,7 +148,7 @@
             restrictions on networking without requiring a WakeLock.
         -->
         <service
-            android:name=".DeskdropService"
+            android:name=".LinkAllService"
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="connectedDevice"
@@ -156,7 +156,7 @@
 
         <!-- ── Notification listener service ─────────────────────────── -->
         <service
-            android:name=".DeskdropNotificationListener"
+            android:name=".LinkAllNotificationListener"
             android:label="Link All Notification Listener"
             android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
             android:exported="true">
@@ -167,7 +167,7 @@
 
         <!-- ── Accessibility service (Clipboard fallback) ──────────────── -->
         <service
-            android:name=".DeskdropAccessibilityService"
+            android:name=".LinkAllAccessibilityService"
             android:label="Link All Clipboard Sync"
             android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
             android:exported="true">
@@ -181,7 +181,7 @@
 
         <!-- ── Quick Settings tile ───────────────────────────────────── -->
         <service
-            android:name=".DeskdropTileService"
+            android:name=".LinkAllTileService"
             android:exported="true"
             android:label="@string/app_name"
             android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">

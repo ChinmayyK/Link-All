@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace 'com.deskdrop.benchmark'
+    namespace 'app.linkall.benchmark'
     compileSdk 36
 
     defaultConfig {

@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace 'com.deskdrop'
+    namespace 'app.linkall'
     compileSdk 36
 
     defaultConfig {
@@ -23,19 +23,19 @@ android {
 
     signingConfigs {
         release {
-            def keystorePath = System.getenv("DESKDROP_KEYSTORE")
+            def keystorePath = System.getenv("LINKALL_KEYSTORE")
             if (keystorePath != null) {
                 def keystoreFile = file(keystorePath)
                 if (!keystoreFile.exists()) {
                     throw new GradleException("Release keystore not found at ${keystoreFile.absolutePath}")
                 }
-                def storePw = System.getenv("DESKDROP_STORE_PASSWORD")
-                def alias   = System.getenv("DESKDROP_KEY_ALIAS")
-                def keyPw   = System.getenv("DESKDROP_KEY_PASSWORD")
+                def storePw = System.getenv("LINKALL_STORE_PASSWORD")
+                def alias   = System.getenv("LINKALL_KEY_ALIAS")
+                def keyPw   = System.getenv("LINKALL_KEY_PASSWORD")
                 if (!storePw || !alias || !keyPw) {
                     throw new GradleException(
-                        "DESKDROP_KEYSTORE is set but DESKDROP_STORE_PASSWORD, " +
-                        "DESKDROP_KEY_ALIAS or DESKDROP_KEY_PASSWORD is empty. " +
+                        "LINKALL_KEYSTORE is set but LINKALL_STORE_PASSWORD, " +
+                        "LINKALL_KEY_ALIAS or LINKALL_KEY_PASSWORD is empty. " +
                         "Refusing to build an incorrectly signed release.")
                 }
                 storeFile keystoreFile
@@ -67,12 +67,12 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Sign with the release keystore whenever DESKDROP_KEYSTORE is set, which
+            // Sign with the release keystore whenever LINKALL_KEYSTORE is set, which
             // covers CI and any signed local build. Without it there is no release key
             // available, so fall back to the debug key purely so that a local
             // `assembleRelease` still completes. That output is not distributable:
             // the debug signing key is public and shipped with every Android SDK.
-            def useReleaseKey = System.getenv("DESKDROP_KEYSTORE") != null
+            def useReleaseKey = System.getenv("LINKALL_KEYSTORE") != null
             signingConfig useReleaseKey ? signingConfigs.release : signingConfigs.debug
         }
         debug {
@@ -107,7 +107,7 @@ android {
     packaging {
         jniLibs {
             // Preserve debug symbols in release so crash reports are actionable
-            keepDebugSymbols += '**/libdeskdrop_core.so'
+            keepDebugSymbols += '**/liblinkall_core.so'
         }
     }
 }
