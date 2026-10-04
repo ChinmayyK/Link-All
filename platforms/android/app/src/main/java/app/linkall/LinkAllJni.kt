@@ -53,6 +53,7 @@ object LinkAllJni {
     @JvmStatic external fun initContext(context: android.content.Context)
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
     @JvmStatic external fun stop(handle: Long)
+    @JvmStatic external fun protocolVersion(): Int
 
     // ── Clipboard push ────────────────────────────────────────────────────────
     @JvmStatic external fun pushText(handle: Long, text: String): Int

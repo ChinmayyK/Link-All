@@ -140,6 +140,19 @@ fn config_with_android_paths(
     updated
 }
 
+// ── protocolVersion ──────────────────────────────────────────────────────────
+
+/// The wire protocol version this core speaks, for the mDNS `v` TXT record the
+/// Kotlin side publishes and checks. Read from here so it can never drift from
+/// the core's own value again.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_protocolVersion(
+    _env: JNIEnv,
+    _class: JClass,
+) -> jint {
+    crate::protocol::PROTOCOL_VERSION as jint
+}
+
 // ── stop ──────────────────────────────────────────────────────────────────────
 
 #[no_mangle]

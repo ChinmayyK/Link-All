@@ -3497,7 +3497,7 @@ class LinkAllService : Service() {
             serviceType = NSD_SERVICE_TYPE
             port        = DEFAULT_LINKALL_PORT
             setAttribute("id", myDeviceId ?: "")
-            setAttribute("v", "4")
+            setAttribute("v", LinkAllJni.protocolVersion().toString())
         }
 
         val regListener = object : NsdManager.RegistrationListener {
@@ -3642,7 +3642,7 @@ class LinkAllService : Service() {
             }
 
             val peerVersion = if (Build.VERSION.SDK_INT >= 21) info.attributes["v"]?.let { String(it) } else null
-            if (peerVersion != null && peerVersion != "4") {
+            if (peerVersion != null && peerVersion != LinkAllJni.protocolVersion().toString()) {
                 Log.i(TAG, "NSD: skipping ${info.serviceName} due to protocol version $peerVersion")
                 return
             }
