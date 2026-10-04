@@ -384,7 +384,8 @@ private struct TransferHistoryRow: View {
     var isReceived: Bool { !(entry.dest_path ?? "").isEmpty }
 
     var displaySize: String {
-        guard let b = entry.file_bytes else { return "Unknown size" }
+        // Folder entries carry a file count ("15 files") instead of a byte size.
+        guard let b = entry.file_bytes else { return entry.text_preview ?? "Unknown size" }
         let mb = Double(b) / 1_048_576.0
         if mb >= 1.0 { return String(format: "%.1f MB", mb) }
         let kb = Double(b) / 1_024.0
