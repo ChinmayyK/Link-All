@@ -1,0 +1,44 @@
+# Link All Linux distribution files
+
+# ── .desktop file (freedesktop.org) ──────────────────────────────────────────
+# Install to: ~/.local/share/applications/linkall.desktop
+#             /usr/share/applications/linkall.desktop (system-wide)
+
+[Desktop Entry]
+Type=Application
+Name=Link All
+GenericName=Clipboard Sync
+Comment=Proximity-Based Shared Clipboard — sync text, images and files across your devices on LAN
+Exec=/usr/local/bin/linkall-gtk %U
+Icon=linkall
+Categories=Utility;Network;
+Keywords=clipboard;sync;copy;paste;LAN;proximity;
+MimeType=x-scheme-handler/linkall;
+StartupNotify=false
+# Run in background — no window, tray icon only.
+NoDisplay=false
+Terminal=false
+Actions=SendClipboard;OpenHistory;Preferences;Quit;
+
+# ── Desktop Actions ────────────────────────────────────────────────────────────
+# Right-click actions in GNOME / KDE launchers.
+
+[Desktop Action SendClipboard]
+Name=Send Clipboard to Devices
+Exec=/usr/local/bin/linkall-cli push
+Icon=document-send
+
+[Desktop Action OpenHistory]
+Name=Clipboard History
+Exec=/usr/local/bin/linkall-cli history
+Icon=document-open-recent
+
+[Desktop Action Preferences]
+Name=Preferences
+Exec=/usr/local/bin/linkall-cli settings
+Icon=preferences-system
+
+[Desktop Action Quit]
+Name=Quit Link All
+Exec=/usr/local/bin/linkall-cli stop
+Icon=application-exit

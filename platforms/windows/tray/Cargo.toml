@@ -1,16 +1,16 @@
 [package]
-name = "deskdrop-tray"
+name = "linkall-tray"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
 license.workspace = true
-description = "Deskdrop Windows system tray helper (native Win32, no .NET runtime)"
+description = "Link All Windows system tray helper (native Win32, no .NET runtime)"
 publish = false
 
-# The WinUI build copies target/<profile>/deskdrop-tray.exe to
-# tray\Deskdrop.Tray.exe, the name TrayService.cs launches and watches.
+# The WinUI build copies target/<profile>/linkall-tray.exe to
+# tray\LinkAll.Tray.exe, the name TrayService.cs launches and watches.
 [[bin]]
-name = "deskdrop-tray"
+name = "linkall-tray"
 path = "src/main.rs"
 
 [target.'cfg(windows)'.dependencies]

@@ -40,9 +40,9 @@ use windows_sys::Win32::UI::WindowsAndMessaging::{
     WM_SETTINGCHANGE, WNDCLASSEXW, WS_OVERLAPPED,
 };
 
-const TRAY_PIPE: &str = r"\\.\pipe\Deskdrop_Tray_Pipe";
-const MAIN_PIPE: &str = r"\\.\pipe\Deskdrop_Main_Commands";
-const MAIN_EXE: &str = "Deskdrop.exe";
+const TRAY_PIPE: &str = r"\\.\pipe\LinkAll_Tray_Pipe";
+const MAIN_PIPE: &str = r"\\.\pipe\LinkAll_Main_Commands";
+const MAIN_EXE: &str = "LinkAll.exe";
 
 /// Shell_NotifyIcon callback for mouse events on the icon.
 const WM_TRAY: u32 = WM_APP + 1;
@@ -68,12 +68,12 @@ thread_local! {
 }
 
 pub fn run() {
-    log("=== deskdrop-tray starting ===");
+    log("=== linkall-tray starting ===");
     unsafe {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
         let instance = GetModuleHandleW(null());
-        let class = wide("DeskdropTrayWindow");
+        let class = wide("LinkAllTrayWindow");
         let wc = WNDCLASSEXW {
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wndproc),
@@ -139,7 +139,7 @@ pub fn run() {
             }
         });
     }
-    log("=== deskdrop-tray exiting ===");
+    log("=== linkall-tray exiting ===");
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -264,7 +264,7 @@ unsafe fn show_menu(hwnd: HWND) {
     }
 }
 
-/// Serves `Deskdrop_Tray_Pipe` forever, one line per client connection, and
+/// Serves `LinkAll_Tray_Pipe` forever, one line per client connection, and
 /// hands each line to the UI thread. TrayService's watchdog also connects and
 /// closes without writing; that reads as an empty line and is ignored.
 fn pipe_server(hwnd_addr: usize) {
@@ -394,7 +394,7 @@ fn open_main_window() {
         if found.is_null() && !search.pids.is_empty() {
             found = FindWindowW(null(), wide("Link All").as_ptr());
             if found.is_null() {
-                found = FindWindowW(null(), wide("DeskDrop Dashboard").as_ptr());
+                found = FindWindowW(null(), wide("LinkAll Dashboard").as_ptr());
             }
         }
         if !found.is_null() {
@@ -405,7 +405,7 @@ fn open_main_window() {
     }
 
     let Some(exe) = main_exe_path() else {
-        log("OpenDeskdropWindow: Deskdrop.exe not found");
+        log("OpenLinkAllWindow: LinkAll.exe not found");
         return;
     };
     let path = wide(&exe.to_string_lossy());
@@ -428,7 +428,7 @@ struct WindowSearch {
 }
 
 /// EnumWindows callback: the first visible, unowned top-level window of a
-/// Deskdrop.exe process (what .NET calls a process's MainWindowHandle).
+/// LinkAll.exe process (what .NET calls a process's MainWindowHandle).
 unsafe extern "system" fn find_main_window(hwnd: HWND, lparam: LPARAM) -> windows_sys::core::BOOL {
     if IsWindowVisible(hwnd) == 0 || !GetWindow(hwnd, GW_OWNER).is_null() {
         return 1;
@@ -531,7 +531,7 @@ unsafe fn wide_ptr_eq(mut p: *const u16, s: &str) -> bool {
     *p == 0
 }
 
-/// The tray icon from the app's Assets (shipped next to Deskdrop.exe), in the
+/// The tray icon from the app's Assets (shipped next to LinkAll.exe), in the
 /// logo that suits the taskbar's theme, at the small-icon size for the
 /// current DPI, else the stock application icon.
 fn load_icon() -> HICON {
@@ -579,12 +579,12 @@ fn copy_wide(dst: &mut [u16], s: &str) {
     dst[n] = 0;
 }
 
-/// Appends to %LOCALAPPDATA%\Deskdrop\tray_debug.txt, like the old helper.
+/// Appends to %LOCALAPPDATA%\LinkAll\tray_debug.txt, like the old helper.
 fn log(msg: &str) {
     let Some(base) = std::env::var_os("LOCALAPPDATA") else {
         return;
     };
-    let dir = PathBuf::from(base).join("Deskdrop");
+    let dir = PathBuf::from(base).join("LinkAll");
     let _ = std::fs::create_dir_all(&dir);
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

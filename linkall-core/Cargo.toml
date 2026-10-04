@@ -1,0 +1,106 @@
+[package]
+name = "linkall-core"
+version.workspace = true
+edition = "2021"
+authors = ["Link All Contributors"]
+description = "Proximity-Based Shared Clipboard — core engine"
+license = "AGPL-3.0-only"
+
+[lib]
+name = "linkall_core"
+crate-type = ["cdylib", "rlib"]
+
+[[bin]]
+name = "linkall-daemon"
+path = "src/bin/daemon.rs"
+test = false
+bench = false
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "fs", "sync", "rt", "signal"] }
+
+# Serialization
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = "1"
+postcard = { version = "1", features = ["alloc", "use-std"] }
+
+# Encryption
+aes-gcm = "0.10"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+rand = "0.8"
+sha2 = "0.10"
+hmac = "0.12"
+hkdf = { version = "0.12", features = ["std"] }
+hex = "0.4"
+zeroize = "1"
+
+# Networking
+tokio-util = { version = "0.7", features = ["codec"] }
+bytes = { version = "1", features = ["serde"] }
+libc = "0.2"
+socket2 = { version = "0.5", features = ["all"] }
+image = { version = "0.24", default-features = false, features = ["png", "jpeg"], optional = true }
+if-addrs = "0.13"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# UUID
+uuid = { version = "1", features = ["serde", "v4"] }
+base64 = "0.21"
+
+# Hostname / user info
+whoami = "1"
+hostname = "0.3"
+dirs = "5"
+
+# Error handling
+thiserror = "1"
+anyhow = "1"
+netdev = "0.45.0"
+lz4_flex = "0.13.1"
+dashmap = "5"
+memmap2 = "0.7"
+
+# sha2 has no aarch64 hardware path without `asm` (x86 uses SHA-NI already).
+# The asm is GNU assembly, which MSVC cannot build, so Windows on ARM is left out.
+[target.'cfg(all(target_arch = "aarch64", not(windows)))'.dependencies]
+sha2 = { version = "0.10", features = ["asm"] }
+
+[target.'cfg(not(target_os = "android"))'.dependencies]
+mdns-sd = "0.10"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Memory", "Win32_Storage_FileSystem"] }
+
+[target.'cfg(not(target_os="android"))'.dependencies]
+
+[target.'cfg(target_os="android")'.dependencies]
+ndk-context = "0.1"
+
+[dev-dependencies]
+chacha20poly1305 = "0.10"
+tokio-test = "0.4"
+tempfile = "3"
+dhat = "0.3.3"
+
+[dev-dependencies.criterion]
+version = "0.5"
+features = ["html_reports"]
+
+[[bench]]
+name = "benches"
+harness = false
+
+
+
+
+
+[features]
+compress = ["image"]
+image = ["dep:image"]
