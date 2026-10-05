@@ -10,8 +10,8 @@
 //! - Max instances: 8 (supports up to 8 simultaneous CLI connections)
 //! - Timeout: 100 ms connect wait
 //!
-//! ACL: the pipe DACL grants access only to the current user's SID
-//! (SDDL: `D:(A;;GA;;;{user-sid})`), matching the 0600 behaviour on Unix.
+//! ACL: the pipe DACL grants access only to its owner, the current user
+//! (SDDL: `D:(A;;GA;;;OW)`), matching the 0600 behaviour on Unix.
 
 #![cfg(windows)]
 
@@ -40,19 +40,19 @@ struct SecurePipeAttributes {
 }
 
 impl SecurePipeAttributes {
-    fn new() -> Self {
+    fn new() -> std::io::Result<Self> {
         let sddl = b"D:(A;;GA;;;OW)\0"; // Generic All for Owner
         let mut sd: *mut std::ffi::c_void = null_mut();
-        unsafe {
-            let res = ConvertStringSecurityDescriptorToSecurityDescriptorA(
+        let res = unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorA(
                 sddl.as_ptr(),
                 1, // SDDL_REVISION_1
                 &mut sd,
                 null_mut(),
-            );
-            if res == 0 {
-                panic!("ConvertStringSecurityDescriptorToSecurityDescriptorA failed");
-            }
+            )
+        };
+        if res == 0 {
+            return Err(std::io::Error::last_os_error());
         }
 
         let sa = SECURITY_ATTRIBUTES {
@@ -61,7 +61,7 @@ impl SecurePipeAttributes {
             bInheritHandle: 0,
         };
 
-        Self { sa }
+        Ok(Self { sa })
     }
 
     fn as_mut_ptr(&mut self) -> *mut std::ffi::c_void {
@@ -79,6 +79,24 @@ impl Drop for SecurePipeAttributes {
     }
 }
 
+/// Create one pipe instance that only the current user can open.
+fn create_pipe_instance(
+    first: bool,
+) -> std::io::Result<tokio::net::windows::named_pipe::NamedPipeServer> {
+    let mut attrs = SecurePipeAttributes::new()?;
+    // SAFETY: `attrs` holds a valid SECURITY_ATTRIBUTES for the whole call;
+    // the system copies the descriptor, so dropping it afterwards is fine.
+    unsafe {
+        ServerOptions::new()
+            .first_pipe_instance(first)
+            .access_inbound(true)
+            .access_outbound(true)
+            .pipe_mode(PipeMode::Byte)
+            .max_instances(MAX_INSTANCES)
+            .create_with_security_attributes_raw(get_pipe_name(), attrs.as_mut_ptr())
+    }
+}
+
 /// Spawn the Windows named-pipe IPC server.
 ///
 /// `handler` is called once per request and must return a `IpcResponse`.
@@ -92,18 +110,14 @@ where
     tokio::spawn(async move {
         let mut is_first = true;
         loop {
-            let server = ServerOptions::new()
-                .first_pipe_instance(is_first)
-                .access_inbound(true)
-                .access_outbound(true)
-                .pipe_mode(PipeMode::Byte)
-                .max_instances(MAX_INSTANCES)
-                .create(get_pipe_name());
-
-            is_first = false;
-
-            let server = match server {
-                Ok(s) => s,
+            let server = match create_pipe_instance(is_first) {
+                // Only after the first instance exists: until then a pipe of
+                // this name owned by another process must make us fail, not
+                // join it.
+                Ok(s) => {
+                    is_first = false;
+                    s
+                }
                 Err(e) => {
                     warn!("Named pipe create error: {}", e);
                     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
