@@ -398,11 +398,11 @@ public partial class App : Application
         {
             var protocolArgs = activatedArgs.Data as Windows.ApplicationModel.Activation.IProtocolActivatedEventArgs;
             var uri = protocolArgs?.Uri;
+            // Any web page can open a linkall:// link, so a link must never
+            // accept a pairing or a transfer: only the notification buttons
+            // (AppNotification activation below) may do that.
             if (uri != null)
-            {
-                TraceLog.Write("Activated via protocol: " + uri.ToString());
-                HandleLinkAllUri(uri.ToString());
-            }
+                TraceLog.Write("Ignored protocol activation: " + uri.Scheme + "://" + uri.Host);
         }
         else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.AppNotification)
         {
