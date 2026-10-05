@@ -128,6 +128,8 @@ class LinkAllService : Service() {
         // Intent actions
         const val ACTION_START              = "app.linkall.START"
         const val ACTION_STOP               = "app.linkall.STOP"
+        /** The user swiped the service notification away. */
+        private const val ACTION_SERVICE_NOTIFICATION_DISMISSED = "app.linkall.SERVICE_NOTIFICATION_DISMISSED"
         const val ACTION_PAUSE_SYNC         = "app.linkall.PAUSE_SYNC"
         const val ACTION_RESUME_SYNC        = "app.linkall.RESUME_SYNC"
         const val ACTION_DISCONNECT_ALL     = "app.linkall.DISCONNECT_ALL"
@@ -571,6 +573,10 @@ class LinkAllService : Service() {
 
         when (intent?.action) {
             ACTION_STOP         -> { shutdownAndStop(); return START_NOT_STICKY }
+            ACTION_SERVICE_NOTIFICATION_DISMISSED -> {
+                serviceNotificationDismissed = true
+                return START_STICKY
+            }
 
             // Settings changed live (e.g. sync toggle from SettingsActivity).
             // Re-read prefs and push them to the engine if possible.
@@ -4137,8 +4143,6 @@ class LinkAllService : Service() {
     // Two action buttons: [Pause Sync] / [Resume Sync] and [Disconnect]
 
 
-    private var cachedLargeIcon: android.graphics.Bitmap? = null
-
     private fun buildForegroundNotification(): Notification {
         val launchPi = PendingIntent.getActivity(
             this, 0,
@@ -4170,20 +4174,23 @@ class LinkAllService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Rebuilt on every peer change and service command; decode once.
-        val largeIcon = cachedLargeIcon ?: android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round).also { cachedLargeIcon = it }
+        val dismissedPi = PendingIntent.getService(
+            this, 12,
+            Intent(this, LinkAllService::class.java).apply { action = ACTION_SERVICE_NOTIFICATION_DISMISSED },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
 
         return NotificationCompat.Builder(this, CHAN_SERVICE)
             // Calm and still: no running timer, no "active" wording, so a
             // service that mostly waits does not look like busy work.
             .setContentTitle("Link All")
             .setContentText(description)
-            .setSubText(if (syncEnabled) "Uses almost no battery" else null)
             .setShowWhen(false)
             .setSmallIcon(R.drawable.ic_cr_activity)
-            .setLargeIcon(largeIcon)
             .setColor(android.graphics.Color.parseColor("#3D7BFF")) // Brand blue
-            .setOngoing(true)
+            // Not ongoing: Android 13+ lets the user swipe it away while the
+            // service keeps running, and the delete intent keeps it away.
+            .setDeleteIntent(dismissedPi)
             .setOnlyAlertOnce(true)
             .setSilent(true)
             .setPriority(NotificationCompat.PRIORITY_MIN)
@@ -4214,7 +4221,14 @@ class LinkAllService : Service() {
         } else {
             startForeground(NOTIF_ID_SERVICE, notification)
         }
+        isInForeground = true
     }
+
+    /** Set once startForeground succeeded; this service never leaves the foreground. */
+    private var isInForeground = false
+
+    /** The user swiped the notification away; keep it away until the service restarts. */
+    private var serviceNotificationDismissed = false
 
     /** What the service notification last showed; see [updateForegroundNotification]. */
     private var postedNotificationState: String? = null
@@ -4225,6 +4239,7 @@ class LinkAllService : Service() {
      * service event, most of which change nothing visible.
      */
     private fun updateForegroundNotification() {
+        if (serviceNotificationDismissed) return
         val state = notificationState()
         if (state == postedNotificationState) return
         postedNotificationState = state
