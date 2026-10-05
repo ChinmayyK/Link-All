@@ -79,6 +79,8 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import app.linkall.ActivityEntry
 import app.linkall.ActivityKind
@@ -372,7 +374,9 @@ fun BottomDock(
                 modifier = Modifier
                     .clip(CircleShape)
                     .background(bg)
-                    .clickable(
+                    .selectable(
+                        selected = selected,
+                        role = Role.Tab,
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
