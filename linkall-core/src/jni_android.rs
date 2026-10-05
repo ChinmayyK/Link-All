@@ -131,6 +131,9 @@ fn config_with_android_paths(
         updated.trust_store_path = data_root.join("trust.json");
         updated.peer_store_path = data_root.join("peers.json");
         updated.identity_path = data_root.join("identity.key");
+        // History, settings and the cache live here too. The default points
+        // into another package's directory, which the app can't write.
+        updated.data_dir = data_root;
     }
 
     if let Some(file_save_root) = file_save_root.filter(|path| !path.as_os_str().is_empty()) {
