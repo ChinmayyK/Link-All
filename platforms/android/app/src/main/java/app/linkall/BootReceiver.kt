@@ -11,7 +11,9 @@ import android.util.Log
  *
  * Also handles:
  *   - MY_PACKAGE_REPLACED — restart after app update
- *   - LOCKED_BOOT_COMPLETED — for Android 7+ direct-boot compatibility
+ *
+ * Not LOCKED_BOOT_COMPLETED: before the user unlocks, credential-encrypted
+ * SharedPreferences throw, so the app would crash on every reboot.
  *
  * Requires RECEIVE_BOOT_COMPLETED permission in AndroidManifest.xml.
  * Service is only started if the user had sync enabled before the reboot.
@@ -25,7 +27,6 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         when (intent.action) {
             Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_LOCKED_BOOT_COMPLETED,
             Intent.ACTION_MY_PACKAGE_REPLACED -> {
                 val prefs = context.getSharedPreferences(LinkAllService.PREFS_NAME, Context.MODE_PRIVATE)
 

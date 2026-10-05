@@ -30,8 +30,9 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- ── External storage for Downloads/Link All ──────────────────── -->
+    <!-- Writing received files to Download/Link All on Android 10 and older. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
+        android:maxSdkVersion="29" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
@@ -64,7 +65,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.LinkAll"
-        android:requestLegacyExternalStorage="false">
+        android:requestLegacyExternalStorage="true">
 
         <!-- ── Main activity ─────────────────────────────────────────── -->
         <activity
@@ -219,13 +220,11 @@
         <receiver
             android:name=".BootReceiver"
             android:enabled="true"
-            android:exported="true"
-            android:directBootAware="true">
+            android:exported="true">
             <intent-filter>
-                <!-- Standard boot -->
+                <!-- Boot, after the user unlocks. Not LOCKED_BOOT_COMPLETED:
+                     before unlock, SharedPreferences throw and the app crashes. -->
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-                <!-- Android 7+ direct-boot (before credential unlock) -->
-                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
                 <!-- Restart after OTA app update -->
                 <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>

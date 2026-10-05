@@ -82,7 +82,8 @@ class LinkAllNotificationListener : NotificationListenerService() {
         if (lastSentContent[id] == content) return
         lastSentContent[id] = content
         
-        Log.d(TAG, "Notification posted: pkg=$pkg, title=$title, text=$text")
+        // Never log the content: it holds messages and one-time codes.
+        Log.d(TAG, "Notification posted: pkg=$pkg")
         
         val intent = Intent(this, LinkAllService::class.java).apply {
             action = LinkAllService.ACTION_PUSH_NOTIFICATION

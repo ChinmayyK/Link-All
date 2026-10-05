@@ -108,7 +108,6 @@ class LinkAllService : Service() {
             }
         }
 
-
         val quickSendContextFlow = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
         // Notification channels
@@ -168,6 +167,7 @@ class LinkAllService : Service() {
         const val EXTRA_CLIPBOARD_TEXT      = "clipboard_text"
         const val EXTRA_CONTENT_HASH        = "content_hash"   // SHA-256 hex; used for full-content apply via engine
         const val EXTRA_TOKEN               = "token"          // QR Code Auth Token
+        const val EXTRA_FINGERPRINT         = "fingerprint"    // QR Code: computer's key
         const val EXTRA_TRANSFER_ID         = "transfer_id"
         const val EXTRA_SHARED_URI          = "shared_uri"
         const val EXTRA_SHARED_URIS         = "shared_uris"
@@ -319,7 +319,7 @@ class LinkAllService : Service() {
                         val codeMatch = Regex("\\b\\d{4,8}\\b").find(body ?: "")
                         if (codeMatch != null) {
                             LinkAllJni.pushText(h, codeMatch.value)
-                            Log.i(TAG, "Pushed 2FA code: ${codeMatch.value}")
+                            Log.i(TAG, "Pushed 2FA code")
                             break
                         }
                     }
@@ -390,6 +390,18 @@ class LinkAllService : Service() {
             rl.unlock()
         }
     }
+
+    /**
+     * Calls [action] with the running engine's handle, or returns null when
+     * the engine is stopped. The read lock keeps onDestroy from freeing the
+     * engine during the call; a freed handle crashes the whole app.
+     * Keep [action] to the JNI call: waiting on the main thread inside it
+     * deadlocks against onDestroy's write lock.
+     */
+    private inline fun <T> withEngine(action: (Long) -> T): T? = engineLock.readLock {
+        val h = engineHandle
+        if (h != 0L) action(h) else null
+    }
     private fun syncMode(): BackgroundSyncMode =
         if (prefs().getString("sync_mode", "always") == "battery") BackgroundSyncMode.BATTERY_OPTIMIZED
         else BackgroundSyncMode.ALWAYS_ACTIVE
@@ -407,7 +419,7 @@ class LinkAllService : Service() {
                     handler.post {
                         val h = engineHandle
                         if (h != 0L) {
-                            backgroundExecutor.execute { LinkAllJni.notifySleepState(h, false) }
+                            backgroundExecutor.execute { withEngine { live -> LinkAllJni.notifySleepState(live, false) } }
                         }
                         // Peers that survived the screen-off need no
                         // rediscovery; restarting NSD and redialling every
@@ -415,7 +427,7 @@ class LinkAllService : Service() {
                         if (!hasConnectedPeers()) {
                             restartDiscoveryNow()
                             if (h != 0L) {
-                                backgroundExecutor.execute { LinkAllJni.notifyNetworkRestored(h) }
+                                backgroundExecutor.execute { withEngine { live -> LinkAllJni.notifyNetworkRestored(live) } }
                             }
                         }
                     }
@@ -424,7 +436,7 @@ class LinkAllService : Service() {
                     Log.i(TAG, "Screen OFF: Notifying Rust engine to relax heartbeats")
                     val h = engineHandle
                     if (h != 0L) {
-                        backgroundExecutor.execute { LinkAllJni.notifySleepState(h, true) }
+                        backgroundExecutor.execute { withEngine { live -> LinkAllJni.notifySleepState(live, true) } }
                     }
                     // The 2-minute idle release runs on uptime, which stops
                     // while the CPU sleeps, so it could leave the multicast
@@ -447,7 +459,7 @@ class LinkAllService : Service() {
                             restartDiscoveryNow()
                             val h = engineHandle
                             if (h != 0L) {
-                                backgroundExecutor.execute { LinkAllJni.notifyNetworkRestored(h) }
+                                backgroundExecutor.execute { withEngine { live -> LinkAllJni.notifyNetworkRestored(live) } }
                             }
                         }
                     }
@@ -468,7 +480,7 @@ class LinkAllService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     // Example action: broadcast a generic notification/warning to peers or local logs
-                    LinkAllJni.pushNotification(h, "custom_br", context.packageName, "Custom Broadcast", message)
+                    withEngine { live -> LinkAllJni.pushNotification(live, "custom_br", context.packageName, "Custom Broadcast", message) }
                 }
             }
         }
@@ -545,8 +557,12 @@ class LinkAllService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Once in the foreground the service stays there, and Android needs no
+        // new startForeground for later starts. Calling it on every start
+        // re-posted the notification each time any app posted one (the
+        // notification relay starts this service), undoing the user's swipe.
         try {
-            if (intent?.action != ACTION_STOP) {
+            if (intent?.action != ACTION_STOP && !isInForeground) {
                 startForegroundCompat(buildForegroundNotification())
             }
         } catch (e: Exception) {
@@ -578,7 +594,7 @@ class LinkAllService : Service() {
                     val text = explicitText ?: cm.primaryClip?.getItemAt(0)
                         ?.coerceToText(this)?.toString()
                     if (!text.isNullOrBlank()) {
-                        val result = LinkAllJni.pushText(h, text)
+                        val result = withEngine { live -> LinkAllJni.pushText(live, text) }
                         Log.i(TAG, "PUSH_CLIPBOARD: result=$result len=${text.length}")
                         if (result == 0) {
                             broadcastActivityUpdated()
@@ -617,7 +633,7 @@ class LinkAllService : Service() {
                 if (!targetId.isNullOrBlank() && engineHandle != 0L) {
                     val h = engineHandle
                     serviceScope.launch {
-                        LinkAllJni.reconnectPeer(h, targetId)
+                        withEngine { live -> LinkAllJni.reconnectPeer(live, targetId) }
                         restartDiscoveryNow()
                         Log.i(TAG, "Reconnecting to peer $targetId & restarted discovery")
                     }
@@ -635,7 +651,7 @@ class LinkAllService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     serviceScope.launch {
-                        val result = LinkAllJni.forgetPeer(h, deviceId)
+                        val result = withEngine { live -> LinkAllJni.forgetPeer(live, deviceId) }
                         Log.i(TAG, "Manual forget request for $deviceId: result=$result")
                         persistStatus()
                     }
@@ -665,7 +681,7 @@ class LinkAllService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     serviceScope.launch {
-                        val result = LinkAllJni.sendPairingRequest(h, deviceId)
+                        val result = withEngine { live -> LinkAllJni.sendPairingRequest(live, deviceId) }
                         Log.i(TAG, "Manual pairing request for $deviceId: result=$result")
                         persistStatus()
                     }
@@ -677,7 +693,7 @@ class LinkAllService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     serviceScope.launch {
-                        val result = LinkAllJni.cancelPairingRequest(h, deviceId)
+                        val result = withEngine { live -> LinkAllJni.cancelPairingRequest(live, deviceId) }
                         Log.i(TAG, "Cancelled pairing request to $deviceId: result=$result")
                         persistStatus()
                     }
@@ -690,7 +706,7 @@ class LinkAllService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     serviceScope.launch {
-                        val result = LinkAllJni.respondToPairing(h, deviceId, accepted)
+                        val result = withEngine { live -> LinkAllJni.respondToPairing(live, deviceId, accepted) }
                         Log.i(TAG, "Pairing response for $deviceId accepted=$accepted result=$result")
                         persistStatus()
                         notificationManager.cancel(pairingNotifId(deviceId))
@@ -715,7 +731,7 @@ class LinkAllService : Service() {
                 val h = engineHandle
                 if (h != 0L) {
                     serviceScope.launch {
-                        val result = LinkAllJni.disconnectPeer(h, deviceId)
+                        val result = withEngine { live -> LinkAllJni.disconnectPeer(live, deviceId) }
                         Log.i(TAG, "Manual disconnect request for $deviceId: result=$result")
                         persistStatus()
                     }
@@ -733,7 +749,7 @@ class LinkAllService : Service() {
                     suppressNext = true
                     if (!hash.isNullOrBlank()) {
                         // Engine holds the full content by hash — apply without truncation.
-                        val result = LinkAllJni.applyClipboardByHash(engineHandle, hash)
+                        val result = withEngine { live -> LinkAllJni.applyClipboardByHash(live, hash) }
                         if (result != 1 && !text.isNullOrBlank()) {
                             // Hash not found (e.g. engine restarted) — fall back to text.
                             cm.setPrimaryClip(ClipData.newPlainText("Link All", text))
@@ -753,7 +769,7 @@ class LinkAllService : Service() {
             ACTION_ACCEPT_FILE_TRANSFER -> {
                 val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
                 if (engineHandle != 0L) {
-                    LinkAllJni.acceptFileTransfer(engineHandle, tid)
+                    withEngine { live -> LinkAllJni.acceptFileTransfer(live, tid) }
                     notificationManager.cancel(transferNotifId(tid))
                 }
                 return START_STICKY
@@ -763,7 +779,7 @@ class LinkAllService : Service() {
             ACTION_REJECT_FILE_TRANSFER -> {
                 val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
                 if (engineHandle != 0L) {
-                    LinkAllJni.rejectFileTransfer(engineHandle, tid)
+                    withEngine { live -> LinkAllJni.rejectFileTransfer(live, tid) }
                     notificationManager.cancel(transferNotifId(tid))
                 }
                 // The core sends no local event for a reject, so the entry
@@ -780,12 +796,12 @@ class LinkAllService : Service() {
                     if (tid.startsWith(FOLDER_ROW_PREFIX)) {
                         val handle = engineHandle
                         backgroundExecutor.execute {
-                            LinkAllJni.cancelFolder(handle, tid.removePrefix(FOLDER_ROW_PREFIX))
+                            withEngine { live -> LinkAllJni.cancelFolder(live, tid.removePrefix(FOLDER_ROW_PREFIX)) }
                         }
                         TransferManager.activeTransfers.remove(tid)
                         TransferManager.publishActiveTransfers(force = true)
                     } else {
-                        LinkAllJni.cancelFileTransfer(engineHandle, tid)
+                        withEngine { live -> LinkAllJni.cancelFileTransfer(live, tid) }
                     }
                     notificationManager.cancel(transferNotifId(tid))
                 }
@@ -795,7 +811,7 @@ class LinkAllService : Service() {
             ACTION_PAUSE_FILE_TRANSFER -> {
                 val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
                 if (engineHandle != 0L) {
-                    LinkAllJni.pauseFileTransfer(engineHandle, tid)
+                    withEngine { live -> LinkAllJni.pauseFileTransfer(live, tid) }
                 }
                 return START_STICKY
             }
@@ -803,7 +819,7 @@ class LinkAllService : Service() {
             ACTION_RESUME_FILE_TRANSFER -> {
                 val tid = intent.getStringExtra(EXTRA_TRANSFER_ID) ?: return START_STICKY
                 if (engineHandle != 0L) {
-                    LinkAllJni.resumeFileTransfer(engineHandle, tid)
+                    withEngine { live -> LinkAllJni.resumeFileTransfer(live, tid) }
                 }
                 return START_STICKY
             }
@@ -811,7 +827,7 @@ class LinkAllService : Service() {
             ACTION_START_SPEED_TEST -> {
                 val deviceId = intent.getStringExtra("device_id") ?: return START_STICKY
                 if (engineHandle != 0L) {
-                    LinkAllJni.startSpeedTest(engineHandle, deviceId, 10)
+                    withEngine { live -> LinkAllJni.startSpeedTest(live, deviceId, 10) }
                 }
                 return START_STICKY
             }
@@ -859,7 +875,7 @@ class LinkAllService : Service() {
                 startEventDrainThread()
                 acquireContinuousLocks()
                 // Cache our own UUID prefix so NSD can filter self-connections.
-                myDeviceId = LinkAllJni.getDeviceId(engineHandle)
+                myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
                 myDeviceUuidPrefix = myDeviceId?.take(8)
                 startNsdDiscovery()   // advertise + browse so the Mac can find us
                 registerNetworkCallback() // restart NSD on WiFi changes
@@ -886,7 +902,7 @@ class LinkAllService : Service() {
             if (intent?.action == ACTION_PUSH_TEXT) {
                 intent.getStringExtra("text")?.takeIf { it.isNotBlank() }?.let { text ->
                     if (engineHandle != 0L && hasConnectedPeers()) {
-                        LinkAllJni.pushText(engineHandle, text)
+                        withEngine { live -> LinkAllJni.pushText(live, text) }
                     } else if (engineHandle != 0L) {
                         Log.i(TAG, "PUSH_TEXT ignored: no connected peers")
                     } else {
@@ -900,13 +916,13 @@ class LinkAllService : Service() {
                 prefs().getBoolean("notification_mirroring", false) &&
                 engineHandle != 0L && hasConnectedPeers()
             ) {
-                LinkAllJni.pushNotification(
-                    engineHandle,
+                withEngine { live -> LinkAllJni.pushNotification(
+                    live,
                     intent.getStringExtra(EXTRA_NOTIFICATION_ID) ?: "",
                     intent.getStringExtra(EXTRA_NOTIFICATION_PKG) ?: "",
                     intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: "",
                     intent.getStringExtra(EXTRA_NOTIFICATION_TEXT) ?: "",
-                )
+                ) }
             }
 
             if (intent?.action == ACTION_PUSH_FOLDER) {
@@ -973,7 +989,6 @@ class LinkAllService : Service() {
             if (engineHandle != 0L) {
                 LinkAllJni.stop(engineHandle)
                 engineHandle = 0L
-                activeEngineHandle = 0L
             }
         } finally {
             engineLock.writeLock().unlock()
@@ -1138,7 +1153,7 @@ class LinkAllService : Service() {
         prefs().edit().putBoolean("sync_enabled", enabled).apply()
         val h = engineHandle
         if (h != 0L) {
-            LinkAllJni.setSyncEnabled(h, enabled)
+            withEngine { live -> LinkAllJni.setSyncEnabled(live, enabled) }
         }
         updateForegroundNotification()
         broadcastStatus()
@@ -1149,14 +1164,14 @@ class LinkAllService : Service() {
         if (h != 0L) {
             // Cancel all active transfers before disconnecting
             TransferManager.activeTransfers.values.forEach { transfer ->
-                LinkAllJni.cancelFileTransfer(h, transfer.id)
+                withEngine { live -> LinkAllJni.cancelFileTransfer(live, transfer.id) }
             }
             TransferManager.activeTransfers.clear()
             TransferManager.activeTransfersFlow.value = emptyList()
 
             currentPeerSnapshots()
                 .filter { it.isConnected }
-                .forEach { peer -> LinkAllJni.disconnectPeer(h, peer.id) }
+                .forEach { peer -> withEngine { live -> LinkAllJni.disconnectPeer(live, peer.id) } }
         }
         connectedPeerIds.clear()
         persistStatus()
@@ -1220,7 +1235,13 @@ class LinkAllService : Service() {
                     acquireWakeLock()
                     handler.post {
                         try { 
-                            for (e in batch) { handleEvent(e) } 
+                            for (e in batch) {
+                                // One event's failure must not crash the app
+                                // and drop the rest of the batch.
+                                try { handleEvent(e) } catch (t: Exception) {
+                                    Log.e(TAG, "Event ${LinkAllJni.eventType(e)} failed", t)
+                                }
+                            }
                             syncTransferWifiLock()
                         } finally { 
                             for (e in batch) { LinkAllJni.freeEvent(e) }
@@ -1341,7 +1362,7 @@ class LinkAllService : Service() {
                     val folder = fileName.substringBefore('/')
                     val peer = currentPeerSnapshots().firstOrNull { it.id == LinkAllJni.eventDeviceId(ev) }
                     if (peer?.trusted == true && engineHandle != 0L) {
-                        LinkAllJni.acceptFileTransfer(engineHandle, tid)
+                        withEngine { live -> LinkAllJni.acceptFileTransfer(live, tid) }
                     } else if (shouldAskAboutFolder("$from/$folder")) {
                         showFileTransferIncomingNotification(from, folder, 0L, tid, isFolder = true)
                     }
@@ -1387,7 +1408,7 @@ class LinkAllService : Service() {
 
                     val peer = currentPeerSnapshots().firstOrNull { it.id == LinkAllJni.eventDeviceId(ev) }
                     if (peer?.trusted == true && engineHandle != 0L) {
-                        LinkAllJni.acceptFileTransfer(engineHandle, tid)
+                        withEngine { live -> LinkAllJni.acceptFileTransfer(live, tid) }
                     } else {
                         showFileTransferIncomingNotification(from, fileName, totalBytes, tid)
                     }
@@ -1816,11 +1837,11 @@ class LinkAllService : Service() {
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to show permission notification", e)
                         }
-                        LinkAllJni.sendRemoteFilesResponse(
-                            engineHandle, requestId, targetDeviceId, null, null, 0,
+                        withEngine { live -> LinkAllJni.sendRemoteFilesResponse(
+                            live, requestId, targetDeviceId, null, null, 0,
                             if (BuildConfig.FULL_PERMISSIONS) "Permission Denied: Please grant storage permission on your Android device to browse files."
                             else "Browsing phone files isn't available in the Google Play version of Link All. Share files from the phone instead."
-                        )
+                        ) }
                         return@executeInBackgroundWithWakeLock
                     }
 
@@ -1830,14 +1851,14 @@ class LinkAllService : Service() {
                             includeSummary = summaryOnly || offset == 0,
                             includeList = !summaryOnly
                         )
-                        LinkAllJni.sendRemoteFilesResponse(
-                            engineHandle, requestId, targetDeviceId, summaryJson, filesJson, total, null
-                        )
+                        withEngine { live -> LinkAllJni.sendRemoteFilesResponse(
+                            live, requestId, targetDeviceId, summaryJson, filesJson, total, null
+                        ) }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error handling RemoteFilesQuery", e)
-                        LinkAllJni.sendRemoteFilesResponse(
-                            engineHandle, requestId, targetDeviceId, null, null, 0, e.message ?: "Query error"
-                        )
+                        withEngine { live -> LinkAllJni.sendRemoteFilesResponse(
+                            live, requestId, targetDeviceId, null, null, 0, e.message ?: "Query error"
+                        ) }
                     }
                 }
             }
@@ -1855,27 +1876,27 @@ class LinkAllService : Service() {
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to show permission notification", e)
                         }
-                        LinkAllJni.sendRemoteThumbnailResponse(
-                            engineHandle, requestId, targetDeviceId, fileId, null, "Permission Denied"
-                        )
+                        withEngine { live -> LinkAllJni.sendRemoteThumbnailResponse(
+                            live, requestId, targetDeviceId, fileId, null, "Permission Denied"
+                        ) }
                         return@executeInBackgroundWithWakeLock
                     }
                     try {
                         val thumbnailBytes = RemoteFileManager.getThumbnail(applicationContext, fileId, sizePx)
                         if (thumbnailBytes != null) {
-                            LinkAllJni.sendRemoteThumbnailResponse(
-                                engineHandle, requestId, targetDeviceId, fileId, thumbnailBytes, null
-                            )
+                            withEngine { live -> LinkAllJni.sendRemoteThumbnailResponse(
+                                live, requestId, targetDeviceId, fileId, thumbnailBytes, null
+                            ) }
                         } else {
-                            LinkAllJni.sendRemoteThumbnailResponse(
-                                engineHandle, requestId, targetDeviceId, fileId, null, "Thumbnail generation failed"
-                            )
+                            withEngine { live -> LinkAllJni.sendRemoteThumbnailResponse(
+                                live, requestId, targetDeviceId, fileId, null, "Thumbnail generation failed"
+                            ) }
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Error handling RemoteThumbnailRequest", e)
-                        LinkAllJni.sendRemoteThumbnailResponse(
-                            engineHandle, requestId, targetDeviceId, fileId, null, e.message ?: "Thumbnail error"
-                        )
+                        withEngine { live -> LinkAllJni.sendRemoteThumbnailResponse(
+                            live, requestId, targetDeviceId, fileId, null, e.message ?: "Thumbnail error"
+                        ) }
                     }
                 }
             }
@@ -1900,7 +1921,7 @@ class LinkAllService : Service() {
                         if (resolved != null) {
                             val (filePath, displayName, mimeType) = resolved
                             Log.i(TAG, "Pulling remote file: $filePath ($displayName, $mimeType) to target $targetDeviceId")
-                            LinkAllJni.sendFilePath(engineHandle, filePath, displayName, mimeType, targetDeviceId, null, false, 1)
+                            withEngine { live -> LinkAllJni.sendFilePath(live, filePath, displayName, mimeType, targetDeviceId, null, false, 1) }
                         } else {
                             Log.w(TAG, "Failed to resolve file path for pull request $fileId")
                         }
@@ -1962,7 +1983,7 @@ class LinkAllService : Service() {
         val scheme = uri?.scheme?.lowercase()
         if (uri == null || (scheme != "http" && scheme != "https") || uri.host.isNullOrEmpty()) {
             Log.w(TAG, "Refusing link from $from: not a web link")
-            LinkAllJni.ackOpenUrlOnDevice(engineHandle, requesterId, false, "Only web links can be opened")
+            withEngine { live -> LinkAllJni.ackOpenUrlOnDevice(live, requesterId, false, "Only web links can be opened") }
             return
         }
         try {
@@ -1978,10 +1999,10 @@ class LinkAllService : Service() {
                 .setContentIntent(openPi)
                 .build()
             notificationManager.notify(NOTIF_ID_FILE_BASE + (uri.hashCode() and 0xFFF), note)
-            LinkAllJni.ackOpenUrlOnDevice(engineHandle, requesterId, true, null)
+            withEngine { live -> LinkAllJni.ackOpenUrlOnDevice(live, requesterId, true, null) }
         } catch (e: Exception) {
             Log.e(TAG, "Could not show the link from $from", e)
-            LinkAllJni.ackOpenUrlOnDevice(engineHandle, requesterId, false, "Could not show the link")
+            withEngine { live -> LinkAllJni.ackOpenUrlOnDevice(live, requesterId, false, "Could not show the link") }
         }
     }
 
@@ -2334,7 +2355,7 @@ class LinkAllService : Service() {
             val sig = "text:${text.hashCode()}"
             if (sig != lastClipboardSignature) {
                 lastClipboardSignature = sig
-                LinkAllJni.pushText(engineHandle, text)
+                withEngine { live -> LinkAllJni.pushText(live, text) }
             }
             return
         }
@@ -2368,11 +2389,11 @@ class LinkAllService : Service() {
             null -> Unit
             is OutgoingPayload.Image -> {
                 lastClipboardSignature = sig
-                LinkAllJni.pushImage(engineHandle, payload.mime, payload.data)
+                withEngine { live -> LinkAllJni.pushImage(live, payload.mime, payload.data) }
             }
             is OutgoingPayload.File -> {
                 lastClipboardSignature = sig
-                LinkAllJni.pushFile(engineHandle, payload.name, payload.data)
+                withEngine { live -> LinkAllJni.pushFile(live, payload.name, payload.data) }
             }
         }
     }
@@ -2438,9 +2459,16 @@ class LinkAllService : Service() {
     private fun applyText(text: String, from: String) {
         suppressNext = true
         lastClipboardSignature = "text:${text.hashCode()}"
-        clipboardManager.setPrimaryClip(
-            android.content.ClipData.newPlainText("linkall", text)
-        )
+        // Binder carries at most about 1 MB, so very long text is refused.
+        try {
+            clipboardManager.setPrimaryClip(
+                android.content.ClipData.newPlainText("linkall", text)
+            )
+        } catch (e: RuntimeException) {
+            suppressNext = false
+            Log.w(TAG, "Clipboard from $from not applied: ${text.length} chars is too long", e)
+            return
+        }
         // The event handler that received this text already added its feed entry.
         broadcastStatus()
 
@@ -2660,15 +2688,15 @@ class LinkAllService : Service() {
             val size = pfd.statSize
             if (size >= 0) {
                 // Rust owns the descriptor from here and closes it.
-                val tid = LinkAllJni.sendFileFd(engineHandle, pfd.detachFd(), displayName, mime, targetDeviceId)
+                val tid = withEngine { live -> LinkAllJni.sendFileFd(live, pfd.detachFd(), displayName, mime, targetDeviceId) }
                 return tid?.let { SentSharedFile(it, displayName, size, direct = true) }
             }
             runCatching { pfd.close() }
         }
 
         val staged = stageSharedUri(uri, preferredName, fallbackIndex) ?: return null
-        val tid = LinkAllJni.sendFilePath(
-            engineHandle,
+        val tid = withEngine { live -> LinkAllJni.sendFilePath(
+            live,
             staged.localFile.absolutePath,
             staged.displayName,
             staged.mimeType,
@@ -2676,7 +2704,7 @@ class LinkAllService : Service() {
             null,
             false,
             1
-        ) ?: return null
+        ) } ?: return null
         return SentSharedFile(tid, staged.displayName, staged.localFile.length(), direct = false)
     }
 
@@ -2788,7 +2816,7 @@ class LinkAllService : Service() {
 
     private fun foldersInFlight(): List<FolderInFlight> {
         if (engineHandle == 0L) return emptyList()
-        val json = LinkAllJni.foldersJson(engineHandle) ?: return emptyList()
+        val json = withEngine { live -> LinkAllJni.foldersJson(live) } ?: return emptyList()
         return runCatching {
             val arr = org.json.JSONArray(json)
             (0 until arr.length()).map { i ->
@@ -2934,7 +2962,7 @@ class LinkAllService : Service() {
             ) ?: break
             TransferManager.pendingOutboundTransferIds.add(tid)
         }
-        LinkAllJni.finishFolderSend(handle, batchId)
+        withEngine { live -> LinkAllJni.finishFolderSend(live, batchId) }
     }
 
     /** Every file under a document tree as (document id, path inside the folder). */
@@ -3060,10 +3088,10 @@ class LinkAllService : Service() {
         if (stateStr == "idle") lastCallNumber = ""
         val known = number.ifEmpty { lastCallNumber }
         val contact = resolveContactName(known)
-        Log.i(TAG, "Call state: $stateStr number=$known contact=$contact")
+        Log.i(TAG, "Call state: $stateStr hasNumber=${known.isNotEmpty()} hasContact=${contact.isNotEmpty()}")
         val h = engineHandle
         if (h != 0L) {
-            LinkAllJni.pushCallState(h, stateStr, known, contact)
+            withEngine { live -> LinkAllJni.pushCallState(live, stateStr, known, contact) }
         }
         // Keep peers' copy of a live call alive; they drop one not heard of
         // for a while (CALL_LEASE in the core), so a lost "idle" cannot stick.
@@ -3093,7 +3121,7 @@ class LinkAllService : Service() {
                 resyncIdleCallState(delayMs = 0)
                 return
             }
-            if (h != 0L) LinkAllJni.pushCallState(h, lastCallState, lastCallNumber, resolveContactName(lastCallNumber))
+            if (h != 0L) withEngine { live -> LinkAllJni.pushCallState(live, lastCallState, lastCallNumber, resolveContactName(lastCallNumber)) }
             callRefreshHandler.postDelayed(this, CALL_REFRESH_MS)
         }
     }
@@ -3117,7 +3145,7 @@ class LinkAllService : Service() {
             lastCallNumber = ""
             notificationManager.cancel(NOTIF_ID_CALL)
             val h = engineHandle
-            if (h != 0L) LinkAllJni.pushCallState(h, "idle", "", "")
+            if (h != 0L) withEngine { live -> LinkAllJni.pushCallState(live, "idle", "", "") }
         }, delayMs)
     }
 
@@ -3145,7 +3173,7 @@ class LinkAllService : Service() {
         val h = engineHandle
         if (h != 0L) {
             serviceScope.launch {
-                val result = LinkAllJni.trustPeer(h, deviceId)
+                val result = withEngine { live -> LinkAllJni.trustPeer(live, deviceId) }
                 Log.i(TAG, "Manual trust request for $deviceId: result=$result")
                 persistStatus()
             }
@@ -3155,15 +3183,16 @@ class LinkAllService : Service() {
     private fun handleTrustPeerFromQr(intent: Intent) {
         val deviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return
         val token = intent.getStringExtra(EXTRA_TOKEN) ?: return
+        val fingerprint = intent.getStringExtra(EXTRA_FINGERPRINT)
         val h = engineHandle
         if (h != 0L) {
             val ip = intent.getStringExtra("ip")
             val port = intent.getIntExtra("port", 47823)
             serviceScope.launch {
                 if (ip != null && ip.isNotBlank()) {
-                    LinkAllJni.connectToPeer(h, ip, port)
+                    withEngine { live -> LinkAllJni.connectToPeer(live, ip, port) }
                 }
-                val result = LinkAllJni.trustPeerFromQr(h, deviceId, token)
+                val result = withEngine { live -> LinkAllJni.trustPeerFromQr(live, deviceId, token, fingerprint) }
                 Log.i(TAG, "QR trust request for $deviceId: result=$result")
                 persistStatus()
             }
@@ -3175,7 +3204,7 @@ class LinkAllService : Service() {
         val h = engineHandle
         if (h != 0L) {
             serviceScope.launch {
-                val result = LinkAllJni.rejectPeer(h, deviceId)
+                val result = withEngine { live -> LinkAllJni.rejectPeer(live, deviceId) }
                 Log.i(TAG, "Manual reject request for $deviceId: result=$result")
                 persistStatus()
             }
@@ -3344,7 +3373,7 @@ class LinkAllService : Service() {
                         val h = engineHandle
                         if (h != 0L && level >= 0) {
                             Log.i(TAG, "Battery status update: level=$level charging=$charging")
-                            LinkAllJni.pushBatteryStatus(h, level, charging)
+                            withEngine { live -> LinkAllJni.pushBatteryStatus(live, level, charging) }
                         }
                     }
                 }
@@ -3661,7 +3690,7 @@ class LinkAllService : Service() {
             val h = engineHandle
             if (h != 0L) {
                 val fallbackName = "Link All Device" // Name is discovered during handshake
-                val result = LinkAllJni.reportDiscoveredPeer(h, peerDeviceId, fallbackName, ip, port)
+                val result = withEngine { live -> LinkAllJni.reportDiscoveredPeer(live, peerDeviceId, fallbackName, ip, port) }
                 if (result == 0) {
                     Log.i(TAG, "NSD: reportDiscoveredPeer($ip:$port, id=$peerDeviceId) pushed to DiscoveryManager")
                     nsdRetryCount.set(0L)
@@ -3855,7 +3884,7 @@ class LinkAllService : Service() {
                         val h = engineHandle
                         if (h != 0L) {
                             backgroundExecutor.execute {
-                                LinkAllJni.notifyNetworkRestored(h)
+                                withEngine { live -> LinkAllJni.notifyNetworkRestored(live) }
                             }
                         }
                     }
@@ -3873,7 +3902,7 @@ class LinkAllService : Service() {
                 Log.i(TAG, "Network: default network lost — stopping discovery, scheduling retry")
                 val h = engineHandle
                 if (h != 0L) {
-                    backgroundExecutor.execute { LinkAllJni.notifyNetworkRestored(h) }
+                    backgroundExecutor.execute { withEngine { live -> LinkAllJni.notifyNetworkRestored(live) } }
                 }
                 handler.post {
                     delayedNetworkAction?.let { handler.removeCallbacks(it) }
@@ -3979,7 +4008,7 @@ class LinkAllService : Service() {
         val syncFiles   = p.getBoolean("sync_files",   true)
         Log.i(TAG, "Applying settings: sync=$syncEnabled text=$syncText images=$syncImages files=$syncFiles")
         // Push to engine — JNI call updates the engine's sync filter flags atomically.
-        LinkAllJni.applySyncSettings(h, syncEnabled, syncText, syncImages, syncFiles)
+        withEngine { live -> LinkAllJni.applySyncSettings(live, syncEnabled, syncText, syncImages, syncFiles) }
         // If sync was just disabled, cancel any pending clipboard notifications.
         if (!syncEnabled) {
             notificationManager.cancel(NOTIF_ID_CLIPBOARD_AVAILABLE)
@@ -4107,6 +4136,7 @@ class LinkAllService : Service() {
     // Silent — no sound, no vibration, no heads-up banner.
     // Two action buttons: [Pause Sync] / [Resume Sync] and [Disconnect]
 
+
     private var cachedLargeIcon: android.graphics.Bitmap? = null
 
     private fun buildForegroundNotification(): Notification {
@@ -4129,9 +4159,6 @@ class LinkAllService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Rebuilt on every peer change and service command; decode once.
-        val largeIcon = cachedLargeIcon ?: android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round).also { cachedLargeIcon = it }
-
         val description = foregroundStatusText()
 
         val pushClipboardIntent = Intent(this, LinkAllService::class.java).apply {
@@ -4142,6 +4169,9 @@ class LinkAllService : Service() {
             pushClipboardIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
+
+        // Rebuilt on every peer change and service command; decode once.
+        val largeIcon = cachedLargeIcon ?: android.graphics.BitmapFactory.decodeResource(resources, R.mipmap.ic_launcher_round).also { cachedLargeIcon = it }
 
         return NotificationCompat.Builder(this, CHAN_SERVICE)
             // Calm and still: no running timer, no "active" wording, so a
@@ -4281,7 +4311,7 @@ class LinkAllService : Service() {
 
     private fun currentPeerSnapshots(): List<PeerSnapshot> {
         val raw = if (engineHandle != 0L) {
-            LinkAllJni.peersJson(engineHandle)
+            withEngine { live -> LinkAllJni.peersJson(live) }
         } else {
             prefs().getString(PREF_PEER_SNAPSHOTS_JSON, null)
         }
@@ -4306,7 +4336,7 @@ class LinkAllService : Service() {
 
     private fun persistStatus() {
         val rawPeerJson = if (engineHandle != 0L) {
-            LinkAllJni.peersJson(engineHandle)
+            withEngine { live -> LinkAllJni.peersJson(live) }
         } else {
             prefs().getString(PREF_PEER_SNAPSHOTS_JSON, null)
         } ?: "[]"
@@ -4319,12 +4349,12 @@ class LinkAllService : Service() {
 
         val editor = prefs().edit()
             .putString("local_device_name", resolvedDeviceName())
-            .putString("device_id", if (engineHandle != 0L) LinkAllJni.getDeviceId(engineHandle) else null)
+            .putString("device_id", if (engineHandle != 0L) withEngine { live -> LinkAllJni.getDeviceId(live) } else null)
             .putBoolean("peer_connected", connectedPeerIds.isNotEmpty())
             .putInt("connected_count", connectedPeerIds.size)
             .putStringSet("connected_names", connectedPeerIds.values.toSet())
             .putString(PREF_PEER_SNAPSHOTS_JSON, rawPeerJson)
-            .putString(PREF_HEALTH_JSON, if (engineHandle != 0L) LinkAllJni.healthJson(engineHandle) ?: "[]" else "[]")
+            .putString(PREF_HEALTH_JSON, if (engineHandle != 0L) withEngine { live -> LinkAllJni.healthJson(live) } ?: "[]" else "[]")
         // Store last-sync times so the dashboard can show "Last sync: 2m ago" per peer.
         peerLastSync.forEach { (name, ts) ->
             editor.putLong("last_sync_${name.take(32)}", ts)
@@ -4345,7 +4375,7 @@ class LinkAllService : Service() {
             val error = when {
                 ip == null -> "Couldn't find \"$host\" on this network."
                 getLocalIpAddresses().contains(ip) -> "That's this phone's own address. Enter the other device's IP."
-                LinkAllJni.connectToPeer(h, ip, port) != 0 ->
+                withEngine { live -> LinkAllJni.connectToPeer(live, ip, port) } != 0 ->
                     "Couldn't reach $host:$port. Check both devices are on the same network and Link All is open on the other one."
                 else -> null
             }
