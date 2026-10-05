@@ -94,13 +94,17 @@ namespace LinkAll.WinUI.UI
             ExpandedCard.Scale = new System.Numerics.Vector3(0.95f, 0.95f, 1.0f);
             try
             {
-                var target = LinkAllStore.Shared.SelectedPeer?.device_id;
-                if (string.IsNullOrEmpty(target))
+                // Only connected devices can take the drop. Peers also lists
+                // offline and unpaired devices, and the first of those used
+                // to get it. One connected device gets it; with several, all
+                // of them do, as the card says ("your connected devices").
+                var connected = System.Linq.Enumerable.ToList(LinkAllStore.Shared.ConnectedPeers);
+                if (connected.Count == 0)
                 {
-                    var peers = System.Linq.Enumerable.ToList(LinkAllStore.Shared.Peers);
-                    target = peers.Count > 0 ? peers[0].device_id : "";
+                    NotificationHelper.ShowToast("No devices connected", "Connect a device to send files.");
+                    return;
                 }
-                if (string.IsNullOrEmpty(target)) return;
+                var target = connected.Count == 1 ? connected[0].device_id : "";
 
                 if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
                 {
@@ -116,7 +120,10 @@ namespace LinkAll.WinUI.UI
                 else if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
                 {
                     var text = await e.DataView.GetTextAsync();
-                    DaemonActions.RunFireAndForget("Send Text", () => DaemonClient.PushTextTo(text, target));
+                    if (string.IsNullOrEmpty(target))
+                        DaemonActions.RunFireAndForget("Send Text", () => DaemonClient.PushText(text));
+                    else
+                        DaemonActions.RunFireAndForget("Send Text", () => DaemonClient.PushTextTo(text, target));
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }

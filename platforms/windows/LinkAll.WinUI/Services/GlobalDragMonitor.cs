@@ -106,7 +106,9 @@ namespace LinkAll.WinUI.Services
                 
                 appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - w, (screenH - h) / 2, w, h));
                 
-                _dropZoneWindow.Activate();
+                // Shown without taking focus: the user is mid-drag in another
+                // app, and activating this window could end that drag.
+                appWindow.Show(false);
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
