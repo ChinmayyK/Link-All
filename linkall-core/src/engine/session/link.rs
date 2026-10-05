@@ -90,6 +90,16 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             origin_device: _,
             origin_device_name: _,
         } => {
+            // The text is shown to the user: never take it from a stranger.
+            if !shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false)
+            {
+                tracing::warn!("Ignoring PermissionError from untrusted peer {}", peer_id);
+                return Flow::Continue;
+            }
             let _ = shared
                 .event_tx
                 .send(EngineEvent::Warning(format!("{}: {}", feature, message)))

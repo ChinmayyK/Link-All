@@ -76,3 +76,31 @@ async fn a_call_the_phone_stops_reporting_ends_by_itself() {
     .await
     .expect("call outlived its lease");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unpaired_device_cannot_answer_calls() {
+    let tmp = TempDir::new().unwrap();
+    let (mut phone, stranger) = start_pair(&tmp, false, false).await;
+    connect(&stranger, &phone).await;
+
+    stranger
+        .engine
+        .send_call_action("accept".into(), phone.id)
+        .await;
+
+    let got = timeout(Duration::from_secs(2), async {
+        while let Some(event) = phone.events.recv().await {
+            if matches!(
+                event,
+                linkall_core::engine::EngineEvent::CallActionRequest { .. }
+            ) {
+                return;
+            }
+        }
+    })
+    .await;
+    assert!(
+        got.is_err(),
+        "a call action from an unpaired device must be ignored"
+    );
+}

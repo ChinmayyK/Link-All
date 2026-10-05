@@ -188,6 +188,16 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 let _ = shared.peer_manager.set_explicit_disconnect(peer_id, true);
                 return Flow::Disconnect("explicitly disconnected by peer".to_string());
             }
+            // Only a paired device may answer, decline or reroute our calls.
+            if !shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false)
+            {
+                tracing::warn!("Ignoring CallAction from untrusted peer {}", peer_id);
+                return Flow::Continue;
+            }
             tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
             let _ = shared
                 .event_tx
