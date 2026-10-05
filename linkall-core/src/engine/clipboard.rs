@@ -176,7 +176,18 @@ impl crate::engine::Engine {
 
             let send_result = match tx.try_send(app_message.clone()) {
                 Ok(()) => Ok(()),
-                Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => tx.send(app_message).await,
+                // Bounded: Android calls this on its main thread, and a peer
+                // whose connection stalled can keep its queue full until the
+                // heartbeat drops it - long enough for an ANR.
+                Err(tokio::sync::mpsc::error::TrySendError::Full(_)) => match tokio::time::timeout(
+                    std::time::Duration::from_secs(2),
+                    tx.send(app_message.clone()),
+                )
+                .await
+                {
+                    Ok(sent) => sent,
+                    Err(_) => Err(tokio::sync::mpsc::error::SendError(app_message)),
+                },
                 Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
                     Err(tokio::sync::mpsc::error::SendError(app_message))
                 }
