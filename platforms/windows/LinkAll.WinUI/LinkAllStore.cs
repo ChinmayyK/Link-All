@@ -1252,8 +1252,6 @@ namespace LinkAll.WinUI
                 }
             }
         }
-        private bool _requireTofuConfirmation = true;
-        public bool RequireTofuConfirmation { get => _requireTofuConfirmation; set { if (SetProperty(ref _requireTofuConfirmation, value)) DaemonActions.RunFireAndForget("Settings", () => DaemonClient.PatchSettings(DaemonClient.Fields(("require_tofu_confirmation", value)))); } }
         public string DaemonStatusText => IsDaemonRunning ? "Running" : "Stopped";
         public string HeaderStatusText
         {
@@ -1619,21 +1617,6 @@ namespace LinkAll.WinUI
                     var settings = DaemonClient.GetSettings();
                     if (settings != null && settings.RootElement.TryGetProperty("data", out var settingsDataElem))
                     {
-                        if (settingsDataElem.TryGetProperty("require_tofu_confirmation", out var tofuElem))
-                        {
-                            bool tofu = tofuElem.GetBoolean();
-                            App.MainDispatcherQueue?.TryEnqueue(() =>
-                            {
-                                // Set the backing field directly (not the public setter) so
-                                // loading the daemon's current value doesn't turn around and
-                                // PatchSettings it straight back.
-                                if (_requireTofuConfirmation != tofu)
-                                {
-                                    _requireTofuConfirmation = tofu;
-                                    OnPropertyChanged(nameof(RequireTofuConfirmation));
-                                }
-                            });
-                        }
                         // Same for "Share clipboard": without this the switch
                         // showed On after every launch whatever was saved.
                         if (settingsDataElem.TryGetProperty("sync_enabled", out var syncElem))

@@ -371,28 +371,6 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
-                                <FontIcon Glyph="&#xE928;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                                <TextBlock Text="Confirm a code when pairing" Style="{StaticResource AppBodyStrong}" />
-                                <TextBlock Text="Require a matching six-digit code on both devices before trusting a new one"
-                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
-                            </StackPanel>
-                            <ToggleSwitch Grid.Column="2" IsOn="{x:Bind mgr.RequireTofuConfirmation, Mode=TwoWay}" MinWidth="0"
-                                          VerticalAlignment="Center"
-                                          AutomationProperties.Name="Confirm a code when pairing" />
-                        </Grid>
-
-                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
-
-                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
                             <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppDangerSubtleBrush}" VerticalAlignment="Center">
                                 <FontIcon Glyph="&#xE74D;" FontSize="16" Foreground="{ThemeResource AppDangerBrush}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
@@ -462,7 +440,7 @@
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                 <TextBlock Text="Link All for Windows" Style="{StaticResource AppBodyStrong}" />
-                                <TextBlock Text="Version 4.0.0  &#183;  No cloud, no account, no telemetry"
+                                <TextBlock x:Name="VersionText" Text="No cloud, no account, no telemetry"
                                            Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Grid>

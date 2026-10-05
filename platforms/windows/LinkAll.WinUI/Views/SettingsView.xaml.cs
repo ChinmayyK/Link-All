@@ -16,6 +16,9 @@ namespace LinkAll.WinUI.Views
         public SettingsView()
         {
             this.InitializeComponent();
+            var version = typeof(SettingsView).Assembly.GetName().Version;
+            if (version != null)
+                VersionText.Text = $"Version {version.Major}.{version.Minor}.{version.Build}  \u00B7  No cloud, no account, no telemetry";
             StartupToggle.IsOn = IsLaunchAtStartupEnabled();
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
