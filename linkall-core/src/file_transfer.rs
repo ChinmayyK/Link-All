@@ -1488,7 +1488,8 @@ pub fn is_folder_item(file_name: &str) -> bool {
 ///
 /// Rules applied (in order):
 /// 1. Take only the last path component (basename) — removes `../` prefixes.
-/// 2. Remove any remaining `/` or `\` characters.
+/// 2. Remove any remaining `/` or `\` characters, and replace `:` with `_`
+///    (on Windows `a.txt:x` writes a hidden NTFS alternate data stream).
 /// 3. Strip leading dots to avoid hidden files (e.g. `.bashrc`).
 /// 4. If the result is empty or is a reserved name, substitute "file".
 pub fn sanitize_file_name(name: &str) -> String {
@@ -1502,6 +1503,7 @@ pub fn sanitize_file_name(name: &str) -> String {
     let sanitized: String = base
         .chars()
         .filter(|&c| c != '/' && c != '\\' && c != '\0')
+        .map(|c| if c == ':' { '_' } else { c })
         .collect();
 
     // Trim leading dots (hidden file prevention).
@@ -1734,6 +1736,12 @@ pub fn checksum_file(path: &Path) -> Result<String> {
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn sanitize_file_name_blocks_alternate_data_streams() {
+        assert_eq!(sanitize_file_name("a.txt:evil.exe"), "a.txt_evil.exe");
+        assert_eq!(sanitize_file_name("notes 12:30.txt"), "notes 12_30.txt");
+    }
 
     #[test]
     fn compression_verdict_gives_up_after_streak() {
