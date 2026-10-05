@@ -176,7 +176,7 @@ namespace LinkAll.WinUI.Services
                         // The engine already emits these events (this poll loop already
                         // drains them every 30ms) - they just had no handler wired up,
                         // so the app ran silently for anything but clipboard/file-offer/
-                        // camera-call while minimized to the tray.
+                        // call while minimized to the tray.
                         case NativeCore.PB_EVENT_FOLDER_TRANSFER_COMPLETE:
                         {
                             var folder = NativeCore.PtrToUtf8String(NativeCore.linkall_event_transfer_file_name(ev)) ?? "Folder";
@@ -257,14 +257,6 @@ namespace LinkAll.WinUI.Services
                             var device = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_name(ev)) ?? "A device";
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 NotificationHelper.ShowToast("Device Connected", $"{device} is now connected");
-                            });
-                            break;
-                        }
-                        case NativeCore.PB_EVENT_CAMERA_STREAM_STOP:
-                        {
-                            var device = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_id(ev));
-                            (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                if (!string.IsNullOrEmpty(device)) CameraPreviewWindow.NotifyRemoteStreamStopped(device);
                             });
                             break;
                         }

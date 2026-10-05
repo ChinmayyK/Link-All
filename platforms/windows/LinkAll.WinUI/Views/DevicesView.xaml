@@ -127,10 +127,6 @@
                                                 Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE916;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
-                                <MenuFlyoutItem Text="Continuity camera" Click="OnViewCameraClicked"
-                                                Visibility="{x:Bind ShowCameraButton, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
-                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE722;" /></MenuFlyoutItem.Icon>
-                                </MenuFlyoutItem>
                                 <MenuFlyoutItem Text="Rename device" Click="OnRenameDeviceClicked">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8AC;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>

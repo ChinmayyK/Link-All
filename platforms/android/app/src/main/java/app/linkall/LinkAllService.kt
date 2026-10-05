@@ -73,40 +73,9 @@ class LinkAllService : Service() {
         private const val TAG = "LinkAll"
         const val PREFS_NAME = "linkall"
 
-        // Expose engine handle for high-throughput zero-copy JNI calls (e.g. video frames)
-        @Volatile var activeEngineHandle: Long = 0L
+        // Guards engineHandle: readers hold it across JNI calls, stop() takes
+        // the write lock before freeing the engine.
         val engineLock = java.util.concurrent.locks.ReentrantReadWriteLock()
-
-        fun pushVideoFrameSafely(jpegBytes: ByteArray): Int {
-            engineLock.readLock().lock()
-            return try {
-                val h = activeEngineHandle
-                if (h != 0L) {
-                    LinkAllJni.pushVideoFrame(h, jpegBytes)
-                } else {
-                    -1
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error pushing video frame", e)
-                -1
-            } finally {
-                engineLock.readLock().unlock()
-            }
-        }
-
-        fun stopCameraStreamSafely() {
-            engineLock.readLock().lock()
-            try {
-                val h = activeEngineHandle
-                if (h != 0L) {
-                    LinkAllJni.stopCameraStream(h)
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error stopping camera stream", e)
-            } finally {
-                engineLock.readLock().unlock()
-            }
-        }
 
         val quickSendContextFlow = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
@@ -876,7 +845,6 @@ class LinkAllService : Service() {
 
                 applySettingsToEngine()
 
-                activeEngineHandle = engineHandle
                 Log.i(TAG, "Engine started — $deviceName")
                 startEventDrainThread()
                 acquireContinuousLocks()

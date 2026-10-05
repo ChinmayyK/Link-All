@@ -9,6 +9,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 ### Changed
 - **All platforms:** Deskdrop is now Link All. Existing installs keep their pairings, settings and history; the data folder moves from `deskdrop` to `linkall` on first launch. The Android app has a new ID (`app.linkall`) and installs beside the old one, so pair it once more and remove the old app. Received files now go to `Downloads/Link All`. Release downloads are named `LinkAll-*`.
+### Removed
+- **All platforms:** The phone camera stream to the computer (Continuity Camera), including the macOS virtual camera extension. Android no longer asks for camera access.
+### Fixed
+- **All platforms:** A phone with its screen off no longer drops off the computer after 30 seconds of quiet.
 
 ## [1.4.0] - 2026-10-02
 ### Added

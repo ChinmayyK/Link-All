@@ -101,11 +101,7 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::NetworkStatus { .. }
         | M::StorageStatus { .. }
         | M::CallAction { .. }
-        | M::NotificationRelay { .. }
-        | M::CameraStreamRequest { .. }
-        | M::CameraStreamAccept { .. }
-        | M::CameraStreamStop { .. }
-        | M::CameraFrame { .. }) => device::handle(ctx, m).await,
+        | M::NotificationRelay { .. }) => device::handle(ctx, m).await,
         m @ (M::RemoteFilesQuery { .. }
         | M::RemoteFilesResponse { .. }
         | M::RemoteThumbnailRequest { .. }
@@ -116,6 +112,11 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::OpenUrlOnDeviceAck { .. }) => remote::handle(ctx, m).await,
         // Handshake messages; once the session is up they carry nothing.
         M::Hello { .. } | M::HelloAck { .. } => Flow::Continue,
+        // Sent only by older builds that had the camera stream.
+        M::RetiredCameraStreamRequest { .. }
+        | M::RetiredCameraStreamAccept { .. }
+        | M::RetiredCameraStreamStop { .. }
+        | M::RetiredCameraFrame { .. } => Flow::Continue,
     }
 }
 
@@ -773,7 +774,6 @@ pub(super) fn register_session(
                         transfers.pause_all_for_device(peer_id);
                     }
                 }
-                shared.camera_frames.remove(&peer_id);
                 pump_transfer_queue(&shared).await;
 
                 // Drain pending remote file waiters and notify oneshot receivers with error fast-path

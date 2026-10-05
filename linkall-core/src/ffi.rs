@@ -281,10 +281,7 @@ pub const PB_EVENT_CALL_ACTION: c_int = 18;
 pub const PB_EVENT_BATTERY_STATE_CHANGED: c_int = 19;
 pub const PB_EVENT_FILE_TRANSFER_PAUSED: c_int = 20;
 pub const PB_EVENT_FILE_TRANSFER_RESUMED: c_int = 21;
-pub const PB_EVENT_CAMERA_STREAM_REQUEST: c_int = 22;
-pub const PB_EVENT_CAMERA_STREAM_ACCEPT: c_int = 23;
-pub const PB_EVENT_CAMERA_STREAM_STOP: c_int = 24;
-pub const PB_EVENT_CAMERA_FRAME: c_int = 25;
+// 22-25 belonged to the removed camera stream; do not reuse them.
 pub const PB_EVENT_SYSTEM_HEALTH_UPDATED: c_int = 26;
 pub const PB_EVENT_PEER_DISCOVERED: c_int = 27;
 pub const PB_EVENT_NETWORK_STATE_CHANGED: c_int = 28;
@@ -405,10 +402,6 @@ pub unsafe extern "C" fn linkall_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::BatteryStateChanged { .. } => PB_EVENT_BATTERY_STATE_CHANGED,
         EngineEvent::NetworkStateChanged { .. } => PB_EVENT_NETWORK_STATE_CHANGED,
         EngineEvent::NotificationReceived { .. } => PB_EVENT_NOTIFICATION_RECEIVED,
-        EngineEvent::CameraStreamRequest { .. } => PB_EVENT_CAMERA_STREAM_REQUEST,
-        EngineEvent::CameraStreamAccept { .. } => PB_EVENT_CAMERA_STREAM_ACCEPT,
-        EngineEvent::CameraStreamStop { .. } => PB_EVENT_CAMERA_STREAM_STOP,
-        EngineEvent::CameraFrameReceived { .. } => PB_EVENT_CAMERA_FRAME,
         EngineEvent::PeerDiscovered { .. } => PB_EVENT_PEER_DISCOVERED,
         // A refresh hint: re-read the peer list.
         EngineEvent::PairingChanged { .. } => PB_EVENT_PEER_DISCOVERED,
@@ -731,9 +724,6 @@ pub unsafe extern "C" fn linkall_event_device_id(event: *mut PbEvent) -> *const 
         }
         EngineEvent::SpeedTestProgress { peer_id, .. } => Some(peer_id.to_string()),
         EngineEvent::SpeedTestComplete { peer_id, .. } => Some(peer_id.to_string()),
-        EngineEvent::CameraStreamRequest { from_device, .. } => Some(from_device.to_string()),
-        EngineEvent::CameraStreamAccept { from_device, .. } => Some(from_device.to_string()),
-        EngineEvent::CameraStreamStop { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::OpenUrlOnDeviceRequested { from_device, .. } => Some(from_device.to_string()),
         EngineEvent::FolderTransferComplete { peer_id, .. } => Some(peer_id.to_string()),
         EngineEvent::OpenUrlOnDeviceAckReceived { from_device, .. } => {
@@ -965,125 +955,6 @@ pub unsafe extern "C" fn linkall_resume_file_transfer(
 pub unsafe extern "C" fn linkall_free_event(event: *mut PbEvent) {
     if !event.is_null() {
         drop(Box::from_raw(event));
-    }
-}
-
-// ── Camera accessors ─────────────────────────────────────────────────────────
-
-/// Get the data buffer for a PB_EVENT_CAMERA_FRAME event.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_event_camera_frame_data(_event: *mut PbEvent) -> *const u8 {
-    // Camera frames are no longer sent via event bus to avoid OOM.
-    // They must be fetched directly from the engine state via linkall_engine_get_camera_frame.
-    std::ptr::null()
-}
-
-/// Get the data length for a PB_EVENT_CAMERA_FRAME event.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_event_camera_frame_len(_event: *const PbEvent) -> usize {
-    0
-}
-
-/// Fetch the latest camera frame for a specific peer directly from the engine.
-/// Copies up to `max_len` bytes into `out_buffer`. Returns actual length, or 0 if none/error.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_engine_get_camera_frame(
-    engine: *mut crate::engine::Engine,
-    peer_id_bytes: *const u8,
-    out_buffer: *mut u8,
-    max_len: usize,
-) -> usize {
-    if engine.is_null() || peer_id_bytes.is_null() || out_buffer.is_null() {
-        return 0;
-    }
-    let engine = &*engine;
-    let peer_id = match uuid::Uuid::from_slice(std::slice::from_raw_parts(peer_id_bytes, 16)) {
-        Ok(id) => id,
-        Err(_) => return 0,
-    };
-
-    // Fetch frame from engine using public method
-    if let Some(frame_data) = engine.get_latest_camera_frame(peer_id) {
-        let len = std::cmp::min(frame_data.len(), max_len);
-        std::ptr::copy_nonoverlapping(frame_data.as_ptr(), out_buffer, len);
-        return len;
-    }
-    0
-}
-
-/// Push a camera frame to all peers.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_push_video_frame(
-    handle: *mut LinkAllHandle,
-    data: *const u8,
-    len: usize,
-) -> c_int {
-    if handle.is_null() || data.is_null() || len == 0 {
-        return -1;
-    }
-    let bytes = std::slice::from_raw_parts(data, len).to_vec();
-    let h = &*handle;
-    runtime().block_on(h.engine.push_camera_frame(bytes));
-    0
-}
-
-/// Stop the camera stream and broadcast stop message to all peers.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_stop_camera_stream(handle: *mut LinkAllHandle) -> c_int {
-    if handle.is_null() {
-        return -1;
-    }
-    let h = &*handle;
-    runtime().block_on(h.engine.stop_camera_stream());
-    0
-}
-
-/// Ask a specific connected peer to start streaming its camera. Returns 0
-/// if the request was sent, -1 on invalid args or if that peer isn't
-/// currently connected.
-///
-/// # Safety
-/// `handle` and `target_device_ptr` must be valid.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_request_camera_stream(
-    handle: *mut LinkAllHandle,
-    target_device_ptr: *const c_char,
-) -> c_int {
-    if handle.is_null() || target_device_ptr.is_null() {
-        return -1;
-    }
-    let id_str = match CStr::from_ptr(target_device_ptr).to_str() {
-        Ok(s) => s.to_string(),
-        Err(_) => return -1,
-    };
-    let target_device = match uuid::Uuid::parse_str(&id_str) {
-        Ok(id) => id,
-        Err(_) => return -1,
-    };
-    let h = &*handle;
-    let sent = runtime().block_on(h.engine.request_camera_stream(target_device));
-    if sent {
-        0
-    } else {
-        -1
-    }
-}
-
-/// Returns 1 if a PB_EVENT_CAMERA_STREAM_ACCEPT event's request was
-/// accepted, 0 if rejected or not applicable.
-#[no_mangle]
-pub unsafe extern "C" fn linkall_event_camera_stream_accepted(event: *const PbEvent) -> c_int {
-    if event.is_null() {
-        return 0;
-    }
-    if let EngineEvent::CameraStreamAccept { accepted, .. } = &(*event).inner {
-        if *accepted {
-            1
-        } else {
-            0
-        }
-    } else {
-        0
     }
 }
 

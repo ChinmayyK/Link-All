@@ -251,44 +251,6 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_pushFile(
             .push_clipboard(ClipboardContent::File { name, data: bytes }),
     ) as jint
 }
-// ── pushVideoFrame ──────────────────────────────────────────────────────────────
-
-#[no_mangle]
-pub extern "system" fn Java_app_linkall_LinkAllJni_pushVideoFrame(
-    env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-    data: jbyteArray,
-) -> jint {
-    if handle == 0 {
-        return -1;
-    }
-    let data = unsafe { JByteArray::from_raw(data) };
-    let bytes = match env.convert_byte_array(&data) {
-        Ok(b) => b,
-        Err(_) => return -1,
-    };
-    let h = unsafe { &*(handle as *const AndroidHandle) };
-    rt().block_on(h.engine.push_camera_frame(bytes));
-    0
-}
-
-// ── stopCameraStream ──────────────────────────────────────────────────────────
-
-#[no_mangle]
-pub extern "system" fn Java_app_linkall_LinkAllJni_stopCameraStream(
-    _env: JNIEnv,
-    _class: JClass,
-    handle: jlong,
-) -> jint {
-    if handle == 0 {
-        return -1;
-    }
-    let h = unsafe { &*(handle as *const AndroidHandle) };
-    rt().block_on(h.engine.stop_camera_stream());
-    0
-}
-
 // ── pollEvent ─────────────────────────────────────────────────────────────────
 
 #[no_mangle]
@@ -428,10 +390,6 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         BatteryStateChanged { .. } => 19,
         NetworkStateChanged { .. } => 28,
         NotificationReceived { .. } => 16,
-        CameraStreamRequest { .. } => 22,
-        CameraStreamAccept { .. } => 23,
-        CameraStreamStop { .. } => 24,
-        CameraFrameReceived { .. } => 25,
         PairingRequest { .. } => 7,
         PairingResponse { .. } => 7,
         PeerDiscovered { .. } => 5,

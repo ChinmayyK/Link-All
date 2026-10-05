@@ -168,7 +168,7 @@ struct QuickSendContext {
 
 // MARK: - Status Snapshot
 
-struct StatusSnapshot {
+struct StatusSnapshot: Equatable {
     let peerCount: Int
     let trustedCount: Int
     let lastSyncAt: Date?
@@ -189,7 +189,7 @@ struct DeviceDetailSnapshot {
 
 // MARK: - Settings Snapshot
 
-struct LinkAllSettingsSnapshot {
+struct LinkAllSettingsSnapshot: Equatable {
     var port: UInt16
     var deviceName: String
     var syncEnabled: Bool

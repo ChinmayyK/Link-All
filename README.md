@@ -69,7 +69,6 @@ Sending files across a local network shouldn't stall due to transient packet los
 
 In addition to core file and clipboard synchronization, Link All includes several secondary modules built atop the secure peer connection layer:
 - **Remote Directory Browsing**: Navigate explicitly permitted filesystem directories on remote paired machines over local sockets to fetch specific documents on demand.
-- **Wireless Continuity Camera**: Route live mobile camera feeds to desktop video clients over local Wi-Fi without proprietary drivers or cables.
 - **Notification & Call Handoff**: Mirror mobile SMS messages, phone call alerts, and application notifications directly to desktop notification centers.
 - **Power & Battery Monitoring**: Surface remote hardware battery status (`0–100%`) and charging states directly within desktop system trays.
 - **OS-Level Sleep Immunity**: Leverages platform power management primitives (`ProcessInfo.beginActivity` on macOS, `SetThreadExecutionState` on Windows, and selective wake locks on Android) during ongoing bulk transfers to prevent unintended system suspension.
@@ -95,7 +94,7 @@ Link All combines a unified high-performance Rust core with platform-native inte
 
 | Platform | Frontend Stack | IPC / Binding Mechanism | Current Status & Notes |
 | :--- | :--- | :--- | :--- |
-| **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications, continuity camera support) |
+| **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications) |
 | **Android** | Kotlin & Jetpack Compose | JNI Bridge | 🟢 **Production Ready** (Background service runtime, native share-sheet target, QR/PIN pairing) |
 | **Linux** | GTK3 & D-Bus | Unix Sockets / D-Bus | 🟢 **Production Ready** (XDG notification integration, `systemd` user service runtime) |
 | **Windows** | WinUI 3 / .NET 10 | In-process C-FFI / Named Pipes | 🟠 **Alpha / Experimental** (Active developmental architecture; GUI layer undergoing stabilization) |

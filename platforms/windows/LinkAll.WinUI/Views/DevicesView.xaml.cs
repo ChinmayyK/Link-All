@@ -347,22 +347,6 @@ namespace LinkAll.WinUI.Views
             }
         }
 
-        private void OnViewCameraClicked(object sender, RoutedEventArgs e)
-        {
-            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
-            {
-                try
-                {
-                    var cameraWindow = new CameraPreviewWindow(peer.device_id);
-                    cameraWindow.Activate();
-                }
-                catch (Exception ex)
-                {
-                    App.HandleError(ex);
-                }
-            }
-        }
-
         // ---- Home: Send section and transfer rows ----
 
         // Files & folders: one dialog for where (all devices unless one is

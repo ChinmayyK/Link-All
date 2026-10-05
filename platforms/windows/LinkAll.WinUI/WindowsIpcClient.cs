@@ -137,7 +137,6 @@ namespace LinkAll.WinUI
             return o;
         }
 
-        public static JsonDocument? LatestCameraFrame(string peerId) => Send(Req("latest_camera_frame", ("target_device", peerId)));
 
         // ── Private transport ─────────────────────────────────────────────────
 

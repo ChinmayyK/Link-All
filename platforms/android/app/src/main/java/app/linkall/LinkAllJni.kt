@@ -28,7 +28,6 @@ object LinkAllJni {
     const val CR_EVENT_FILE_TRANSFER_RESUMED   = 21
     const val CR_EVENT_ACTIVITY_UPDATED        = 16
     const val CR_EVENT_CALL_STATE_CHANGED       = 17
-    const val CR_EVENT_CAMERA_FRAME          = 25
     const val CR_EVENT_CALL_ACTION              = 18
     const val CR_EVENT_BATTERY_STATE_CHANGED    = 19
     const val CR_EVENT_OUTGOING_PAIRING_WAITING = 29
@@ -63,7 +62,6 @@ object LinkAllJni {
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int
     @JvmStatic external fun pushFile(handle: Long, name: String, data: ByteArray): Int
     @JvmStatic external fun pushNotification(handle: Long, id: String, packageName: String, title: String, text: String): Int
-    @JvmStatic external fun pushVideoFrame(handle: Long, data: ByteArray): Int
     @JvmStatic external fun pushBatteryStatus(handle: Long, level: Int, charging: Boolean): Int
     @JvmStatic external fun pushStorageStatus(handle: Long, imagesBytes: Long, videosBytes: Long, appsBytes: Long, freeBytes: Long, totalBytes: Long): Int
 
@@ -143,8 +141,6 @@ object LinkAllJni {
     @JvmStatic external fun resumeFileTransfer(engineHandle: Long, transferIdHex: String): Int
     /** Start a speed test with the given peer. */
     @JvmStatic external fun startSpeedTest(engineHandle: Long, deviceId: String, durationSecs: Int): Int
-
-    @JvmStatic external fun stopCameraStream(engineHandle: Long): Int
 
     /**
      * Connect to a peer discovered via Android NSD.

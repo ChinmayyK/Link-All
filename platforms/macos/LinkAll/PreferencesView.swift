@@ -12,10 +12,13 @@ struct PreferencesView: View {
     @State private var tab              = SettingsTab.general
     @State private var copy             = LinkAllSettingsSnapshot.defaults
     @State private var patternDraft     = ""
-    @State private var isDirty          = false
     @State private var portString       = "47823"
     @State private var portIsInvalid    = false
-    @StateObject private var virtualCamera = VirtualCameraInstaller.shared
+    @State private var saveState        = SaveState.idle
+
+    /// Unsaved means different from what the daemon has, so undoing a change
+    /// by hand clears it too.
+    private var isDirty: Bool { store.settings.map { copy != $0 } ?? false }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,56 +54,51 @@ struct PreferencesView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Mark dirty on any meaningful change
-            .onChange(of: copy.deviceName)                  { _ in isDirty = true }
-            .onChange(of: copy.syncEnabled)                 { _ in isDirty = true }
-            .onChange(of: copy.syncText)                    { _ in isDirty = true }
-            .onChange(of: copy.syncImages)                  { _ in isDirty = true }
-            .onChange(of: copy.syncFiles)                   { _ in isDirty = true }
-            .onChange(of: copy.syncMode)                    { _ in isDirty = true }
-            .onChange(of: copy.maxPayloadBytes)             { _ in isDirty = true }
-            .onChange(of: copy.clipboardPollMs)             { _ in isDirty = true }
-            .onChange(of: copy.maxPushesPerSec)             { _ in isDirty = true }
-            .onChange(of: copy.rateLimitBurst)              { _ in isDirty = true }
-            .onChange(of: copy.smartSyncDuplicateWindowMs)  { _ in isDirty = true }
-            .onChange(of: copy.smartSyncDebounceMs)         { _ in isDirty = true }
-            .onChange(of: copy.startOnLogin)                { _ in isDirty = true }
-            .onChange(of: copy.blockSensitiveText)          { _ in isDirty = true }
-            .onChange(of: copy.requireTofuConfirmation)     { _ in isDirty = true }
-            .onChange(of: copy.showReceiveNotification)     { _ in isDirty = true }
-            .onChange(of: copy.historyLimit)                { _ in isDirty = true }
-            .onChange(of: copy.maxHistoryTextBytes)         { _ in isDirty = true }
-            .onChange(of: copy.ignorePatterns)              { _ in isDirty = true }
 
             PrefsFooter(
-                isDirty:      isDirty,
+                isLoaded:      store.settings != nil,
+                isDirty:       isDirty,
                 portIsInvalid: portIsInvalid,
+                saveState:     saveState,
                 onRevert: {
                     if let s = store.settings { copy = s; portString = "\(s.port)" }
                     portIsInvalid = false
-                    isDirty       = false
                 },
                 onSave: {
-                    guard !portIsInvalid else { return }
-                    store.saveSettings(copy)
-                    isDirty = false
+                    guard !portIsInvalid, saveState != .saving else { return }
+                    saveState = .saving
+                    Task {
+                        let ok = await store.saveSettingsNow(copy)
+                        if ok, let s = store.settings { copy = s }
+                        saveState = ok ? .saved : .failed
+                        if ok {
+                            try? await Task.sleep(nanoseconds: 2_500_000_000)
+                            if saveState == .saved { saveState = .idle }
+                        }
+                    }
                 }
             )
         }
         .background(CRTheme.surface.ignoresSafeArea())
-        .onAppear {
+        // Fresh values each time the window opens, not whatever was last
+        // cached; the controls show defaults only until this returns.
+        .task {
+            await store.loadSettings()
             if let s = store.settings { copy = s; portString = "\(s.port)" }
+        }
+        .onChange(of: copy) { _ in
+            if saveState != .saving { saveState = .idle }
         }
     }
 
     @ViewBuilder private var pane: some View {
         switch tab {
-        case .general:       GeneralPane(copy: $copy, virtualCamera: virtualCamera)
+        case .general:       GeneralPane(copy: $copy)
         case .sync:          SyncPane(copy: $copy, patternDraft: $patternDraft)
         case .notifications: TransferNotificationPreferencesView()
         case .network:       NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
                             .onChange(of: portString) { v in
-                                if let p = UInt16(v), p > 1024 { copy.port = p; portIsInvalid = false; isDirty = true }
+                                if let p = UInt16(v), p > 1024 { copy.port = p; portIsInvalid = false }
                                 else { portIsInvalid = true }
                             }
         case .security:      SecurityPane(copy: $copy, store: store)
@@ -173,11 +171,17 @@ private struct PrefsTabChip: View {
 
 // MARK: - Footer
 
+private enum SaveState { case idle, saving, saved, failed }
+
 private struct PrefsFooter: View {
+    let isLoaded:      Bool
     let isDirty:       Bool
     let portIsInvalid: Bool
+    let saveState:     SaveState
     let onRevert:      () -> Void
     let onSave:        () -> Void
+
+    private var canSave: Bool { isLoaded && isDirty && !portIsInvalid && saveState != .saving }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -193,6 +197,22 @@ private struct PrefsFooter: View {
                                 .font(.system(size: 12, weight: .medium)).foregroundStyle(CRTheme.accentRed)
                         }
                         .transition(.move(edge: .leading).combined(with: .opacity))
+                    } else if !isLoaded {
+                        footerNote("Loading settings…", color: CRTheme.inkSubtle)
+                    } else if saveState == .saving {
+                        HStack(spacing: 6) {
+                            ProgressView().controlSize(.small)
+                            Text("Saving…").font(.system(size: 12, weight: .medium)).foregroundStyle(CRTheme.inkSoft)
+                        }
+                    } else if saveState == .saved {
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.system(size: 12)).foregroundStyle(CRTheme.accentGreen)
+                            Text("Saved").font(.system(size: 12, weight: .medium)).foregroundStyle(CRTheme.accentGreen)
+                        }
+                        .transition(.opacity)
+                    } else if saveState == .failed {
+                        footerNote("Couldn't save. Is Link All running?", color: CRTheme.accentRed)
                     } else if isDirty {
                         HStack(spacing: 5) {
                             Circle().fill(CRTheme.accentYellow).frame(width: 5.5, height: 5.5)
@@ -203,15 +223,27 @@ private struct PrefsFooter: View {
                     }
                 }
                 Spacer()
-                Button("Revert", action: onRevert).buttonStyle(CRSecondaryButtonStyle()).disabled(!isDirty)
-                Button("Save Changes", action: onSave)
+                Button("Revert", action: onRevert)
+                    .buttonStyle(CRSecondaryButtonStyle())
+                    .disabled(!isDirty || saveState == .saving)
+                    .opacity(isDirty ? 1 : 0.45)
+                Button(saveState == .saving ? "Saving…" : "Save Changes", action: onSave)
                     .buttonStyle(CRPrimaryButtonStyle())
-                    .disabled(!isDirty || portIsInvalid)
+                    .disabled(!canSave)
+                    // The style draws the same blue either way; dim it so a
+                    // disabled button doesn't look clickable.
+                    .opacity(canSave ? 1 : 0.45)
+                    .keyboardShortcut("s", modifiers: .command)
             }
             .padding(.horizontal, 24).padding(.vertical, 12)
         }
         .animation(.crFast, value: isDirty)
         .animation(.crFast, value: portIsInvalid)
+        .animation(.crFast, value: saveState)
+    }
+
+    private func footerNote(_ text: String, color: Color) -> some View {
+        Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(color)
     }
 }
 
@@ -219,7 +251,6 @@ private struct PrefsFooter: View {
 
 private struct GeneralPane: View {
     @Binding var copy: LinkAllSettingsSnapshot
-    @ObservedObject var virtualCamera: VirtualCameraInstaller
     @AppStorage("cr_app_theme") private var appTheme: String = "system"
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
     @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
@@ -265,17 +296,6 @@ private struct GeneralPane: View {
             }
         }
         
-        PrefsSection(title: "Experimental", icon: "flask.fill", tint: CRTheme.accentRed) {
-            PrefsRow(icon: "camera.fill", label: "Virtual Camera (Beta)",
-                     description: "Use your Android camera in Zoom, OBS, etc. Requires System Extension installation, which on a managed Mac may need IT/admin approval.") {
-                Button(virtualCamera.status == "Not Installed" ? "Install Extension" : virtualCamera.status) {
-                    virtualCamera.install()
-                }
-                .buttonStyle(CRSecondaryButtonStyle())
-                .disabled(virtualCamera.status == "Installed Successfully" || virtualCamera.status == "Installing...")
-            }
-        }
-
         PrefsSection(title: "Appearance", icon: "circle.lefthalf.filled", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "sun.max.fill", label: "Light",
                      description: "Classic clean look with light backgrounds.") {

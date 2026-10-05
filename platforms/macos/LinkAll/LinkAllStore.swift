@@ -110,27 +110,13 @@ final class LinkAllStore: ObservableObject {
     private var pendingRename: PeerViewModel? = nil
     private var toastWorkItems: [UUID: DispatchWorkItem] = [:]
     private var ipcFailureCount: Int = 0
-    private var isCameraPolling = false
 
     @Published var showQrCodeSheet: Bool = false
     @AppStorage("lastUsedDeviceId") private var lastUsedDeviceId: String = ""
 
-    private var cameraWindowClosedObserver: Any?
-
     init(ipc: LinkAllIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
-        cameraWindowClosedObserver = NotificationCenter.default.addObserver(forName: .linkallCameraWindowClosed, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.stopCameraPolling()
-            }
-        }
-    }
-    
-    deinit {
-        if let obs = cameraWindowClosedObserver {
-            NotificationCenter.default.removeObserver(obs)
-        }
     }
 
     // MARK: - Computed / Bridging
@@ -217,8 +203,22 @@ final class LinkAllStore: ObservableObject {
         Task {
             try? await Task.sleep(nanoseconds: 500_000_000)
             await refresh()
+            await loadSettings()
             scanForDevices()
         }
+    }
+
+    /// Reads the daemon's settings. Until this succeeds `settings` is nil,
+    /// and the Settings window, sync toggle and device name have nothing real
+    /// to show or change.
+    @discardableResult
+    func loadSettings() async -> Bool {
+        guard var s = try? await ipc.getSettings() else { return false }
+        if #available(macOS 13.0, *) {
+            s.startOnLogin = SMAppService.mainApp.status == .enabled
+        }
+        if settings != s { settings = s }
+        return true
     }
 
     func stop() {
@@ -347,6 +347,13 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
+    /// Writes only a changed value. Each write to a @Published property
+    /// redraws every view watching the store, and refresh runs every 1.5 s,
+    /// so rewriting equal values kept the app busy while idle.
+    private func set<T: Equatable>(_ keyPath: ReferenceWritableKeyPath<LinkAllStore, T>, _ value: T) {
+        if self[keyPath: keyPath] != value { self[keyPath: keyPath] = value }
+    }
+
     func refresh() async {
         let now = Date()
         if now.timeIntervalSince(lastRefreshTime) < 0.08 {
@@ -356,8 +363,8 @@ final class LinkAllStore: ObservableObject {
         do {
             let s = try await ipc.status()
             ipcFailureCount = 0
-            isRunning      = true
-            connectedCount = s.peers.filter { $0.status == "connected" && $0.trusted }.count
+            set(\.isRunning, true)
+            set(\.connectedCount, s.peers.filter { $0.status == "connected" && $0.trusted }.count)
             let reconnectingCount = s.peers.filter { $0.status == "connecting" }.count
             let reconnectableCount = s.peers.filter {
                 $0.status != "connected" &&
@@ -366,11 +373,11 @@ final class LinkAllStore: ObservableObject {
                 ($0.remembered ?? true) &&
                 ($0.auto_connect ?? true)
             }.count
-            statusLine = whenStatusLine(
+            set(\.statusLine, whenStatusLine(
                 connectedCount: connectedCount,
                 reconnectingCount: reconnectingCount,
                 reconnectableCount: reconnectableCount
-            )
+            ))
             var seenIds = Set<String>()
             var uniquePeers = [PeerViewModel]()
             // Deduplicate peers by ID (handles cases where a device is discovered via both IPv4 and IPv6)
@@ -390,17 +397,17 @@ final class LinkAllStore: ObservableObject {
                 watcher.start()
             }
 
-            pendingClipboardCount = s.pending_clipboard_count ?? 0
+            set(\.pendingClipboardCount, s.pending_clipboard_count ?? 0)
             let health = s.health ?? []
             if health != healthIssues { healthIssues = health }
             let folders = Dictionary((s.folders ?? []).map { ($0.batch_id, $0) }, uniquingKeysWith: { a, _ in a })
             if folders != folderProgress { folderProgress = folders }
-            if let fp = s.local_fingerprint { localFingerprint = fp }
-            if let id = s.local_device_id { localDeviceId = id }
-            if let name = s.local_device_name { localDeviceName = name }
+            if let fp = s.local_fingerprint { set(\.localFingerprint, fp) }
+            if let id = s.local_device_id { set(\.localDeviceId, id) }
+            if let name = s.local_device_name { set(\.localDeviceName, name) }
             
             if let ats = s.active_transfers {
-                activeTransfers = ats.map { t in
+                set(\.activeTransfers, ats.map { t in
                     let status: FileTransferStatus
                     switch t.status {
                     case "pending": status = .incoming
@@ -428,9 +435,9 @@ final class LinkAllStore: ObservableObject {
                         status: status,
                         isOutbound: t.is_outbound ?? false
                     )
-                }
+                })
             } else {
-                activeTransfers = []
+                set(\.activeTransfers, [])
             }
             
             if let ast = s.active_speed_tests {
@@ -516,21 +523,14 @@ final class LinkAllStore: ObservableObject {
                 peerStorages = incomingStorages
             }
 
-            // ── Camera Streaming ──────────────────────────────────────────────
-            if !isCameraPolling {
-                if let frameData = try? await ipc.latestCameraFrame() {
-                    startFastCameraPolling(initialFrame: frameData)
-                }
-            }
-
-            dashboardStatus = StatusSnapshot(
+            set(\.dashboardStatus, StatusSnapshot(
                 peerCount:    connectedCount,
                 trustedCount: s.peers.filter { $0.trusted }.count,
                 lastSyncAt:   s.peers.compactMap { $0.last_sync }
                     .max().map { Date(timeIntervalSince1970: TimeInterval($0)) },
                 syncEnabled:  true,
                 daemonVersion: nil
-            )
+            ))
             if lastActivityId > 0 {
                 await pollActivityFeedIncremental()
             } else {
@@ -538,56 +538,19 @@ final class LinkAllStore: ObservableObject {
             }
         } catch {
             ipcFailureCount += 1
-            isRunning       = false
+            set(\.isRunning, false)
             // Without the daemon a call can be neither followed nor acted on.
             if activeCall != nil { activeCall = nil }
-            statusLine      = ipcFailureCount >= 3
+            set(\.statusLine, ipcFailureCount >= 3
                 ? "Daemon not running"
-                : "Reconnecting to daemon…"
-            dashboardStatus = nil
+                : "Reconnecting to daemon…")
+            set(\.dashboardStatus, nil)
             if case LinkAllIPCError.connectionFailed = error {
                 NotificationCenter.default.post(name: .linkallEnsureDaemon, object: nil)
             }
         }
     }
 
-    // MARK: - Camera Streaming
-
-    private func startFastCameraPolling(initialFrame: Data) {
-        guard !isCameraPolling else { return }
-        isCameraPolling = true
-        DispatchQueue.main.async {
-            CameraPreviewWindowController.shared.showWindow(nil)
-            CameraPreviewWindowController.shared.updateFrame(data: initialFrame)
-        }
-        
-        Task { [weak self] in
-            while self?.isCameraPolling == true {
-                try? await Task.sleep(nanoseconds: 33_000_000) // ~30 fps
-                guard let self = self else { break }
-                do {
-                    if let frameData = try await self.ipc.latestCameraFrame() {
-                        DispatchQueue.main.async {
-                            CameraPreviewWindowController.shared.updateFrame(data: frameData)
-                        }
-                    } else {
-                        self.isCameraPolling = false
-                        DispatchQueue.main.async {
-                            CameraPreviewWindowController.shared.close()
-                        }
-                        break
-                    }
-                } catch {
-                    self.isCameraPolling = false
-                    break
-                }
-            }
-        }
-    }
-
-    func stopCameraPolling() {
-        isCameraPolling = false
-    }
     // MARK: - Device actions (ManagedDevice variants)
 
     func disconnect(_ device: ManagedDevice) {
@@ -1205,17 +1168,24 @@ final class LinkAllStore: ObservableObject {
     // MARK: - Settings
 
     func saveSettings(_ snapshot: LinkAllSettingsSnapshot) {
-        settings = snapshot
+        Task { await saveSettingsNow(snapshot) }
+    }
+
+    /// Saves and returns whether the daemon took it. The Settings window
+    /// shows the result itself; a failure also shows a toast.
+    @discardableResult
+    func saveSettingsNow(_ snapshot: LinkAllSettingsSnapshot) async -> Bool {
         // startOnLogin is OS-level (LaunchAgent) — handle separately from daemon settings.
         applyLoginItemState(enabled: snapshot.startOnLogin)
-        Task {
-            do {
-                try await ipc.saveSettings(snapshot)
-                await refresh()
-                showToast(title: "Settings saved", body: "Changes applied", tint: CRTheme.accentGreen)
-            } catch {
-                showToast(title: "Save failed", body: error.localizedDescription, tint: CRTheme.accentRed)
-            }
+        do {
+            try await ipc.saveSettings(snapshot)
+            settings = snapshot
+            await loadSettings()
+            await refresh()
+            return true
+        } catch {
+            showToast(title: "Couldn't save settings", body: error.localizedDescription, tint: CRTheme.accentRed)
+            return false
         }
     }
 

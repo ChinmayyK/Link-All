@@ -103,7 +103,6 @@ fun HomeTab(
     onManualIp: () -> Unit,
     onActionSendFiles: (String?) -> Unit,
     onActionSendFolder: (String?) -> Unit,
-    onActionStreamCamera: () -> Unit,
     onApplyClipboard: (ActivityEntry) -> Unit,
     onActionPauseTransfer: (String) -> Unit,
     onActionResumeTransfer: (String) -> Unit,
@@ -180,8 +179,6 @@ fun HomeTab(
                     enabled = enabled,
                     onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
                 )
-                Hairline(c)
-                ActionRow(c, Icons.Outlined.Videocam, "Camera", "Stream this camera to a device", enabled = enabled, onClick = onActionStreamCamera)
             }
         }
 

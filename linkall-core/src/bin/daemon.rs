@@ -146,57 +146,6 @@ async fn run() -> Result<()> {
         tracing::info!("Windows IPC server started on \\\\.\\pipe\\linkall");
     }
 
-    // ── Virtual Camera TCP Frame Server ───────────────────────────────────────
-    // A lightweight HTTP/TCP endpoint purely for the Virtual Camera extension
-    // to bypass CMIOExtension UNIX socket sandbox restrictions.
-    {
-        let camera_state = state.clone();
-        tokio::spawn(async move {
-            let addr = "127.0.0.1:40404";
-            let listener = match tokio::net::TcpListener::bind(addr).await {
-                Ok(l) => l,
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to bind virtual camera TCP server on {}: {}",
-                        addr,
-                        e
-                    );
-                    return;
-                }
-            };
-            tracing::info!("Virtual Camera TCP server listening on {}", addr);
-
-            loop {
-                if let Ok((mut socket, _)) = listener.accept().await {
-                    let st = camera_state.clone();
-                    tokio::spawn(async move {
-                        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-                        let mut buf = [0u8; 1024];
-                        if socket.read(&mut buf).await.is_ok() {
-                            // We don't even parse HTTP headers fully, just serve the latest frame.
-                            let frames = st.engine.camera_frames().await;
-                            let frame = {
-                                let x = frames.iter().next().map(|r| r.value().clone());
-                                x
-                            };
-                            if let Some(bytes) = frame {
-                                let response = format!(
-                                    "HTTP/1.1 200 OK\r\nContent-Type: image/jpeg\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                                    bytes.len()
-                                );
-                                let _ = socket.write_all(response.as_bytes()).await;
-                                let _ = socket.write_all(&bytes).await;
-                            } else {
-                                let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
-                                let _ = socket.write_all(response.as_bytes()).await;
-                            }
-                        }
-                    });
-                }
-            }
-        });
-    }
-
     tracing::info!(
         "Link All daemon started. IPC socket: {:?}",
         linkall_core::ipc::socket_path()
@@ -470,12 +419,6 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
                 },
             )
             .await;
-        }
-        EngineEvent::CameraFrameReceived { .. } => {
-            // Handled inside EngineShared to avoid MPSC channel OOM
-        }
-        EngineEvent::CameraStreamStop { .. } => {
-            // Handled inside EngineShared
         }
         EngineEvent::FileTransferIncoming {
             transfer_id: _,
@@ -979,19 +922,6 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 .cloned()
                 .context("clipboard payload not found")?;
             Ok(IpcResponse::ok(payload))
-        }
-        IpcRequest::LatestCameraFrame { target_device: _ } => {
-            let frames = state.engine.camera_frames().await;
-            let frame = {
-                let x = frames.iter().next().map(|r| r.value().clone());
-                x
-            };
-            if let Some(bytes) = frame {
-                let base64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-                Ok(IpcResponse::ok(json!({ "frame_base64": base64 })))
-            } else {
-                Ok(IpcResponse::ok(json!({})))
-            }
         }
         IpcRequest::GetSettings => Ok(IpcResponse::ok(state.settings.lock().await.get().clone())),
         IpcRequest::PatchSettings { patch } => {

@@ -183,8 +183,29 @@ struct IpcRemoteThumbnailResult: Codable {
     let error: String?
 }
 
-struct IpcCameraFrameResponse: Codable {
-    let frame_base64: String?
+/// The daemon's settings as `get_settings` returns them (the fields the
+/// Settings window shows).
+struct IpcSettings: Codable {
+    let port: UInt16
+    let device_name: String
+    let sync_enabled: Bool
+    let sync_text: Bool
+    let sync_images: Bool
+    let sync_files: Bool
+    let sync_mode: String
+    let max_payload_bytes: UInt64
+    let history_limit: Int
+    let max_history_text_bytes: Int
+    let show_receive_notification: Bool
+    let require_tofu_confirmation: Bool
+    let blocked_device_ids: [String]
+    let block_sensitive_text: Bool
+    let ignore_patterns: [String]
+    let clipboard_poll_ms: UInt64
+    let max_pushes_per_sec: Double
+    let rate_limit_burst: Double
+    let smart_sync_duplicate_window_ms: UInt64
+    let smart_sync_debounce_ms: UInt64
 }
 
 struct IpcResponse<T: Codable>: Codable {
@@ -441,17 +462,6 @@ final class LinkAllIPCClient {
         _ = try await send(cmd: ["cmd": "resume_file_transfer", "transfer_id": transferId])
     }
 
-    func latestCameraFrame(targetDeviceId: String? = nil) async throws -> Data? {
-        var cmd: [String: Any] = ["cmd": "latest_camera_frame"]
-        if let id = targetDeviceId {
-            cmd["target_device"] = id
-        }
-        let raw = try await send(cmd: cmd)
-        let resp = try await decode(IpcResponse<IpcCameraFrameResponse>.self, from: raw)
-        guard let b64 = resp.data?.frame_base64 else { return nil }
-        return Data(base64Encoded: b64)
-    }
-
     // ── Remote Explorer API ───────────────────────────────────────────────────
 
     func queryRemoteFiles(
@@ -658,6 +668,29 @@ extension LinkAllIPCClient {
             cmd["target"] = id
         }
         _ = try await send(cmd: cmd)
+    }
+
+    /// The daemon's current settings. `startOnLogin` is the OS login item's
+    /// state, not a daemon setting, so the caller fills it in.
+    func getSettings() async throws -> LinkAllSettingsSnapshot {
+        let raw = try await send(cmd: ["cmd": "get_settings"])
+        let resp = try await decode(IpcResponse<IpcSettings>.self, from: raw)
+        guard let s = resp.data else { throw LinkAllIPCError.noData }
+        return LinkAllSettingsSnapshot(
+            port: s.port, deviceName: s.device_name, syncEnabled: s.sync_enabled,
+            syncText: s.sync_text, syncImages: s.sync_images, syncFiles: s.sync_files,
+            syncMode: SyncModeModel(rawValue: s.sync_mode) ?? .auto,
+            maxPayloadBytes: s.max_payload_bytes,
+            historyLimit: s.history_limit, maxHistoryTextBytes: s.max_history_text_bytes,
+            showReceiveNotification: s.show_receive_notification,
+            requireTofuConfirmation: s.require_tofu_confirmation,
+            blockedDeviceIds: s.blocked_device_ids, blockSensitiveText: s.block_sensitive_text,
+            ignorePatterns: s.ignore_patterns, clipboardPollMs: s.clipboard_poll_ms,
+            maxPushesPerSec: Int(s.max_pushes_per_sec), rateLimitBurst: Int(s.rate_limit_burst),
+            smartSyncDuplicateWindowMs: s.smart_sync_duplicate_window_ms,
+            smartSyncDebounceMs: s.smart_sync_debounce_ms,
+            startOnLogin: false
+        )
     }
 
     /// Persist settings changes to the daemon — partial patch, only set fields are applied.

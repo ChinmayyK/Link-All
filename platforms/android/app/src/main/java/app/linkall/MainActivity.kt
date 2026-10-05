@@ -490,9 +490,6 @@ class MainActivity : ComponentActivity() {
                         }
                         window.decorView.postDelayed({ refreshDashboardState() }, 200)
                     },
-                    onActionStreamCamera = {
-                        startActivity(Intent(this@MainActivity, CameraStreamActivity::class.java))
-                    },
                     onActionPauseTransfer = { tid ->
                         ContextCompat.startForegroundService(this@MainActivity, Intent(this@MainActivity, LinkAllService::class.java).apply {
                             action = LinkAllService.ACTION_PAUSE_FILE_TRANSFER

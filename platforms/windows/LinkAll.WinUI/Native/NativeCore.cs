@@ -30,10 +30,6 @@ namespace LinkAll.WinUI
         public const int PB_EVENT_BATTERY_STATE_CHANGED = 19;
         public const int PB_EVENT_FILE_TRANSFER_PAUSED = 20;
         public const int PB_EVENT_FILE_TRANSFER_RESUMED = 21;
-        public const int PB_EVENT_CAMERA_STREAM_REQUEST = 22;
-        public const int PB_EVENT_CAMERA_STREAM_ACCEPT = 23;
-        public const int PB_EVENT_CAMERA_STREAM_STOP = 24;
-        public const int PB_EVENT_CAMERA_FRAME = 25;
         public const int PB_EVENT_SYSTEM_HEALTH_UPDATED = 26;
         public const int PB_EVENT_PEER_DISCOVERED = 27;
         public const int PB_EVENT_NETWORK_STATE_CHANGED = 28;
@@ -117,21 +113,6 @@ namespace LinkAll.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr linkall_event_device_id(IntPtr ev);
-
-        // Continuity Camera: ask a specific connected peer to start
-        // streaming its camera. Frames themselves are still fetched by
-        // polling linkall_engine_get_camera_frame (see DaemonClient's
-        // "latest_camera_frame" IPC command) - this only kicks off the
-        // request that was previously never sent at all.
-        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int linkall_request_camera_stream(
-            IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string targetDevice);
-
-        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int linkall_stop_camera_stream(IntPtr handle);
-
-        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int linkall_event_camera_stream_accepted(IntPtr ev);
 
         /// Respond to a TOFU prompt. trust=1 to accept, trust=0 to reject.
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]

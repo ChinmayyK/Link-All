@@ -1,5 +1,5 @@
 //! Phone features relayed between devices: calls, battery, network and
-//! storage status, notifications, and the camera stream.
+//! storage status and notifications.
 
 use super::*;
 
@@ -244,83 +244,6 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     text,
                     from_device: origin_device,
                     from_name: origin_device_name,
-                })
-                .await;
-        }
-        AppMessage::CameraStreamRequest { origin_device } => {
-            ctx.touch_last_seen();
-            if !shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false)
-            {
-                return Flow::Continue;
-            }
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::CameraStreamRequest {
-                    from_device: origin_device,
-                })
-                .await;
-        }
-        AppMessage::CameraStreamAccept {
-            origin_device,
-            accepted,
-        } => {
-            ctx.touch_last_seen();
-            if !shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false)
-            {
-                return Flow::Continue;
-            }
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::CameraStreamAccept {
-                    from_device: origin_device,
-                    accepted,
-                })
-                .await;
-        }
-        AppMessage::CameraStreamStop { origin_device } => {
-            ctx.touch_last_seen();
-            if !shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false)
-            {
-                return Flow::Continue;
-            }
-            shared.camera_frames.remove(&origin_device);
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::CameraStreamStop {
-                    from_device: origin_device,
-                })
-                .await;
-        }
-        AppMessage::CameraFrame {
-            origin_device,
-            data,
-        } => {
-            ctx.touch_last_seen();
-            if !shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false)
-            {
-                return Flow::Continue;
-            }
-            shared.camera_frames.insert(origin_device, data);
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::CameraFrameReceived {
-                    from_device: origin_device,
                 })
                 .await;
         }

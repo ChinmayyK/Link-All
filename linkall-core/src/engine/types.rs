@@ -212,23 +212,6 @@ pub enum EngineEvent {
         from_device: Uuid,
         from_name: String,
     },
-    /// A remote peer requested to start the virtual camera stream.
-    CameraStreamRequest {
-        from_device: Uuid,
-    },
-    /// A remote peer accepted or rejected the camera stream request.
-    CameraStreamAccept {
-        from_device: Uuid,
-        accepted: bool,
-    },
-    /// A remote peer stopped the camera stream.
-    CameraStreamStop {
-        from_device: Uuid,
-    },
-    /// A raw video frame was received for the virtual camera stream.
-    CameraFrameReceived {
-        from_device: Uuid,
-    },
     RemoteFilesQueryReceived {
         request_id: Uuid,
         from_device: Uuid,
@@ -552,8 +535,6 @@ pub(crate) struct EngineShared {
     pub(crate) local_sleeping: Arc<std::sync::atomic::AtomicBool>,
     /// Battery, storage, network and call state, ours and each peer's.
     pub(crate) device_status: DeviceStatus,
-    /// Per-peer latest camera frame (to prevent MPSC channel OOM).
-    pub camera_frames: Arc<dashmap::DashMap<uuid::Uuid, Vec<u8>>>,
     /// Rate limit for pairing UI spam from untrusted peers.
 
     /// Cross-device duplicate prevention (mesh echo suppression).

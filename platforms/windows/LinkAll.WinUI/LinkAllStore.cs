@@ -256,7 +256,7 @@ namespace LinkAll.WinUI
         private string _friendly_name = "";
         public string friendly_name { get => _friendly_name; set { if (SetProperty(ref _friendly_name, value)) { OnPropertyChanged(nameof(DisplayName)); OnPropertyChanged(nameof(DeviceGlyph)); NotifyLogo(); } } }
         private string? _platform;
-        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(DeviceGlyph)); NotifyLogo(); OnPropertyChanged(nameof(IsCameraCapable)); OnPropertyChanged(nameof(ShowCameraButton)); OnPropertyChanged(nameof(DetailLine)); } } }
+        public string? platform { get => _platform; set { if (SetProperty(ref _platform, value)) { OnPropertyChanged(nameof(DeviceIcon)); OnPropertyChanged(nameof(DeviceGlyph)); NotifyLogo(); OnPropertyChanged(nameof(DetailLine)); } } }
         private string _status = "";
         public string status { get => _status; set { if(SetProperty(ref _status, value)) NotifyPeerStateProperties(); } }
         private bool _is_trusted;
@@ -421,19 +421,6 @@ namespace LinkAll.WinUI
             ? ""
             : $"Couldn't reach {DisplayName}. It may be offline or on another network.";
 
-        // Continuity Camera is phone-to-desktop only: the mobile app is the
-        // frame source (linkall_push_video_frame), desktop platforms have
-        // no camera stream to show. Same platform-string matching as DeviceIcon.
-        public bool IsCameraCapable
-        {
-            get
-            {
-                var p = (platform ?? friendly_name).ToLowerInvariant();
-                return !(p.Contains("windows") || p.Contains("mac") || p.Contains("linux"));
-            }
-        }
-        public bool ShowCameraButton => IsConnected && IsCameraCapable;
-
         private string? _pairingPin;
         [System.Text.Json.Serialization.JsonPropertyName("pairing_pin")]
         public string? pairingPin { get => _pairingPin; set { if (SetProperty(ref _pairingPin, value)) NotifyPeerStateProperties(); } }
@@ -533,7 +520,6 @@ namespace LinkAll.WinUI
             OnPropertyChanged(nameof(ShowDisconnectButton));
             OnPropertyChanged(nameof(ShowConnectButton));
             OnPropertyChanged(nameof(ShowForgetButton));
-            OnPropertyChanged(nameof(ShowCameraButton));
             OnPropertyChanged(nameof(IsNegotiating));
             OnPropertyChanged(nameof(IsOffline));
             OnPropertyChanged(nameof(IsKnown));

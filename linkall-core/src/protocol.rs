@@ -494,21 +494,20 @@ pub enum AppMessage {
     Pong {
         timestamp_ms: u64,
     },
-    /// Request to start a virtual camera stream.
-    CameraStreamRequest {
+    // The four messages below belonged to the removed camera stream. Postcard
+    // encodes a variant by its position, so they hold their places: removing
+    // them would renumber every message after them. Received ones are dropped.
+    RetiredCameraStreamRequest {
         origin_device: Uuid,
     },
-    /// Accept a virtual camera stream request.
-    CameraStreamAccept {
+    RetiredCameraStreamAccept {
         origin_device: Uuid,
         accepted: bool,
     },
-    /// Stop a virtual camera stream.
-    CameraStreamStop {
+    RetiredCameraStreamStop {
         origin_device: Uuid,
     },
-    /// A single encoded video frame (NAL unit) for the virtual camera.
-    CameraFrame {
+    RetiredCameraFrame {
         origin_device: Uuid,
         data: Vec<u8>,
     },

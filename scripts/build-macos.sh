@@ -38,7 +38,7 @@ DAEMON_SRC="${TARGET_DIR}/linkall-daemon"
 
 log "Creating ${PRODUCT_NAME}.app bundle..."
 rm -rf "${APP_BUNDLE}"
-mkdir -p "${APP_BUNDLE}/Contents/"{MacOS,Frameworks,Resources,Library/SystemExtensions}
+mkdir -p "${APP_BUNDLE}/Contents/"{MacOS,Frameworks,Resources}
 
 # Copy dylib.
 cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
@@ -78,41 +78,6 @@ swiftc \
     -llinkall_core \
     -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -o "${APP_BUNDLE}/Contents/MacOS/${PRODUCT_NAME}"
-
-# ── 3.5. Compile Virtual Camera Extension ────────────────────────────────────
-
-log "Compiling Virtual Camera System Extension..."
-EXT_DIR="${APP_BUNDLE}/Contents/Library/SystemExtensions/app.linkall.mac.VirtualCamera.systemextension"
-mkdir -p "${EXT_DIR}/Contents/MacOS"
-
-swiftc \
-    "${MACOS_DIR}/VirtualCamera/main.swift" \
-    "${MACOS_DIR}/VirtualCamera/VirtualCameraProvider.swift" \
-    "${MACOS_DIR}/VirtualCamera/VirtualCameraStream.swift" \
-    -sdk "${SDK_PATH}" \
-    -target "${MACOS_TARGET}" \
-    -framework Foundation \
-    -framework CoreMediaIO \
-    -framework CoreVideo \
-    -framework CoreMedia \
-    -framework ImageIO \
-    -o "${EXT_DIR}/Contents/MacOS/app.linkall.mac.VirtualCamera"
-
-cp "${MACOS_DIR}/VirtualCamera/Info.plist" "${EXT_DIR}/Contents/Info.plist"
-
-# Write a basic entitlements file for the extension (do not put inside Contents!)
-cat > "${APP_BUNDLE}/../VirtualCamera.entitlements" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-</dict>
-</plist>
-EOF
 
 # ── 4. Copy resources ─────────────────────────────────────────────────────────
 
@@ -182,13 +147,6 @@ codesign \
     --force \
     --sign "${IDENTITY}" \
     "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
-
-codesign \
-    --force \
-    --sign "${IDENTITY}" \
-    --entitlements "${APP_BUNDLE}/../VirtualCamera.entitlements" \
-    --options runtime \
-    "${EXT_DIR}"
 
 codesign \
     --force \

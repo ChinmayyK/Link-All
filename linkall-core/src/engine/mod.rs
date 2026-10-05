@@ -176,7 +176,6 @@ impl Engine {
             )),
             local_sleeping: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             device_status: DeviceStatus::default(),
-            camera_frames: Arc::new(dashmap::DashMap::new()),
 
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
@@ -571,15 +570,6 @@ impl Engine {
                 "duration_secs": s.duration_secs,
             })
         }).collect()
-    }
-
-    pub async fn camera_frames(&self) -> Arc<dashmap::DashMap<Uuid, Vec<u8>>> {
-        self.shared.camera_frames.clone()
-    }
-
-    /// Retrieve the latest camera frame for a specific peer.
-    pub fn get_latest_camera_frame(&self, peer_id: uuid::Uuid) -> Option<Vec<u8>> {
-        self.shared.camera_frames.get(&peer_id).map(|r| r.clone())
     }
 }
 

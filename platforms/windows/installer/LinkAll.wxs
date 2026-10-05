@@ -134,7 +134,7 @@
       <Component Id="StartMenuShortcut" Guid="d4e5f6a7-b8c9-0123-def0-234567890123">
         <Shortcut Id="AppShortcut"
                   Name="Link All"
-                  Description="Files, clipboard, calls and camera between your devices"
+                  Description="Files, clipboard, calls and notifications between your devices"
                   Target="[INSTALLFOLDER]LinkAll.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="LinkAllIco" />
@@ -149,7 +149,7 @@
       <Component Id="DesktopShortcut" Directory="DesktopFolder" Guid="e5f6a7b8-c9d0-1234-ef01-345678901234">
         <Shortcut Id="DesktopAppShortcut"
                   Name="Link All"
-                  Description="Files, clipboard, calls and camera between your devices"
+                  Description="Files, clipboard, calls and notifications between your devices"
                   Target="[INSTALLFOLDER]LinkAll.exe"
                   WorkingDirectory="INSTALLFOLDER"
                   Icon="LinkAllIco" />

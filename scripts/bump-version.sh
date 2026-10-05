@@ -40,7 +40,6 @@ CSPROJ="$ROOT/platforms/windows/LinkAll.WinUI/LinkAll.WinUI.csproj"
 PLISTS=(
   "$ROOT/platforms/macos/LinkAll/Info.plist"
   "$ROOT/platforms/macos/ShareExtension/Info.plist"
-  "$ROOT/platforms/macos/VirtualCamera/Info.plist"
 )
 
 # ---- readers ---------------------------------------------------------------

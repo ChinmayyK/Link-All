@@ -136,62 +136,6 @@ impl crate::engine::Engine {
         }
     }
 
-    pub async fn push_camera_frame(&self, data: Vec<u8>) {
-        let msg = AppMessage::CameraFrame {
-            origin_device: self.shared.config.device_id,
-            data,
-        };
-        let peers = self.shared.peer_manager.all_connected_senders();
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
-            }
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
-
-    /// Ask a specific trusted peer to start streaming its camera as this
-    /// engine's virtual camera source. Unlike push_camera_frame/
-    /// stop_camera_stream (which broadcast - fine since only one camera
-    /// session exists at a time), a *request* must target one specific
-    /// device: it's what actually kicks off the stream when the desktop UI
-    /// says "View Camera" for a given peer. Returns false if that peer
-    /// isn't currently connected.
-    pub async fn request_camera_stream(&self, target_device: Uuid) -> bool {
-        let msg = AppMessage::CameraStreamRequest {
-            origin_device: self.shared.config.device_id,
-        };
-        let peers = self.shared.peer_manager.all_connected_senders();
-        if let Some(tx) = peers
-            .into_iter()
-            .find(|(id, _)| *id == target_device)
-            .map(|(_, tx)| tx)
-        {
-            tx.send(msg).await.is_ok()
-        } else {
-            false
-        }
-    }
-
-    pub async fn stop_camera_stream(&self) {
-        let msg = AppMessage::CameraStreamStop {
-            origin_device: self.shared.config.device_id,
-        };
-        let peers = self.shared.peer_manager.all_connected_senders();
-        for (peer_id, tx) in peers {
-            let Some(peer) = self.shared.peer_manager.get(peer_id) else {
-                continue;
-            };
-            if !peer.trusted {
-                continue;
-            }
-            let _ = tx.send(msg.clone()).await;
-        }
-    }
-
     /// Get battery states for all peers that have reported their level.
     pub async fn peer_batteries(&self) -> Vec<PeerBatteryState> {
         self.shared
