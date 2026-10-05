@@ -134,7 +134,7 @@ fun ActivityTab(
 }
 
 @Composable
-private fun FilterChip(c: DdColors, text: String, selected: Boolean, onClick: () -> Unit) {
+internal fun FilterChip(c: DdColors, text: String, selected: Boolean, onClick: () -> Unit) {
     Text(
         text,
         style = DdType.small.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Medium),

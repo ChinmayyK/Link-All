@@ -24,6 +24,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -66,9 +67,10 @@ class MainActivity : ComponentActivity() {
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
     private val healthIssues = mutableStateOf<List<HealthIssue>>(emptyList())
-    private val isDarkMode = mutableStateOf(false)
+    private val themeMode = mutableStateOf("system")
     private val hasCompletedOnboarding = mutableStateOf(false)
     private val toastMessage = mutableStateOf("")
+    private val toastAction = mutableStateOf<Pair<String, () -> Unit>?>(null)
 
     private var targetDeviceIdForNextSend: String? = null
 
@@ -163,16 +165,9 @@ class MainActivity : ComponentActivity() {
         
         // Initialize persistent preferences
         val prefs = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
-        isDarkMode.value = prefs.getBoolean("dark_mode", false)
+        themeMode.value = app.linkall.ui.theme.themeModeOf(prefs)
         hasCompletedOnboarding.value = prefs.getBoolean("has_completed_onboarding", false)
 
-        // Request Notification Permission immediately on launch for Android 13+
-        if (Build.VERSION.SDK_INT >= 33) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1005)
-            }
-        }
-        
         // UX FIX: Auto-complete onboarding if we have a trusted peer (user closed app during onboarding previously)
         // We do this ONLY on create so we don't abruptly close the OnboardingScreen while the user is actively using it!
         val allPeers = prefs.peerSnapshots()
@@ -180,6 +175,9 @@ class MainActivity : ComponentActivity() {
             prefs.edit().putBoolean("has_completed_onboarding", true).apply()
             hasCompletedOnboarding.value = true
         }
+        // Asked once there is something to use them for; a first run asks
+        // when pairing finishes (see onComplete).
+        if (hasCompletedOnboarding.value) requestEssentialPermissions()
         // No preferred display mode: pinning the panel's top rate kept a
         // 120 Hz screen at 120 Hz while the dashboard sat still. The system
         // already raises the rate for scrolling and animation.
@@ -204,10 +202,11 @@ class MainActivity : ComponentActivity() {
             val activeSpeedTests by TransferManager.activeSpeedTestsFlow.collectAsStateWithLifecycle()
             val feedState by ActivityFeedManager.feedFlow.collectAsStateWithLifecycle()
 
-            AppTheme(useDarkTheme = isDarkMode.value) {
+            val isDark = app.linkall.ui.theme.isDarkFor(themeMode.value)
+            AppTheme(useDarkTheme = isDark) {
                 prompt.value?.let { p ->
                     app.linkall.ui.ConfirmSheet(
-                        c = app.linkall.ui.rememberDdColors(isDarkMode.value),
+                        c = app.linkall.ui.rememberDdColors(isDark),
                         icon = p.icon,
                         title = p.title,
                         message = p.message,
@@ -220,7 +219,7 @@ class MainActivity : ComponentActivity() {
                 var showManualIpDialog by remember { mutableStateOf(false) }
                 if (showManualIpDialog) {
                     app.linkall.ui.ConnectByIpDialog(
-                        isDark = isDarkMode.value,
+                        isDark = isDark,
                         onDismiss = { showManualIpDialog = false },
                         onConnected = { address ->
                             showManualIpDialog = false
@@ -233,7 +232,7 @@ class MainActivity : ComponentActivity() {
                 Box(modifier = Modifier.fillMaxSize()) {
                     if (!hasCompletedOnboarding.value) {
                         OnboardingScreen(
-                            isDark = isDarkMode.value,
+                            isDark = isDark,
                             peers = peers.value,
                             onConnectPeer = { peer ->
                                 ContextCompat.startForegroundService(this@MainActivity,
@@ -269,12 +268,13 @@ class MainActivity : ComponentActivity() {
                             onComplete = {
                                 getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE).edit().putBoolean("has_completed_onboarding", true).apply()
                                 hasCompletedOnboarding.value = true
+                                requestEssentialPermissions()
                                 requestBatteryOptimizationExemption()
                             }
                         )
                     } else {
                         MainScreen(
-                        isDark = isDarkMode.value,
+                        isDark = isDark,
                         isServiceRunning = isServiceRunning.value,
                         isSyncEnabled = isSyncEnabled.value,
                         syncText = syncText.value,
@@ -343,9 +343,10 @@ class MainActivity : ComponentActivity() {
                             saveBooleanPref("auto_forward_screenshots", it)
                             if (it) requestMediaPermissions()
                         },
-                        onDarkModeChange = {
-                            isDarkMode.value = it
-                            saveBooleanPref("dark_mode", it)
+                        themeMode = themeMode.value,
+                        onThemeModeChange = {
+                            themeMode.value = it
+                            getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE).edit().putString("theme", it).apply()
                         },
                         onForgetDevice = { targetId ->
                             ContextCompat.startForegroundService(this@MainActivity,
@@ -414,8 +415,10 @@ class MainActivity : ComponentActivity() {
                         showSnack(if (entry.isPinned) "Unpinned" else "Pinned to the top")
                     },
                     onClearActivity = {
-                        ActivityFeedManager.clearFeed()
-                        showSnack("Activity cleared")
+                        val cleared = ActivityFeedManager.clearFeed()
+                        showSnack("Activity cleared", actionLabel = "Undo") {
+                            ActivityFeedManager.restoreFeed(cleared)
+                        }
                     },
                     onTrustPeer = { peer ->
                         ContextCompat.startForegroundService(this@MainActivity,
@@ -577,7 +580,16 @@ class MainActivity : ComponentActivity() {
                     exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 48.dp)
                 ) {
-                    CRToast(message = toastMessage.value, isDark = isDarkMode.value)
+                    CRToast(
+                        message = toastMessage.value,
+                        isDark = isDark,
+                        actionLabel = toastAction.value?.first,
+                        onAction = {
+                            toastAction.value?.second?.invoke()
+                            toastAction.value = null
+                            toastMessage.value = ""
+                        }
+                    )
                 }
                 }
             }
@@ -639,7 +651,7 @@ class MainActivity : ComponentActivity() {
             ?: prefs.getString("local_device_name", null)?.trim()?.takeIf { it.isNotBlank() }
             ?: Build.MODEL
         deviceId.value = prefs.getString("device_id", "—") ?: "—"
-        isDarkMode.value = prefs.getBoolean("dark_mode", false)
+        themeMode.value = app.linkall.ui.theme.themeModeOf(prefs)
         hasCompletedOnboarding.value = prefs.getBoolean("has_completed_onboarding", false)
         
         val allPeers = prefs.peerSnapshots()
@@ -684,14 +696,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun showSnack(message: String) {
+    private fun showSnack(message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
         toastMessage.value = message
-        // Auto-dismiss after 3 seconds
+        toastAction.value = if (actionLabel != null && onAction != null) actionLabel to onAction else null
+        // Auto-dismiss; one with an action stays longer so it can be used.
         feedRefreshHandler.postDelayed({
             if (toastMessage.value == message) {
                 toastMessage.value = ""
+                toastAction.value = null
             }
-        }, 3000)
+        }, if (onAction != null) 5000 else 3000)
     }
 
     private fun launchService() = runCatching {
@@ -705,6 +719,25 @@ class MainActivity : ComponentActivity() {
     private fun sendAction(action: String) = runCatching {
         ContextCompat.startForegroundService(this,
             Intent(this, LinkAllService::class.java).apply { this.action = action })
+    }
+
+    /**
+     * What every build needs to work: notifications (13+) for pairing
+     * requests and received files, and on Android 10 and older storage,
+     * without which received files can't be written to Download/Link All.
+     */
+    private fun requestEssentialPermissions() {
+        val needed = buildList {
+            if (Build.VERSION.SDK_INT >= 33 &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.Q &&
+                ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.WRITE_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            }
+        }
+        if (needed.isNotEmpty()) requestPermissions(needed.toTypedArray(), 1005)
     }
 
     private fun requestRuntimePermissions() {
@@ -1044,7 +1077,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CRToast(message: String, isDark: Boolean) {
+fun CRToast(message: String, isDark: Boolean, actionLabel: String? = null, onAction: () -> Unit = {}) {
     Box(
         modifier = Modifier
             .padding(horizontal = 24.dp)
@@ -1060,12 +1093,26 @@ fun CRToast(message: String, isDark: Boolean) {
             .padding(horizontal = 16.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = message,
-            color = CRTheme.textHigh(isDark),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Medium,
-            letterSpacing = 0.5.sp
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = message,
+                color = CRTheme.textHigh(isDark),
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                letterSpacing = 0.5.sp
+            )
+            if (actionLabel != null) {
+                Spacer(Modifier.width(14.dp))
+                Text(
+                    text = actionLabel,
+                    color = Color(0xFF3D7BFF),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier
+                        .clickable(onClick = onAction)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                )
+            }
+        }
     }
 }

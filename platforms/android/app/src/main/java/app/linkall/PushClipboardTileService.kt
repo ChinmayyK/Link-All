@@ -35,7 +35,7 @@ class PushClipboardTileService : TileService() {
         super.onStartListening()
         val tile = qsTile
         tile.state = Tile.STATE_ACTIVE
-        tile.label = "Push to Mac"
+        tile.label = "Send clipboard"
         tile.updateTile()
     }
 }

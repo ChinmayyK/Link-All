@@ -73,9 +73,10 @@ class PairingActivity : ComponentActivity() {
         val isInitiator = intent.getBooleanExtra(EXTRA_IS_INITIATOR, false)
 
         val prefs = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
-        val isDarkMode = prefs.getBoolean("dark_mode", false)
+        val themeMode = app.linkall.ui.theme.themeModeOf(prefs)
 
         setContent {
+            val isDarkMode = app.linkall.ui.theme.isDarkFor(themeMode)
             AppTheme(useDarkTheme = isDarkMode) {
                 // Back is "later", not "no": the request stays on the home
                 // screen until it is answered or expires.

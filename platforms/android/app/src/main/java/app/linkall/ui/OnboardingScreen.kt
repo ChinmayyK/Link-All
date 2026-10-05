@@ -44,9 +44,16 @@ fun OnboardingScreen(
     val haptic = LocalHapticFeedback.current
     var selectedPeerId by remember { mutableStateOf<String?>(null) }
     val selectedPeer = peers.find { it.id == selectedPeerId }
+    // Devices already paired when this opened (it reopens from "Pair a
+    // device") are not the one being linked now.
+    val trustedAtStart = remember { peers.filter { it.trusted }.map { it.id }.toSet() }
+    // Linked by tapping a device here, or by scanning its QR code, which
+    // never selects one: either way a newly trusted device ends the search.
+    val linkedPeer = selectedPeer?.takeIf { it.trusted }
+        ?: peers.firstOrNull { it.trusted && it.id !in trustedAtStart }
 
-    LaunchedEffect(selectedPeer?.trusted) {
-        if (selectedPeer?.trusted == true) onComplete()
+    LaunchedEffect(linkedPeer?.id) {
+        if (linkedPeer != null) haptic.performHapticFeedback(HapticFeedbackType.LongPress)
     }
 
     Box(
@@ -55,12 +62,19 @@ fun OnboardingScreen(
             .background(c.page)
             .systemBarsPadding()
     ) {
+        val step = when {
+            linkedPeer != null -> 2
+            selectedPeer != null -> 1
+            else -> 0
+        }
         AnimatedContent(
-            targetState = selectedPeer != null,
+            targetState = step,
             transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(140)) },
             label = "onboarding"
-        ) { pairing ->
-            if (pairing && selectedPeer != null) {
+        ) { current ->
+            if (current == 2 && linkedPeer != null) {
+                LinkedStep(c, linkedPeer, onSendSample = { onSendSampleText(linkedPeer) }, onDone = onComplete)
+            } else if (current == 1 && selectedPeer != null) {
                 PairStep(
                     c,
                     selectedPeer,
@@ -77,6 +91,7 @@ fun OnboardingScreen(
                     peers = peers.filter { !it.trusted },
                     onScanQr = onScanQr,
                     onManualIp = onManualIp,
+                    onSkip = onComplete,
                     onPick = { peer ->
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         selectedPeerId = peer.id
@@ -95,6 +110,7 @@ private fun FindStep(
     peers: List<PeerSnapshot>,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit,
+    onSkip: () -> Unit,
     onPick: (PeerSnapshot) -> Unit
 ) {
     Column(
@@ -150,6 +166,47 @@ private fun FindStep(
                 }
             }
         }
+        Spacer(Modifier.height(24.dp))
+        PillButton(c, "Skip for now", filled = false, modifier = Modifier.fillMaxWidth(), onClick = onSkip)
+        Spacer(Modifier.height(40.dp))
+    }
+}
+
+/** Paired: say so, and offer a first thing to try before the home screen. */
+@Composable
+private fun LinkedStep(c: DdColors, peer: PeerSnapshot, onSendSample: () -> Unit, onDone: () -> Unit) {
+    var sent by remember { mutableStateOf(false) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = PageGutter)
+    ) {
+        Spacer(Modifier.height(40.dp))
+        IconWell(c, Icons.Outlined.CheckCircle, tint = c.live, background = c.surfaceSunk, size = 56)
+        Spacer(Modifier.height(28.dp))
+        Text("Linked to ${peer.name}", style = DdType.display, color = c.text)
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Copy something here and paste it there, or send a file from the home screen. Try it now with a test message.",
+            style = DdType.body,
+            color = c.textMuted
+        )
+        Spacer(Modifier.height(28.dp))
+        PillButton(
+            c,
+            if (sent) "Sent. Check ${peer.name}" else "Send a test message",
+            filled = !sent,
+            icon = if (sent) Icons.Outlined.Check else Icons.Outlined.Send,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            if (!sent) {
+                onSendSample()
+                sent = true
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        PillButton(c, "Done", filled = sent, modifier = Modifier.fillMaxWidth(), onClick = onDone)
         Spacer(Modifier.height(40.dp))
     }
 }

@@ -171,11 +171,12 @@ fun HomeTab(
                     onClick = { showSendSheet = true }
                 )
                 Hairline(c)
-                val clip = quickContextText?.trim()?.replace('\n', ' ')?.takeIf { it.isNotBlank() }
+                val clip = quickContextText?.trim()?.takeIf { it.isNotBlank() }
+                // What it is, not what it says: the home screen is often seen
+                // by others, and copied text can be a password or a code.
                 ActionRow(
                     c, Icons.Outlined.ContentPaste, "Clipboard",
-                    clip ?: "Send what you last copied",
-                    detailIsContent = clip != null,
+                    clip?.let { "Send copied text · ${it.length} characters" } ?: "Send what you last copied",
                     enabled = enabled,
                     onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
                 )
@@ -294,12 +295,19 @@ private fun LinkStatusLine(c: DdColors, connected: List<PeerSnapshot>) {
         if (lead != null) {
             Box(Modifier.size(8.dp).background(c.live, CircleShape))
             Spacer(Modifier.width(8.dp))
-            Text("Connected", style = DdType.label, color = c.live, maxLines = 1)
-            val synced = agoLabel(connected.mapNotNull { it.lastSyncSecs }.maxOrNull())
-            val meta = listOfNotNull(lead.ip, synced?.let { "synced $it" }).joinToString("  ·  ")
-            if (meta.isNotEmpty()) {
+            // Who, not where: the address lives on the Devices tab.
+            val who = if (connected.size == 1) lead.name else "${connected.size} devices"
+            Text(
+                "Connected to $who",
+                style = DdType.label,
+                color = c.live,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            agoLabel(connected.mapNotNull { it.lastSyncSecs }.maxOrNull())?.let { synced ->
                 Spacer(Modifier.width(10.dp))
-                Text(meta, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("synced $synced", style = DdType.small, color = c.textMuted, maxLines = 1)
             }
         } else {
             Box(Modifier.size(8.dp).border(1.5.dp, c.textMuted, CircleShape))
@@ -461,7 +469,6 @@ private fun ActionRow(
     icon: ImageVector,
     title: String,
     detail: String,
-    detailIsContent: Boolean = false,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
@@ -488,7 +495,7 @@ private fun ActionRow(
             Text(title, style = DdType.label, color = c.text)
             Text(
                 detail,
-                style = if (detailIsContent) DdType.mono else DdType.small,
+                style = DdType.small,
                 color = c.textMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis

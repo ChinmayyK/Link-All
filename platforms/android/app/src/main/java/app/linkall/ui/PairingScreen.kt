@@ -1,6 +1,7 @@
 package app.linkall.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.LinearProgressIndicator
@@ -71,14 +72,27 @@ fun PairingScreen(
         Spacer(Modifier.height(32.dp))
         PinTiles(c, pin)
 
+        // The code is what people compare; the full key is there for anyone
+        // who wants to check it.
         if (fingerprint.isNotBlank()) {
+            var showDetails by remember { mutableStateOf(false) }
             Spacer(Modifier.height(20.dp))
-            Text("Device fingerprint", style = DdType.small, color = c.textMuted)
             Text(
-                fingerprint.replace(":", "").chunked(4).joinToString(" "),
-                style = DdType.mono,
-                color = c.textMuted
+                if (showDetails) "Hide details" else "Show details",
+                style = DdType.small,
+                color = c.accent,
+                modifier = Modifier
+                    .clickable { showDetails = !showDetails }
+                    .padding(vertical = 6.dp)
             )
+            if (showDetails) {
+                Text("Device fingerprint", style = DdType.small, color = c.textMuted)
+                Text(
+                    fingerprint.replace(":", "").chunked(4).joinToString(" "),
+                    style = DdType.mono,
+                    color = c.textMuted
+                )
+            }
         }
 
         Spacer(Modifier.weight(1f))

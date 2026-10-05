@@ -20,7 +20,7 @@ class LinkAllApp : Application(), Application.ActivityLifecycleCallbacks {
         val prefs = getSharedPreferences(packageName + "_preferences", android.content.Context.MODE_PRIVATE)
         
         // 1. Theme Mode
-        val mode = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_NO)
+        val mode = prefs.getInt("theme_mode", AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
         AppCompatDelegate.setDefaultNightMode(mode)
 
         // 2. Dynamic Colors (Material 3)

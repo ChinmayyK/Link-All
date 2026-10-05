@@ -154,9 +154,19 @@ object ActivityFeedManager {
         savePinned(updated)
     }
 
-    /** Clears everything except pinned entries. */
-    fun clearFeed() {
+    /** Clears everything except pinned entries; returns what was there, for undo. */
+    fun clearFeed(): List<ActivityEntry> {
+        val before = _feedFlow.value
         _feedFlow.update { current -> current.filter { it.isPinned } }
+        return before
+    }
+
+    /** Undoes [clearFeed]: brings [entries] back, keeping anything that arrived since. */
+    fun restoreFeed(entries: List<ActivityEntry>) {
+        _feedFlow.update { current ->
+            val known = current.map { it.id }.toSet()
+            arrange(current + entries.filter { it.id !in known })
+        }
     }
 
     fun updateFeedByTransferId(tid: String, transform: (ActivityEntry) -> ActivityEntry) {

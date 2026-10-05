@@ -75,6 +75,24 @@ private val DarkColors = darkColorScheme(
     surfaceTint = md_theme_dark_surfaceTint,
 )
 
+/**
+ * The user's theme choice: "system" (the default), "light" or "dark". A
+ * choice made with the old on/off "dark_mode" switch is kept.
+ */
+fun themeModeOf(prefs: android.content.SharedPreferences): String =
+    prefs.getString("theme", null) ?: when {
+        prefs.contains("dark_mode") -> if (prefs.getBoolean("dark_mode", false)) "dark" else "light"
+        else -> "system"
+    }
+
+/** Whether [mode] (see [themeModeOf]) means dark right now. */
+@Composable
+fun isDarkFor(mode: String): Boolean = when (mode) {
+    "dark" -> true
+    "light" -> false
+    else -> isSystemInDarkTheme()
+}
+
 @Composable
 fun AppTheme(
     useDarkTheme: Boolean = isSystemInDarkTheme(),

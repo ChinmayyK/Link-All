@@ -3259,7 +3259,7 @@ class LinkAllService : Service() {
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle("📞 Incoming call")
             .setContentText(callerLabel)
-            .setSubText("Link All — relaying to your Mac")
+            .setSubText("Link All — showing on your computer")
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -3267,7 +3267,7 @@ class LinkAllService : Service() {
             .setAutoCancel(false)
             .setContentIntent(openPi)
             .setStyle(NotificationCompat.BigTextStyle()
-                .bigText("$callerLabel is calling. Your Mac will show a banner with Accept/Decline.")
+                .bigText("$callerLabel is calling. Your computer shows it with Accept and Decline.")
                 .setSummaryText("Call relay active"))
             .build()
 

@@ -56,7 +56,6 @@ fun SettingsTab(
     autoForwardScreenshots: Boolean,
     deviceName: String,
     deviceId: String,
-    peers: List<app.linkall.PeerSnapshot>,
     onSyncEnabledChange: (Boolean) -> Unit,
     onSyncTextChange: (Boolean) -> Unit,
     onSyncImagesChange: (Boolean) -> Unit,
@@ -65,12 +64,10 @@ fun SettingsTab(
     onNotificationMirroringChange: (Boolean) -> Unit,
     onAutoForwardSmsChange: (Boolean) -> Unit,
     onAutoForwardScreenshotsChange: (Boolean) -> Unit,
-    onDarkModeChange: (Boolean) -> Unit,
-    onForgetDevice: (String) -> Unit,
+    themeMode: String,
+    onThemeModeChange: (String) -> Unit,
     onStartSync: () -> Unit,
-    onResumeSync: () -> Unit,
     onScanNow: () -> Unit,
-    onActionPauseSync: () -> Unit,
     onActionDisconnectAll: () -> Unit,
     onActionStopService: () -> Unit,
     onOpenDiagnostics: () -> Unit,
@@ -84,7 +81,6 @@ fun SettingsTab(
     val version = remember {
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
     }
-    val saved = peers.filter { it.remembered || it.trusted }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -155,7 +151,15 @@ fun SettingsTab(
             Column {
                 SectionHeader(c, "Appearance", null)
                 Panel(c) {
-                    SwitchRow(c, Icons.Outlined.DarkMode, "Dark mode", null, isDark, onDarkModeChange)
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                        Text("Theme", style = DdType.label, color = c.text)
+                        Spacer(Modifier.height(10.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("system" to "Match system", "light" to "Light", "dark" to "Dark").forEach { (mode, label) ->
+                                FilterChip(c, label, selected = themeMode == mode) { onThemeModeChange(mode) }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -166,52 +170,26 @@ fun SettingsTab(
                 Panel(c) {
                     ListRow(c, Icons.Outlined.BatteryChargingFull, "Battery", "Allow background use so clips arrive instantly", onClick = onBatterySettingsClicked)
                     Hairline(c)
-                    ListRow(c, Icons.Outlined.Folder, "All files access", "Lets your computer browse this phone's files", onClick = onStorageSettingsClicked)
-                    Hairline(c)
-                    ListRow(c, Icons.Outlined.NotificationsOff, "Status bar icon", "Hide it without stopping sync", onClick = onNotificationSettingsClicked)
-                }
-            }
-        }
-
-        if (saved.isNotEmpty()) {
-            item {
-                Column {
-                    SectionHeader(c, "Saved devices", "${saved.size}")
-                    Panel(c) {
-                        saved.forEachIndexed { i, peer ->
-                            if (i > 0) Hairline(c)
-                            ListRow(
-                                c,
-                                osIcon(peer.platform, peer.name),
-                                peer.name,
-                                detail = if (peer.isConnected) "Connected" else "Offline",
-                                detailColor = if (peer.isConnected) c.live else c.textMuted,
-                                trailing = {
-                                    PillButton(c, "Forget", filled = false, compact = true, textColor = c.danger) {
-                                        onForgetDevice(peer.id)
-                                    }
-                                }
-                            )
-                        }
+                    // The Play build has no all-files access to ask for.
+                    if (app.linkall.BuildConfig.FULL_PERMISSIONS) {
+                        ListRow(c, Icons.Outlined.Folder, "All files access", "Lets your computer browse this phone's files", onClick = onStorageSettingsClicked)
+                        Hairline(c)
                     }
+                    ListRow(c, Icons.Outlined.NotificationsOff, "Hide the Link All notification", "Turn off \"Link All\" here. Sync keeps running", onClick = onNotificationSettingsClicked)
                 }
             }
         }
 
+        // Rarely needed; pausing is the Sync switch above, and devices are
+        // forgotten from the Devices tab.
         item {
             Column {
-                SectionHeader(c, "Service", null)
+                SectionHeader(c, "Advanced", null)
                 Panel(c) {
                     if (!isServiceRunning) {
                         ListRow(c, Icons.Outlined.PlayCircleOutline, "Start service", onClick = onStartSync)
                         Hairline(c)
                     }
-                    if (isSyncEnabled) {
-                        ListRow(c, Icons.Outlined.PauseCircleOutline, "Pause sync", onClick = onActionPauseSync)
-                    } else {
-                        ListRow(c, Icons.Outlined.PlayCircleOutline, "Resume sync", onClick = onResumeSync)
-                    }
-                    Hairline(c)
                     ListRow(c, Icons.Outlined.Radar, "Scan for devices", onClick = onScanNow)
                     Hairline(c)
                     ListRow(c, Icons.Outlined.LinkOff, "Disconnect all", onClick = onActionDisconnectAll)

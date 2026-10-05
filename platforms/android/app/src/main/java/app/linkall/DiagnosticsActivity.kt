@@ -29,7 +29,7 @@ class DiagnosticsActivity : ComponentActivity() {
         val prefs = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
         
         setContent {
-            val isDark = prefs.getBoolean("dark_mode", false)
+            val isDark = app.linkall.ui.theme.isDarkFor(app.linkall.ui.theme.themeModeOf(prefs))
             val isServiceRunning = prefs.getBoolean(LinkAllService.PREF_SERVICE_RUNNING, false)
             val connectedCount = prefs.getInt("connected_count", 0)
             val autoApply = prefs.getBoolean("auto_apply_clipboard", true)
