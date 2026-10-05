@@ -1304,6 +1304,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_trustPeerFromQr(
     engine_ptr: jlong,
     device_id_jstr: JString,
     token_jstr: JString,
+    fingerprint_jstr: JString,
 ) -> jint {
     if engine_ptr == 0 {
         return 0;
@@ -1316,16 +1317,24 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_trustPeerFromQr(
         Ok(s) => s.into(),
         Err(_) => return 0,
     };
+    let fingerprint: Option<String> = if fingerprint_jstr.is_null() {
+        None
+    } else {
+        env.get_string(&fingerprint_jstr).ok().map(String::from)
+    };
     let Ok(device_id) = uuid::Uuid::parse_str(&device_id) else {
         return 0;
     };
     let h = unsafe { &*(engine_ptr as *const AndroidHandle) };
-    match rt().block_on(h.engine.trust_peer(device_id)) {
-        Ok(()) => {
-            rt().block_on(h.engine.send_qr_auth(device_id, token));
-            1
+    match rt().block_on(
+        h.engine
+            .trust_peer_from_qr(device_id, token, fingerprint.as_deref()),
+    ) {
+        Ok(()) => 1,
+        Err(e) => {
+            tracing::warn!("QR pairing refused: {e:#}");
+            0
         }
-        Err(_) => 0,
     }
 }
 

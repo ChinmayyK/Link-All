@@ -33,7 +33,7 @@ namespace LinkAll.WinUI
             this.InitializeComponent();
             Title = Services.AppDialog.Header("\uE968", "Connect by IP address", "For networks where devices can't find each other");
 
-            var ownAddresses = LocalIPv4Addresses();
+            var ownAddresses = LocalNetwork.IPv4Addresses();
             OwnAddressText.Text = ownAddresses.Count == 0
                 ? "No network connection"
                 : string.Join("\n", ownAddresses.Select(a => $"{a}:{DefaultPort}"));
@@ -195,7 +195,7 @@ namespace LinkAll.WinUI
                 if (ip == null) return $"Couldn't find \"{address.Host}\" on this network.";
             }
 
-            if (LocalIPv4Addresses().Contains(ip.ToString()))
+            if (LocalNetwork.IPv4Addresses().Contains(ip.ToString()))
                 return "That's this PC's own address. Enter the other device's IP.";
 
             var response = await DaemonClient.SendAsync(DaemonClient.Req("connect_manual", ("host", ip.ToString()), ("port", address.Port)),
@@ -243,32 +243,6 @@ namespace LinkAll.WinUI
         {
             var updated = new[] { address }.Concat(RecentAddresses()).Distinct().Take(MaxRecent);
             LocalSettingsStore.Set(RecentSettingKey, string.Join("\n", updated));
-        }
-
-        // IPv4 addresses of connected, non-loopback, non-tunnel adapters, with
-        // adapters that have a default gateway (the real LAN) listed first.
-        private static List<string> LocalIPv4Addresses()
-        {
-            try
-            {
-                return NetworkInterface.GetAllNetworkInterfaces()
-                    .Where(n => n.OperationalStatus == OperationalStatus.Up
-                                && n.NetworkInterfaceType != NetworkInterfaceType.Loopback
-                                && n.NetworkInterfaceType != NetworkInterfaceType.Tunnel)
-                    .Select(n => (Props: n.GetIPProperties(), Nic: n))
-                    .OrderByDescending(x => x.Props.GatewayAddresses.Any(g => g.Address.AddressFamily == AddressFamily.InterNetwork))
-                    .SelectMany(x => x.Props.UnicastAddresses)
-                    .Where(a => a.Address.AddressFamily == AddressFamily.InterNetwork
-                                && !IPAddress.IsLoopback(a.Address)
-                                && !a.Address.ToString().StartsWith("169.254."))
-                    .Select(a => a.Address.ToString())
-                    .Distinct()
-                    .ToList();
-            }
-            catch (NetworkInformationException)
-            {
-                return new List<string>();
-            }
         }
     }
 }

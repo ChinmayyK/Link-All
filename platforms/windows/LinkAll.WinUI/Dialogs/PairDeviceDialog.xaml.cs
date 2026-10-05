@@ -155,6 +155,7 @@ namespace LinkAll.WinUI
             QrErrorPanel.Visibility = Visibility.Collapsed;
             RetryButton.Visibility = Visibility.Collapsed;
 
+            string? deviceId = null;
             string? fingerprint = null;
             string? token = null;
 
@@ -169,7 +170,7 @@ namespace LinkAll.WinUI
             const int attempts = 6;
             const int perCallTimeoutMs = 2500;
 
-            for (var attempt = 1; attempt <= attempts && (fingerprint == null || token == null); attempt++)
+            for (var attempt = 1; attempt <= attempts && (deviceId == null || fingerprint == null || token == null); attempt++)
             {
                 await Task.Run(() =>
                 {
@@ -188,6 +189,7 @@ namespace LinkAll.WinUI
                         var status = DaemonClient.Send(DaemonClient.Req("status"), perCallTimeoutMs);
                         if (status != null && status.RootElement.TryGetProperty("data", out var statusData))
                         {
+                            deviceId ??= statusData.TryGetProperty("local_device_id", out var did) ? did.GetString() : null;
                             fingerprint ??= statusData.TryGetProperty("local_fingerprint", out var fp) ? fp.GetString() : null;
                         }
 
@@ -203,13 +205,13 @@ namespace LinkAll.WinUI
                     }
                 });
 
-                if ((fingerprint == null || token == null) && attempt < attempts)
+                if ((deviceId == null || fingerprint == null || token == null) && attempt < attempts)
                 {
                     await Task.Delay(attempt * 400);
                 }
             }
 
-            if (fingerprint == null || token == null)
+            if (deviceId == null || fingerprint == null || token == null)
             {
                 ShowQrError("Link All's local service isn't responding yet.");
                 return;
@@ -218,12 +220,12 @@ namespace LinkAll.WinUI
             try
             {
                 var name = System.Net.WebUtility.UrlEncode(LinkAll.WinUI.Services.LocalSettingsStore.DeviceName);
-                var ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName())
-                    .AddressList
-                    .FirstOrDefault(x => x.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                    ?.ToString();
+                var ip = LocalNetwork.IPv4Addresses().FirstOrDefault();
 
-                var uri = $"linkall://pair?id={fingerprint}&token={token}&name={name}";
+                // Same fields as the Mac's code: the phone looks the computer
+                // up by id (its device UUID) and checks its key against
+                // fingerprint before trusting it.
+                var uri = $"linkall://pair?id={deviceId}&token={token}&name={name}&fingerprint={fingerprint}";
                 if (!string.IsNullOrEmpty(ip)) uri += $"&ip={ip}&port=47823";
 
                 await GenerateQrCodeAsync(uri);

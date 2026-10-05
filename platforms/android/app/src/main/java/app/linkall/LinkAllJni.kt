@@ -99,8 +99,11 @@ object LinkAllJni {
     @JvmStatic external fun applyClipboardByHash(engineHandle: Long, hash: String): Int
     /** Mark a peer as trusted after the user approves the pairing prompt. */
     @JvmStatic external fun trustPeer(engineHandle: Long, deviceId: String): Int
-    /** Trust a peer via QR code and send the auth token. */
-    @JvmStatic external fun trustPeerFromQr(engineHandle: Long, deviceId: String, token: String): Int
+    /**
+     * Trust a peer via QR code and send the auth token. [fingerprint] is the
+     * key the code shows; the core refuses a peer that presented another one.
+     */
+    @JvmStatic external fun trustPeerFromQr(engineHandle: Long, deviceId: String, token: String, fingerprint: String?): Int
     /** Reject a peer after the user denies the pairing prompt. */
     @JvmStatic external fun rejectPeer(engineHandle: Long, deviceId: String): Int
     /** Forget a previously connected device. */

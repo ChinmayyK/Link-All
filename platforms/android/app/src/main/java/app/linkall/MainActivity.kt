@@ -983,9 +983,10 @@ class MainActivity : ComponentActivity() {
             // New QR Code Pairing format with Auth Token
             val id = uri.getQueryParameter("id")
             val token = uri.getQueryParameter("token")
+            val fingerprint = uri.getQueryParameter("fingerprint")
             val peerName = uri.getQueryParameter("name")?.let {
                 java.net.URLDecoder.decode(it, "UTF-8")
-            } ?: "Mac"
+            } ?: "your computer"
 
             if (id != null && token != null) {
                 val ip = uri.getQueryParameter("ip")
@@ -995,6 +996,7 @@ class MainActivity : ComponentActivity() {
                         action = LinkAllService.ACTION_TRUST_PEER_FROM_QR
                         putExtra(LinkAllService.EXTRA_TARGET_DEVICE_ID, id)
                         putExtra(LinkAllService.EXTRA_TOKEN, token)
+                        putExtra(LinkAllService.EXTRA_FINGERPRINT, fingerprint)
                         if (ip != null) {
                             putExtra("ip", ip)
                             putExtra("port", port)

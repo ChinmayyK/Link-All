@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -62,10 +63,11 @@ namespace LinkAll.WinUI
             RetryButton.Visibility = Visibility.Collapsed;
             TxtCaption.Text = "Scan with Link All on your other device to connect.";
 
+            string? deviceId = null;
             string? fp = null;
             string? token = null;
 
-            for (var attempt = 1; attempt <= 5 && (fp == null || token == null); attempt++)
+            for (var attempt = 1; attempt <= 5 && (deviceId == null || fp == null || token == null); attempt++)
             {
                 await Task.Run(() =>
                 {
@@ -83,6 +85,7 @@ namespace LinkAll.WinUI
                         var status = DaemonClient.Status();
                         if (status != null && status.RootElement.TryGetProperty("data", out var statusData))
                         {
+                            deviceId ??= statusData.TryGetProperty("local_device_id", out var idEl) ? idEl.GetString() : null;
                             fp ??= statusData.TryGetProperty("local_fingerprint", out var fpEl) ? fpEl.GetString() : null;
                         }
 
@@ -98,13 +101,13 @@ namespace LinkAll.WinUI
                     }
                 });
 
-                if ((fp == null || token == null) && attempt < 5)
+                if ((deviceId == null || fp == null || token == null) && attempt < 5)
                 {
                     await Task.Delay(attempt * 400);
                 }
             }
 
-            if (fp == null || token == null)
+            if (deviceId == null || fp == null || token == null)
             {
                 QrLoadingRing.IsActive = false;
                 QrLoadingRing.Visibility = Visibility.Collapsed;
@@ -117,9 +120,11 @@ namespace LinkAll.WinUI
             try
             {
                 var name = System.Net.WebUtility.UrlEncode(System.Environment.MachineName);
-                var ip = System.Net.Dns.GetHostEntry(System.Net.Dns.GetHostName()).AddressList.FirstOrDefault(x => x.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)?.ToString();
+                var ip = LocalNetwork.IPv4Addresses().FirstOrDefault();
 
-                string uri = $"linkall://pair?id={fp}&token={token}&name={name}";
+                // Same fields as PairDeviceDialog and the Mac: id is the
+                // device UUID, fingerprint the key the phone checks.
+                string uri = $"linkall://pair?id={deviceId}&token={token}&name={name}&fingerprint={fp}";
                 if (!string.IsNullOrEmpty(ip)) uri += $"&ip={ip}&port=47823";
                 await GenerateQRCodeAsync(uri);
 

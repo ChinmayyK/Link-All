@@ -49,6 +49,36 @@ impl Engine {
         token
     }
 
+    /// Trust the computer whose pairing QR code was scanned, then send it the
+    /// code's token so it trusts us back. `fingerprint` is the key the code
+    /// shows: a device on the network that only claims the computer's id
+    /// presented another key, and must not be trusted.
+    pub async fn trust_peer_from_qr(
+        &self,
+        device_id: Uuid,
+        token: String,
+        fingerprint: Option<&str>,
+    ) -> Result<()> {
+        if let Some(shown) = fingerprint.filter(|f| !f.is_empty()) {
+            // Codes show `local_fingerprint`: hex bytes joined with ':'.
+            let expected: String = shown.chars().filter(|c| *c != ':').collect();
+            let seen = self
+                .shared
+                .trust
+                .lock()
+                .await
+                .get(device_id)
+                .map(|r| hex::encode(r.public_key));
+            anyhow::ensure!(
+                seen.is_some_and(|key| key.eq_ignore_ascii_case(&expected)),
+                "device {device_id} does not have the key shown in the QR code"
+            );
+        }
+        self.trust_peer(device_id).await?;
+        self.send_qr_auth(device_id, token).await;
+        Ok(())
+    }
+
     pub async fn send_qr_auth(&self, target_device: Uuid, token: String) {
         let msg = AppMessage::QrAuth { token };
         let peers = self.shared.peer_manager.all_connected_senders();
