@@ -467,6 +467,15 @@ impl OutboundTransfer {
         self.hash_checkpoints.push_back((chunk, state));
     }
 
+    /// Whether the receiver has accepted, so chunks may flow. Before that a
+    /// resume only clears the pause; the accept starts the sending.
+    pub fn is_accepted(&self) -> bool {
+        !matches!(
+            self.status,
+            TransferStatus::Pending | TransferStatus::Queued
+        )
+    }
+
     /// Claims the transfer for a new send loop; see `send_run`.
     pub fn start_send_run(&mut self) -> u32 {
         self.send_run = self.send_run.wrapping_add(1);

@@ -293,12 +293,17 @@ impl Engine {
         {
             let mut mgr = self.shared.file_transfers.lock().await;
             if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
-                let resume_chunk = t.last_acked_chunk.map(|c| c + 1).unwrap_or(0);
-                t.resume_from(resume_chunk);
                 t.paused = false;
-                was_outbound = true;
-                bg_send_run = t.start_send_run();
-                target_device = t.target_device;
+                // Paused before the receiver accepted: sending chunks now would
+                // reach a transfer it hasn't opened and the file was dropped.
+                // Its accept starts the sending instead.
+                if t.is_accepted() {
+                    let resume_chunk = t.last_acked_chunk.map(|c| c + 1).unwrap_or(0);
+                    t.resume_from(resume_chunk);
+                    was_outbound = true;
+                    bg_send_run = t.start_send_run();
+                    target_device = t.target_device;
+                }
             } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                 t.paused = false;
             }

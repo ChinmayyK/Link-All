@@ -592,13 +592,16 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 let mut mgr = shared.file_transfers.lock().await;
                 if let Some(t) = mgr.get_outbound_mut(&transfer_id) {
                     if t.target_device == Some(peer_id) || t.target_device.is_none() {
-                        // Same rewind as a local resume: restart after the
-                        // last chunk the receiver confirmed.
-                        let resume_chunk = t.last_acked_chunk.map(|c| c + 1).unwrap_or(0);
-                        t.resume_from(resume_chunk);
                         t.paused = false;
-                        was_outbound = true;
-                        bg_send_run = t.start_send_run();
+                        // Same as a local resume: before the accept, the accept
+                        // starts the sending; after it, restart after the last
+                        // chunk the receiver confirmed.
+                        if t.is_accepted() {
+                            let resume_chunk = t.last_acked_chunk.map(|c| c + 1).unwrap_or(0);
+                            t.resume_from(resume_chunk);
+                            was_outbound = true;
+                            bg_send_run = t.start_send_run();
+                        }
                     }
                 } else if let Some(t) = mgr.get_inbound_mut(&transfer_id) {
                     if t.from_device == peer_id {
