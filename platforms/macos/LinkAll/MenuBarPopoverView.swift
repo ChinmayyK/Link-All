@@ -56,7 +56,7 @@ struct MenuBarPopoverView: View {
                     Button(action: { onAction(.diagnostics) }) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary.opacity(0.7))
                             .frame(width: 28, height: 28)
                             .background(Color.primary.opacity(0.05), in: Circle())
                     }
@@ -66,7 +66,7 @@ struct MenuBarPopoverView: View {
                     Button(action: { onAction(.quit) }) {
                         Image(systemName: "power")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(Color.secondary.opacity(0.7))
+                            .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary.opacity(0.7))
                             .frame(width: 28, height: 28)
                             .background(Color.primary.opacity(0.05), in: Circle())
                     }
@@ -113,7 +113,7 @@ struct MenuBarPopoverView: View {
                 Button(action: { onAction(.commandPalette) }) {
                     Text("Commands ⌘K")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -125,7 +125,7 @@ struct MenuBarPopoverView: View {
                 Button(action: { onAction(.scan) }) {
                     Text("Scan Network")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
@@ -138,18 +138,28 @@ struct MenuBarPopoverView: View {
                 Button(action: { onAction(.connectByIP) }) {
                     Text("Connect by IP")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color.secondary)
+                        .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary)
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                 }
                 .buttonStyle(.plain)
             }
-            .background(Color.primary.opacity(0.02))
-            .overlay(Rectangle().frame(height: 1).opacity(0.05), alignment: .top)
+            .background(scheme == .light ? CRTheme.surfaceElevated.opacity(0.6) : Color.primary.opacity(0.02))
+            .overlay(Rectangle().fill(scheme == .light ? CRTheme.stroke : Color.primary.opacity(0.05)).frame(height: 1), alignment: .top)
         }
         .frame(width: 320)
-        .background(CRVisualEffect(material: .menu))
+        .background {
+            ZStack {
+                CRVisualEffect(material: .menu)
+                // In light mode the translucent material picks up whatever
+                // sits behind the panel and turns grey and low-contrast over
+                // dark windows; a near-solid light surface keeps it readable.
+                if scheme == .light {
+                    CRTheme.surfaceStrong.opacity(0.94)
+                }
+            }
+        }
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -165,9 +175,11 @@ private struct PopoverActionButton: View {
     let action: () -> Void
     
     @State private var isHovered = false
-    
+    @Environment(\.colorScheme) private var scheme
+
     var body: some View {
-        Button(action: {
+        let isLight = scheme == .light
+        return Button(action: {
             NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
             action()
         }) {
@@ -187,17 +199,23 @@ private struct PopoverActionButton: View {
                 
                 Text(title)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.primary.opacity(isHovered ? 1 : 0.8))
+                    .foregroundStyle(isLight ? CRTheme.ink : Color.primary.opacity(isHovered ? 1 : 0.8))
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14)
             .background {
+                // Light: white cards on the light panel. Dark: faint fills on the material.
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(Color.primary.opacity(isHovered ? 0.08 : 0.04))
+                    .fill(isLight
+                          ? AnyShapeStyle(CRTheme.surfaceElevated)
+                          : AnyShapeStyle(Color.primary.opacity(isHovered ? 0.08 : 0.04)))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.primary.opacity(0.05), lineWidth: 1)
+                            .strokeBorder(isLight
+                                          ? (isHovered ? CRTheme.accentBlue.opacity(0.35) : CRTheme.stroke)
+                                          : Color.primary.opacity(0.05), lineWidth: 1)
                     )
+                    .shadow(color: .black.opacity(isLight ? (isHovered ? 0.10 : 0.06) : 0), radius: isHovered ? 6 : 3, y: 1)
             }
         }
         .buttonStyle(.plain)
