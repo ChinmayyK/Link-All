@@ -367,9 +367,14 @@ impl History {
             next_id,
             max_entries: clamp_entries(max_entries),
         };
-        let _ = history.purge_expired_sensitive_entries_with_now(now_secs())?;
+        // Its own save failing is covered by the rewrite below.
+        let _ = history.purge_expired_sensitive_entries_with_now(now_secs());
         history.trim_to_limit();
-        history.persist()?;
+        // A failed rewrite (a full disk) must not stop the app starting:
+        // the entries are in memory and the next change saves them again.
+        if let Err(err) = history.persist() {
+            tracing::warn!(error = %err, "could not rewrite history on load");
+        }
         Ok(history)
     }
 
@@ -1042,6 +1047,20 @@ mod tests {
             .unwrap();
         }
         std::fs::read(path).unwrap()
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn history_loads_when_it_cannot_be_rewritten() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("history.json");
+        saved_history(&path, &["one", "two"]);
+        // Like a full disk: the file reads, but no temp file can be written.
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o500)).unwrap();
+        let loaded = History::load_with_limit(&path, 50);
+        std::fs::set_permissions(dir.path(), std::fs::Permissions::from_mode(0o700)).unwrap();
+        assert_eq!(loaded.expect("load must not fail").entries.len(), 2);
     }
 
     #[test]

@@ -159,7 +159,8 @@ impl TrustStore {
             if bytes.is_empty() {
                 StoreData::default()
             } else {
-                serde_json::from_slice(&bytes).context("parsing trust store")?
+                serde_json::from_slice(&bytes)
+                    .unwrap_or_else(|err| crate::settings::set_aside_corrupt(&path, &err))
             }
         } else {
             StoreData::default()
@@ -652,6 +653,16 @@ pub fn format_fingerprint(fp: &[u8; 32]) -> String {
 mod tests {
     use super::*;
     use tempfile::NamedTempFile;
+
+    #[test]
+    fn unreadable_store_is_set_aside_and_starts_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("trust.json");
+        std::fs::write(&path, b"{\"devices\":{\"half-writ").unwrap();
+        let store = TrustStore::load(&path).expect("load must not fail");
+        assert!(store.data.devices.is_empty());
+        assert!(dir.path().join("trust.json.corrupt").exists());
+    }
 
     #[test]
     fn observe_then_trust_roundtrip() {

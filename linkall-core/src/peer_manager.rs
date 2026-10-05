@@ -347,7 +347,8 @@ impl PeerManager {
             if bytes.is_empty() {
                 PeerStoreData::default()
             } else {
-                serde_json::from_slice(&bytes).context("parsing peer store")?
+                serde_json::from_slice(&bytes)
+                    .unwrap_or_else(|err| crate::settings::set_aside_corrupt(&path, &err))
             }
         } else {
             PeerStoreData::default()
@@ -1299,6 +1300,16 @@ mod tests {
     use std::net::Ipv4Addr;
     use tempfile::NamedTempFile;
     use tokio::sync::oneshot;
+
+    #[test]
+    fn unreadable_store_is_set_aside_and_starts_empty() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("peers.json");
+        std::fs::write(&path, b"\0\0\0garbage").unwrap();
+        let manager = PeerManager::load(&path).expect("load must not fail");
+        assert!(manager.list().is_empty());
+        assert!(dir.path().join("peers.json.corrupt").exists());
+    }
 
     #[test]
     fn persists_peer_records() {

@@ -205,11 +205,17 @@ impl IdentityStore {
                 .context("creating temporary identity key file")?;
             std::io::Write::write_all(&mut file, &key.secret_bytes())
                 .context("writing identity key")?;
+            // On disk before the rename: a power cut must not leave an empty
+            // key, which would stop the app from ever starting again.
+            file.sync_all().context("syncing identity key")?;
         }
 
         #[cfg(not(unix))]
         {
-            std::fs::write(&tmp, key.secret_bytes()).context("writing identity key")?;
+            let mut file = std::fs::File::create(&tmp).context("creating identity key file")?;
+            std::io::Write::write_all(&mut file, &key.secret_bytes())
+                .context("writing identity key")?;
+            file.sync_all().context("syncing identity key")?;
         }
 
         std::fs::rename(&tmp, &self.path).context("renaming identity key")?;

@@ -422,6 +422,19 @@ fn json_merge(target: &mut serde_json::Value, patch: &serde_json::Value) {
     }
 }
 
+/// For a store file that no longer parses: keep it beside the original as
+/// `<name>.corrupt` and start empty. Failing instead would stop the app from
+/// ever starting again; an empty trust store only means pairing again.
+pub(crate) fn set_aside_corrupt<T: Default>(path: &Path, err: &serde_json::Error) -> T {
+    let mut aside = path.as_os_str().to_owned();
+    aside.push(".corrupt");
+    tracing::warn!(error = %err, path = ?path, "store does not parse; starting empty");
+    if let Err(e) = std::fs::rename(path, &aside) {
+        tracing::warn!(error = %e, "could not set the unreadable store aside");
+    }
+    T::default()
+}
+
 // ── Platform config paths ─────────────────────────────────────────────────────
 
 /// The app's own folder under `base`. The app was called Deskdrop before it
