@@ -4356,6 +4356,7 @@ class LinkAllService : Service() {
             prefs().getString(PREF_PEER_SNAPSHOTS_JSON, null)
         } ?: "[]"
         val peers = parsePeerSnapshots(rawPeerJson)
+        DeviceShareTargets.publish(this, peers)
         connectedPeerIds.clear()
         peers.filter { it.isConnected }.forEach { connectedPeerIds[it.id] = it.name }
         peers.forEach { peer ->

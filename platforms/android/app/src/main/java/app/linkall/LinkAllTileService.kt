@@ -205,17 +205,28 @@ class LinkAllShareTarget : ComponentActivity() {
                     putExtra("text", sharedText)
                 })
             }
-            Toast.makeText(this, "Pushed to Link All peers", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Sent to your devices", Toast.LENGTH_SHORT).show()
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
             val peers = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
                 .peerSnapshots()
                 .filter { it.isConnected }
             val prefs = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
-            val isDark = prefs.getBoolean("dark_mode", false)
-            val lastUsedId = prefs.getString("last_used_device_id", null)
+            // Picked by name in Android's share sheet: send straight to it.
+            val chosenId = DeviceShareTargets.peerIdOf(
+                intent?.getStringExtra(androidx.core.content.pm.ShortcutManagerCompat.EXTRA_SHORTCUT_ID)
+            )
+            val chosen = peers.find { it.id == chosenId }
+            if (chosen != null) {
+                sendFiles(sharedUris, sharedName, chosen.id) // finishes the activity
+                return
+            }
+            val themeMode = app.linkall.ui.theme.themeModeOf(prefs)
+            // A chosen device that has since gone offline is preselected instead.
+            val lastUsedId = chosenId ?: prefs.getString("last_used_device_id", null)
 
             setContent {
+                val isDark = app.linkall.ui.theme.isDarkFor(themeMode)
                 AppTheme(useDarkTheme = isDark) {
                     app.linkall.ui.ShareSheet(
                         sharedUris = sharedUris,
