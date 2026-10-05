@@ -339,10 +339,14 @@ async fn recv_encrypted(
     stream: &mut (impl AsyncReadExt + Unpin),
     session: &mut SessionKey,
 ) -> Result<AppMessage> {
+    // No timeout while waiting for the next frame: a link may be quiet for
+    // minutes while a phone sleeps (pings drop to one per 5 minutes). The
+    // session heartbeat and TCP keepalive decide when a quiet link is dead;
+    // handshake reads wrap this call in their own timeout.
     let mut len_buf = [0u8; 4];
-    tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut len_buf))
+    stream
+        .read_exact(&mut len_buf)
         .await
-        .context("timeout waiting for encrypted frame length")?
         .context("reading encrypted frame length")?;
 
     let len = u32::from_le_bytes(len_buf);
@@ -943,5 +947,21 @@ mod tests {
         assert!(KEEPALIVE_IDLE.as_secs() >= 10);
         assert!(KEEPALIVE_INTERVAL.as_secs() >= 1);
         assert!(KEEPALIVE_RETRIES >= 1);
+    }
+    #[tokio::test(start_paused = true)]
+    async fn a_quiet_link_is_not_dropped_by_the_reader() {
+        let alice = EphemeralKeypair::generate();
+        let (mut session, _, _) = alice
+            .derive_session_key(EphemeralKeypair::generate().public_bytes, true)
+            .unwrap();
+        let (_writer, mut reader) = tokio::io::duplex(64);
+
+        // Ten minutes of silence, as while a phone sleeps.
+        let waited = tokio::time::timeout(
+            Duration::from_secs(600),
+            recv_encrypted(&mut reader, &mut session),
+        )
+        .await;
+        assert!(waited.is_err(), "the reader gave up on a quiet link");
     }
 }
