@@ -35,7 +35,7 @@ struct DropCanvasView: View {
                             .fill(store.connectedCount > 0 ? CRTheme.accentGreen : CRTheme.accentOrange)
                             .frame(width: 6.5, height: 6.5)
                             .shadow(color: (store.connectedCount > 0 ? CRTheme.accentGreen : CRTheme.accentOrange).opacity(0.6), radius: 3)
-                        Text(store.connectedCount > 0 ? "\(store.connectedCount) Device\(store.connectedCount == 1 ? "" : "s") Ready" : "Searching Peers...")
+                        Text(store.connectedCount > 0 ? "\(store.connectedCount) connected" : "No devices connected")
                             .font(.system(size: 11, weight: .semibold, design: .rounded))
                             .foregroundStyle(CRTheme.inkSoft)
                     }
@@ -113,26 +113,21 @@ struct DropCanvasView: View {
                         .animation(.spring(response: 0.3, dampingFraction: 0.65), value: isTargeted)
 
                         VStack(spacing: 4) {
-                            Text(isTargeted ? "Release to Broadcast ✨" : "Drop to Broadcast")
+                            Text(isTargeted ? "Release to send" : "Drop files to send")
                                 .font(.system(size: 15, weight: .bold, design: .rounded))
                                 .foregroundStyle(isTargeted ? CRTheme.brandElectric : CRTheme.ink)
                                 .contentTransition(.interpolate)
 
-                            if !connectedDevices.isEmpty {
-                                Text(isTargeted
-                                     ? "Sending to \(connectedDevices.map(\.name).joined(separator: ", "))"
-                                     : "Instant transfer to \(connectedDevices.count == 1 ? connectedDevices[0].name : "\(connectedDevices.count) connected devices")")
-                                    .font(.system(size: 11.5, weight: .medium))
-                                    .foregroundStyle(isTargeted ? CRTheme.ink : CRTheme.inkSubtle)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .contentTransition(.interpolate)
-                            } else {
-                                Text(isTargeted ? "Broadcasting to active mesh" : "Wireless transfer to nearby devices")
-                                    .font(.system(size: 11.5, weight: .medium))
-                                    .foregroundStyle(CRTheme.inkSubtle)
-                                    .contentTransition(.interpolate)
-                            }
+                            // Says what the drop does: one device gets it
+                            // straight away, several bring up the picker.
+                            Text(connectedDevices.isEmpty ? "Connect a device first"
+                                 : connectedDevices.count == 1 ? "Sends to \(connectedDevices[0].name)"
+                                 : "Choose a device after you drop")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundStyle(isTargeted ? CRTheme.ink : CRTheme.inkSubtle)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .contentTransition(.interpolate)
                         }
                     }
                 }
@@ -201,7 +196,7 @@ struct CanvasDropDelegate: DropDelegate {
             store.sendFilesChoosingTarget(urls: urls) { sent in
                 guard sent else { return }
                 store.showToast(
-                    title: "Sending \(urls.count) file\(urls.count == 1 ? "" : "s")",
+                    title: "Sending \(urls.count) item\(urls.count == 1 ? "" : "s")",
                     body: urls.map(\.lastPathComponent).joined(separator: ", "),
                     tint: CRTheme.brandElectric,
                     systemImage: "arrow.up.doc.fill",

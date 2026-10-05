@@ -771,7 +771,12 @@ final class LinkAllStore: ObservableObject {
         guard !urls.isEmpty else { completion?(false); return false }
         let connected = connectedDevices
         guard connected.count > 1 else {
-            guard let only = connected.first else { completion?(false); return false }
+            guard let only = connected.first else {
+                // Every drop target lands here; say why nothing was sent.
+                showToast(title: "No Devices Connected", body: "Connect a device to send files or folders.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
+                completion?(false)
+                return false
+            }
             sendFiles(urls: urls, to: only)
             completion?(true)
             return true

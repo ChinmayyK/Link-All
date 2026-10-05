@@ -9,6 +9,9 @@ class EdgeDropWindowManager: NSObject {
     private var edgePanel: NSPanel?
     private var store: LinkAllStore?
     private var isExpanded = false
+    /// Set from a drop until its send is decided, so the drag ending does
+    /// not collapse the panel under the drop animation.
+    private var dropInFlight = false
     
     private let restingWidth: CGFloat = 16
     private let restingHeight: CGFloat = 200
@@ -81,11 +84,19 @@ class EdgeDropWindowManager: NSObject {
         }
     }
     
+    /// The drag finished anywhere: dropped, cancelled with Esc, or released
+    /// over the panel without files. Collapse unless a drop is being sent.
+    func handleDragEnded() {
+        guard !dropInFlight else { return }
+        updatePosition(expanded: false, animated: true)
+    }
+
     func handleDrop(urls: [URL]) {
         guard let store = store, !urls.isEmpty else {
             updatePosition(expanded: false, animated: true)
             return
         }
+        dropInFlight = true
         
         NSHapticFeedbackManager.defaultPerformer.perform(.generic, performanceTime: .default)
         NSSound(named: "Glass")?.play()
@@ -95,12 +106,13 @@ class EdgeDropWindowManager: NSObject {
         // Defer past the drag session: choosing a target may show a modal prompt.
         DispatchQueue.main.async { [weak self] in
             store.sendFilesChoosingTarget(urls: urls) { [weak self] sent in
+                self?.dropInFlight = false
                 guard sent else {
                     self?.updatePosition(expanded: false, animated: true)
                     return
                 }
                 store.showToast(
-                    title: "Instant Portal Transfer (\(urls.count) file\(urls.count == 1 ? "" : "s"))",
+                    title: "Sending \(urls.count) item\(urls.count == 1 ? "" : "s")",
                     body: urls.map(\.lastPathComponent).joined(separator: ", "),
                     tint: CRTheme.brandElectric,
                     systemImage: "arrow.right.to.line.compact",
@@ -178,26 +190,23 @@ class EdgeDropHostingView: NSView {
         manager?.handleDragExited()
     }
     
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        isTargeted = false
+        manager?.handleDragEnded()
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
         isTargeted = false
-        guard let pboard = sender.draggingPasteboard.propertyList(forType: .fileURL) as? String else {
-            if let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
-                manager?.handleDrop(urls: urls)
-                return true
-            }
+        // Every dragged item: reading the pasteboard's single .fileURL
+        // property kept only the first of several files.
+        guard let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [
+            .urlReadingFileURLsOnly: true
+        ]) as? [URL], !urls.isEmpty else {
             manager?.handleDragExited()
             return false
         }
-        if let url = URL(string: pboard) {
-            manager?.handleDrop(urls: [url])
-            return true
-        }
-        if let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL], !urls.isEmpty {
-            manager?.handleDrop(urls: urls)
-            return true
-        }
-        manager?.handleDragExited()
-        return false
+        manager?.handleDrop(urls: urls)
+        return true
     }
 }
 
@@ -253,11 +262,11 @@ struct EdgeDropSwiftUIView: View {
                             .scaleEffect(pulse ? 1.08 : 1.0)
                             
                             VStack(spacing: 4) {
-                                Text("Edge Portal Drop ✨")
+                                Text("Drop to send")
                                     .font(.system(size: 15, weight: .bold, design: .rounded))
                                     .foregroundStyle(CRTheme.ink)
                                 
-                                Text(connectedDevices.isEmpty ? "Sending to active mesh" : "Instant transfer to \(connectedDevices.map(\.name).joined(separator: ", "))")
+                                Text(connectedDevices.count == 1 ? "Sends to \(connectedDevices[0].name)" : "Choose a device after you drop")
                                     .font(.system(size: 11.5, weight: .medium))
                                     .foregroundStyle(CRTheme.inkSubtle)
                                     .multilineTextAlignment(.center)
