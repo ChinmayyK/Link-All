@@ -480,24 +480,21 @@ struct CRShortcutHint: View {
 
 // MARK: - Status Dot
 
+/// A still dot with a soft halo when online. It used to pulse forever,
+/// which redrew the whole window every frame while any device was connected.
 struct StatusDot: View {
     var isOnline: Bool
     var size: CGFloat = 8
-    @State private var pulse = false
     var body: some View {
         ZStack {
             if isOnline {
                 Circle()
                     .fill(CRTheme.accentGreen.opacity(0.20))
-                    .frame(width: size + 9, height: size + 9)
-                    .scaleEffect(pulse ? 2.1 : 1.0)
-                    .opacity(pulse ? 0 : 0.45)
-                    .animation(.easeOut(duration: 1.6).repeatForever(autoreverses: false), value: pulse)
+                    .frame(width: size + 6, height: size + 6)
             }
             Circle().fill(isOnline ? CRTheme.accentGreen : CRTheme.inkSubtle).frame(width: size, height: size)
         }
-        .onAppear { if isOnline { pulse = true } }
-        .onChange(of: isOnline) { v in pulse = v }
+        .animation(.crFast, value: isOnline)
     }
 }
 
@@ -603,8 +600,6 @@ struct CREmptyState: View {
     var accent: Color = CRTheme.accentBlue
     var actionLabel: String? = nil
     var onAction: (() -> Void)? = nil
-    @State private var isFloating = false
-
     var body: some View {
         VStack(spacing: 14) {
             ZStack {
@@ -613,10 +608,7 @@ struct CREmptyState: View {
                 Image(systemName: systemImage)
                     .font(.system(size: 24, weight: .light)).foregroundStyle(accent.opacity(0.48))
                     .symbolRenderingMode(.hierarchical)
-                    .offset(y: isFloating ? -4 : 4)
-                    .animation(.easeInOut(duration: 2.0).repeatForever(autoreverses: true), value: isFloating)
             }
-            .onAppear { isFloating = true }
             VStack(spacing: 5) {
                 Text(title).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(CRTheme.ink)
                 Text(message).font(.system(size: 12)).foregroundStyle(CRTheme.inkSoft)
@@ -887,9 +879,7 @@ struct CRFluidBackgroundView: View {
             }
         }
         .ignoresSafeArea()
-        .onAppear {
-            isAnimating = true
-        }
+        .whileWindowVisible($isAnimating)
     }
 }
 
@@ -963,5 +953,66 @@ struct CRFontModifier: ViewModifier {
 extension View {
     func crFont(size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default) -> some View {
         modifier(CRFontModifier(size: size, weight: weight, design: design))
+    }
+}
+
+// MARK: - Window Visibility
+
+/// Reports whether the hosting window is on screen. SwiftUI keeps looping
+/// animations running in a closed (ordered-out) window, so a view that loops
+/// uses this to stop while nobody can see it.
+struct WindowVisibilityReader: NSViewRepresentable {
+    let onChange: (Bool) -> Void
+
+    func makeNSView(context: Context) -> NSView { VisibilityView(onChange: onChange) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    final class VisibilityView: NSView {
+        private let onChange: (Bool) -> Void
+        private var token: NSObjectProtocol?
+
+        init(onChange: @escaping (Bool) -> Void) {
+            self.onChange = onChange
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+        deinit { if let token { NotificationCenter.default.removeObserver(token) } }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let token { NotificationCenter.default.removeObserver(token) }
+            token = nil
+            guard let window else { report(false); return }
+            token = NotificationCenter.default.addObserver(
+                forName: NSWindow.didChangeOcclusionStateNotification, object: window, queue: .main
+            ) { [weak self, weak window] _ in
+                self?.report(window?.occlusionState.contains(.visible) ?? false)
+            }
+            report(window.occlusionState.contains(.visible))
+        }
+
+        // Async: this can run during a SwiftUI update, where state changes
+        // are not allowed.
+        private func report(_ visible: Bool) {
+            DispatchQueue.main.async { [onChange] in onChange(visible) }
+        }
+    }
+}
+
+extension View {
+    /// Sets `flag` while the hosting window is on screen and clears it,
+    /// without animating, while it isn't. A looping animation keyed on
+    /// `flag` then stops in a closed window instead of redrawing it forever.
+    func whileWindowVisible(_ flag: Binding<Bool>) -> some View {
+        background(WindowVisibilityReader { visible in
+            if visible {
+                flag.wrappedValue = true
+            } else {
+                var still = Transaction()
+                still.disablesAnimations = true
+                withTransaction(still) { flag.wrappedValue = false }
+            }
+        })
     }
 }

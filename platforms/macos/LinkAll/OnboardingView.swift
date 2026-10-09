@@ -120,11 +120,8 @@ private struct BackgroundRadarGlow: View {
                 .opacity(pulse ? 0 : 1)
         }
         .offset(y: 40)
-        .onAppear {
-            withAnimation(.easeOut(duration: 3.5).repeatForever(autoreverses: false)) {
-                pulse = true
-            }
-        }
+        .animation(.easeOut(duration: 3.5).repeatForever(autoreverses: false), value: pulse)
+        .whileWindowVisible($pulse)
     }
 }
 
@@ -434,7 +431,7 @@ private struct RadarPulseView: View {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(CRTheme.brandElectric)
-                        .symbolEffect(.variableColor.cumulative, options: .repeating)
+                        .symbolEffect(.variableColor.cumulative, options: .repeating, isActive: isPulsing)
                 } else {
                     Image(systemName: "antenna.radiowaves.left.and.right")
                         .font(.system(size: 24, weight: .semibold))
@@ -442,9 +439,7 @@ private struct RadarPulseView: View {
                 }
             }
         }
-        .onAppear {
-            isPulsing = true
-        }
+        .whileWindowVisible($isPulsing)
     }
 }
 

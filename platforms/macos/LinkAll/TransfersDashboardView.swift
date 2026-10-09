@@ -234,7 +234,7 @@ struct ActiveTransferCard: View {
                         .scaleEffect(isPulsing && isTransferring ? 1.05 : 1.0)
                         .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
                 }
-                .onAppear { isPulsing = true }
+                .whileWindowVisible($isPulsing)
                 
                 // Details
                 VStack(alignment: .leading, spacing: 4) {

@@ -672,12 +672,7 @@ struct UntrustedDeviceCard: View {
                     .foregroundStyle(CRTheme.accentOrange)
             }
             
-            .onAppear {
-                if scenePhase == .active { pulse = true }
-            }
-            .onChange(of: scenePhase) { phase in
-                pulse = phase == .active
-            }
+            .whileWindowVisible($pulse)
             VStack(alignment: .leading, spacing: 6) {
                 Text(device.name)
                     .font(.system(size: 16, weight: .bold, design: .rounded))

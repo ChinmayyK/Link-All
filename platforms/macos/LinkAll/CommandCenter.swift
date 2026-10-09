@@ -595,7 +595,6 @@ struct ActivityRow: View {
 // MARK: - Right Column
 struct LiveDevicePanel: View {
     @ObservedObject var store: LinkAllStore
-    @State private var isPulsing = false
     
     private var device: ManagedDevice? {
         store.defaultTargetDevice
@@ -613,27 +612,27 @@ struct LiveDevicePanel: View {
                             .foregroundStyle(CRTheme.ink)
                         
                         HStack(spacing: 6) {
-                            Circle()
-                                .fill(CRTheme.accentGreen)
-                                .frame(width: 8, height: 8)
-                                .scaleEffect(isPulsing ? 1.4 : 1.0)
-                                .opacity(isPulsing ? 0.6 : 1.0)
-                                .animation(.easeInOut(duration: 1).repeatForever(), value: isPulsing)
+                            // Still: a forever pulse here redrew the window
+                            // every frame, even while it was closed.
+                            StatusDot(isOnline: true, size: 8)
                             
                             Text("Connected")
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(CRTheme.accentGreen)
                             
-                            Text("· Wi-Fi 6")
-                                .font(.system(size: 13))
-                                .foregroundStyle(CRTheme.inkSoft)
+                            if let net = store.peerNetworks.first(where: { $0.deviceId == dev.id }) {
+                                Text("· \(net.networkType)")
+                                    .font(.system(size: 13))
+                                    .foregroundStyle(CRTheme.inkSoft)
+                            }
                             
-                            Text("· \(dev.endpoint ?? "192.168.x.x")")
-                                .font(.system(size: 13, design: .monospaced))
-                                .foregroundStyle(CRTheme.inkSoft)
+                            if let endpoint = dev.endpoint {
+                                Text("· \(endpoint)")
+                                    .font(.system(size: 13, design: .monospaced))
+                                    .foregroundStyle(CRTheme.inkSoft)
+                            }
                         }
                     }
-                    .onAppear { isPulsing = true }
                     
                     // Battery Row
                     if let bat = store.peerBatteries.first(where: { $0.deviceId == dev.id }) {
@@ -989,13 +988,24 @@ struct RadarEmptyStateView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear {
-            withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
-                rotation = 360
+        // Spins only while the window is on screen; closed, it kept the app
+        // redrawing at full frame rate whenever no device was connected.
+        .background(WindowVisibilityReader { visible in
+            if visible {
+                withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+                    rotation = 360
+                }
+                withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    opacityPulse = 0.0
+                }
+            } else {
+                var still = Transaction()
+                still.disablesAnimations = true
+                withTransaction(still) {
+                    rotation = 0
+                    opacityPulse = 0.4
+                }
             }
-            withAnimation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                opacityPulse = 0.0
-            }
-        }
+        })
     }
 }
