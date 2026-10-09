@@ -530,17 +530,6 @@ struct SidebarRowView: View {
                     .position(x: rect.midX, y: rect.midY)
             }
             
-            // Floating Batch Action Bar
-            if !selectedFiles.isEmpty {
-                VStack {
-                    Spacer()
-                    batchActionBar
-                        .padding(.bottom, 32)
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity).combined(with: .scale(scale: 0.95)))
-                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: selectedFiles.isEmpty)
-                .zIndex(100)
-            }
         }
         .coordinateSpace(name: "CanvasSpace")
         .contentShape(Rectangle()) // Make empty areas draggable
@@ -908,71 +897,70 @@ struct SidebarRowView: View {
     }
     
     // MARK: - Floating Batch Action Bar
+    // One dark pill, like Finder's and Photos' selection bars: the count on
+    // one line, a filled Download, a quieter Delete, and a clear-selection
+    // button. Dark in both appearances so it stands off any thumbnail grid.
     private var floatingBatchActionBar: some View {
-        HStack(spacing: 20) {
-            HStack(spacing: 8) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color.white)
+        HStack(spacing: 14) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("\(selectedFiles.count) selected")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.white)
-                Text("(\(formatSize(totalSelectedBytes())))")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.7))
+                Text(formatSize(totalSelectedBytes()))
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(0.6))
             }
-            
-            Spacer()
-            
-            Button {
-                pullSelectedBatch()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "arrow.down.to.line.alt")
-                    Text("Download to Mac")
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color.white)
-                .foregroundStyle(Color.black)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .fixedSize()
+            .padding(.leading, 4)
+
+            Spacer(minLength: 8)
+
+            Button { pullSelectedBatch() } label: {
+                Label("Download", systemImage: "arrow.down.circle.fill")
             }
-            .buttonStyle(.plain)
-            
-            Button {
-                askDeleteBatch()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "trash")
-                    Text("Delete")
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(CRTheme.surfaceElevated)
-                .foregroundStyle(CRTheme.accentRed)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .buttonStyle(BatchBarButtonStyle(fill: CRTheme.accentBlue, ink: .white))
+            .keyboardShortcut(.return, modifiers: .command)
+            .help("Download to this Mac (⌘↩)")
+
+            Button { askDeleteBatch() } label: {
+                Label("Delete", systemImage: "trash")
             }
-            .buttonStyle(.plain)
-            
+            .buttonStyle(BatchBarButtonStyle(fill: CRTheme.accentRed.opacity(0.18), ink: Color(red: 1, green: 0.45, blue: 0.42)))
+            .help("Delete from the phone")
+
+            Rectangle()
+                .fill(Color.white.opacity(0.14))
+                .frame(width: 1, height: 22)
+
             Button {
-                withAnimation { selectedFiles.removeAll() }
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { selectedFiles.removeAll() }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Color.white.opacity(0.8))
+                    .font(.system(size: 11, weight: .bold))
+                    .frame(width: 26, height: 26)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(BatchBarButtonStyle(fill: Color.white.opacity(0.10), ink: Color.white.opacity(0.85), round: true))
+            .keyboardShortcut(.cancelAction)
+            .help("Clear selection (Esc)")
+            .accessibilityLabel("Clear selection")
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 14)
-        .frame(width: 500)
-        .background(.ultraThinMaterial)
-        .background(Color.black.opacity(0.6)) // Fallback contrast
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .shadow(color: Color.black.opacity(0.3), radius: 20, x: 0, y: 10)
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .padding(.vertical, 10)
+        .frame(minWidth: 380)
+        .fixedSize()
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(white: 0.11).opacity(0.94))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.10), lineWidth: 0.5)
+        )
+        .shadow(color: Color.black.opacity(0.28), radius: 18, x: 0, y: 8)
+        .environment(\.colorScheme, .dark)
     }
-    
+
     // MARK: - Right Inspector Redesign (Progressive Disclosure)
     private var inspectorView: some View {
         VStack(spacing: 0) {
@@ -1553,58 +1541,6 @@ struct SidebarRowView: View {
             }
         }
     }
-    
-    // MARK: - Batch Action Bar
-    private var batchActionBar: some View {
-        HStack(spacing: 16) {
-            Text("\(selectedFiles.count) selected")
-                .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(CRTheme.ink)
-            
-            Divider()
-                .frame(height: 20)
-                .background(CRTheme.stroke)
-            
-            Button {
-                let selected = result?.files.filter { selectedFiles.contains($0.file_id) } ?? []
-                for file in selected { pullFile(file) }
-            } label: {
-                Label("Download", systemImage: "arrow.down.circle.fill")
-                    .font(.system(size: 13, weight: .bold))
-            }
-            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.brandElectric))
-            
-            Button {
-                askDeleteBatch()
-            } label: {
-                Label("Delete", systemImage: "trash.fill")
-                    .font(.system(size: 13, weight: .bold))
-            }
-            .buttonStyle(PBPrimaryButtonStyle(tint: CRTheme.accentRed))
-            
-            Button {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                    selectedFiles.removeAll()
-                }
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(CRTheme.inkSubtle)
-                    .padding(4)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
-        .background(CRTheme.surface.opacity(0.85))
-        .background(.ultraThinMaterial)
-        .clipShape(Capsule())
-        .overlay(
-            Capsule()
-                .strokeBorder(CRTheme.stroke.opacity(0.8), lineWidth: 0.5)
-        )
-        .shadow(color: Color.black.opacity(0.12), radius: 24, x: 0, y: 12)
-    }
 }
 
 // MARK: - Marquee Selection Preference Key
@@ -1617,5 +1553,44 @@ struct FileFramePreferenceKey: PreferenceKey {
     static var defaultValue: [FileFrameData] = []
     static func reduce(value: inout [FileFrameData], nextValue: () -> [FileFrameData]) {
         value.append(contentsOf: nextValue())
+    }
+}
+
+/// Buttons on the selection bar: a filled capsule-ish shape that brightens
+/// on hover and dips when pressed.
+private struct BatchBarButtonStyle: ButtonStyle {
+    let fill: Color
+    let ink: Color
+    var round: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        BatchBarButton(configuration: configuration, fill: fill, ink: ink, round: round)
+    }
+
+    private struct BatchBarButton: View {
+        let configuration: ButtonStyleConfiguration
+        let fill: Color
+        let ink: Color
+        let round: Bool
+        @State private var hovered = false
+
+        var body: some View {
+            configuration.label
+                .font(.system(size: 13, weight: .semibold))
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(ink)
+                .padding(.horizontal, round ? 0 : 14)
+                .frame(height: round ? 26 : 30)
+                .background(
+                    RoundedRectangle(cornerRadius: round ? 13 : 8, style: .continuous)
+                        .fill(fill)
+                        .brightness(configuration.isPressed ? -0.06 : (hovered ? 0.06 : 0))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: round ? 13 : 8, style: .continuous))
+                .scaleEffect(configuration.isPressed ? 0.97 : 1)
+                .animation(.crFast, value: hovered)
+                .animation(.crFast, value: configuration.isPressed)
+                .onHover { hovered = $0 }
+        }
     }
 }
