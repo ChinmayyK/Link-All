@@ -4,7 +4,7 @@
   change so every step has a measured number.
 
     pwsh scripts\windows-size.ps1 publish\windows
-    pwsh scripts\windows-size.ps1 publish\windows Deskdrop-windows-x64.msi
+    pwsh scripts\windows-size.ps1 publish\windows Link All-windows-x64.msi
 #>
 param(
     [Parameter(Mandatory)] [string] $PublishDir,

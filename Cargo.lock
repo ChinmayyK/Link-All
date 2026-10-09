@@ -519,86 +519,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
 
 [[package]]
-name = "deskdrop-cli"
-version = "1.4.0"
-dependencies = [
- "anyhow",
- "deskdrop-core",
- "dirs",
- "serde_json",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "deskdrop-core"
-version = "1.4.0"
-dependencies = [
- "aes-gcm",
- "anyhow",
- "base64 0.21.7",
- "bytes",
- "chacha20poly1305",
- "criterion",
- "dashmap",
- "dhat",
- "dirs",
- "hex",
- "hkdf",
- "hmac",
- "hostname",
- "if-addrs 0.13.4",
- "image 0.24.9",
- "jni",
- "libc",
- "lz4_flex",
- "mdns-sd",
- "memmap2",
- "ndk-context",
- "netdev",
- "postcard",
- "rand",
- "serde",
- "serde_json",
- "sha2",
- "socket2 0.5.10",
- "tempfile",
- "thiserror 1.0.69",
- "tokio",
- "tokio-test",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "uuid",
- "whoami",
- "windows-sys 0.61.2",
- "x25519-dalek",
- "zeroize",
-]
-
-[[package]]
-name = "deskdrop-linux"
-version = "1.4.0"
-dependencies = [
- "anyhow",
- "arboard",
- "deskdrop-core",
- "dirs",
- "image 0.25.10",
- "libc",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "deskdrop-tray"
-version = "1.4.0"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "dhat"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1122,6 +1042,86 @@ dependencies = [
  "libc",
  "plain",
  "redox_syscall 0.9.0",
+]
+
+[[package]]
+name = "linkall-cli"
+version = "1.4.0"
+dependencies = [
+ "anyhow",
+ "dirs",
+ "linkall-core",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "linkall-core"
+version = "1.4.0"
+dependencies = [
+ "aes-gcm",
+ "anyhow",
+ "base64 0.21.7",
+ "bytes",
+ "chacha20poly1305",
+ "criterion",
+ "dashmap",
+ "dhat",
+ "dirs",
+ "hex",
+ "hkdf",
+ "hmac",
+ "hostname",
+ "if-addrs 0.13.4",
+ "image 0.24.9",
+ "jni",
+ "libc",
+ "lz4_flex",
+ "mdns-sd",
+ "memmap2",
+ "ndk-context",
+ "netdev",
+ "postcard",
+ "rand",
+ "serde",
+ "serde_json",
+ "sha2",
+ "socket2 0.5.10",
+ "tempfile",
+ "thiserror 1.0.69",
+ "tokio",
+ "tokio-test",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+ "whoami",
+ "windows-sys 0.61.2",
+ "x25519-dalek",
+ "zeroize",
+]
+
+[[package]]
+name = "linkall-linux"
+version = "1.4.0"
+dependencies = [
+ "anyhow",
+ "arboard",
+ "dirs",
+ "image 0.25.10",
+ "libc",
+ "linkall-core",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "linkall-tray"
+version = "1.4.0"
+dependencies = [
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

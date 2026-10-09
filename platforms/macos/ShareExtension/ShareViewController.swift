@@ -4,7 +4,7 @@ class ShareViewController: NSViewController {
     
     override func loadView() {
         self.view = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 50))
-        let label = NSTextField(labelWithString: "Sending via Deskdrop...")
+        let label = NSTextField(labelWithString: "Sending via Link All...")
         label.frame = self.view.bounds
         label.alignment = .center
         self.view.addSubview(label)
@@ -44,9 +44,9 @@ class ShareViewController: NSViewController {
         
         group.notify(queue: .main) {
             if !sharedItems.isEmpty {
-                // Determine the App Group identifier, usually TeamID.com.deskdrop or group.com.deskdrop
+                // Determine the App Group identifier, usually TeamID.app.linkall or group.app.linkall
                 // Here we fallback to standard UserDefaults if App Group fails
-                let defaults = UserDefaults(suiteName: "group.com.deskdrop") ?? UserDefaults.standard
+                let defaults = UserDefaults(suiteName: "group.app.linkall") ?? UserDefaults.standard
                 var queue = defaults.stringArray(forKey: "SharedItemsQueue") ?? []
                 queue.append(contentsOf: sharedItems)
                 defaults.set(queue, forKey: "SharedItemsQueue")
@@ -54,7 +54,7 @@ class ShareViewController: NSViewController {
                 
                 // Trigger Darwin Notification so the main app picks it up
                 let center = CFNotificationCenterGetDarwinNotifyCenter()
-                let notificationName = CFStringCreateWithCString(nil, "com.deskdrop.sharedItemReceived", CFStringBuiltInEncodings.UTF8.rawValue)
+                let notificationName = CFStringCreateWithCString(nil, "app.linkall.sharedItemReceived", CFStringBuiltInEncodings.UTF8.rawValue)
                 CFNotificationCenterPostNotification(center, notificationName, nil, nil, true)
             }
             

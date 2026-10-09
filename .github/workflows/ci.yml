@@ -44,8 +44,8 @@ jobs:
         with:
           workspaces: |
             .
-            deskdrop-core
-            deskdrop-cli
+            linkall-core
+            linkall-cli
             platforms/linux
 
       - name: Install Linux system deps
@@ -148,7 +148,7 @@ jobs:
 
       - name: Build for ${{ matrix.target }}
         run: |
-          cargo ndk -t ${{ matrix.target }} build --lib --release -p deskdrop-core
+          cargo ndk -t ${{ matrix.target }} build --lib --release -p linkall-core
         env:
           ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/26.1.10909125
 
@@ -164,7 +164,7 @@ jobs:
         uses: swatinem/rust-cache@v2
 
       - name: Build macOS dylib
-        run: cargo build --release -p deskdrop-core
+        run: cargo build --release -p linkall-core
 
       - name: Build macOS app
         run: ./scripts/build-macos.sh --release
@@ -187,16 +187,16 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Build Windows DLL
-        run: cargo build --release -p deskdrop-core
+        run: cargo build --release -p linkall-core
 
       - name: Build C# project
         run: |
           # Create a stub DLL so the csproj can resolve the native ref.
-          New-Item -ItemType Directory -Force -Path platforms\windows\Deskdrop.WinUI\
-          Copy-Item target\release\deskdrop_core.dll `
-                    platforms\windows\Deskdrop.WinUI\deskdrop_core.dll `
+          New-Item -ItemType Directory -Force -Path platforms\windows\LinkAll.WinUI\
+          Copy-Item target\release\linkall_core.dll `
+                    platforms\windows\LinkAll.WinUI\linkall_core.dll `
                     -ErrorAction SilentlyContinue
-          dotnet build platforms\windows\Deskdrop.WinUI\Deskdrop.WinUI.csproj `
+          dotnet build platforms\windows\LinkAll.WinUI\LinkAll.WinUI.csproj `
             -c Release
 
   # ── Security audit ────────────────────────────────────────────────────────

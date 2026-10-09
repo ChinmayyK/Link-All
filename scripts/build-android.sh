@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-android.sh — Build the Deskdrop Android APK
+# build-android.sh — Build the Link All Android APK
 #
 # Requirements:
 #   - Rust + cargo-ndk:  cargo install cargo-ndk
@@ -18,12 +18,12 @@ log() { echo "▶ $*"; }
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CORE_DIR="${REPO_ROOT}/deskdrop-core"
+CORE_DIR="${REPO_ROOT}/linkall-core"
 ANDROID_DIR="${REPO_ROOT}/platforms/android"
 SDK_ROOT_DEFAULT="${HOME}/Library/Android/sdk"
 BREW_SDK_ROOT="/opt/homebrew/share/android-commandlinetools"
 BREW_NDK_ROOT="/opt/homebrew/share/android-ndk"
-ICON_SRC="${REPO_ROOT}/platforms/macos/Deskdrop/Resources/AppIconSource.png"
+ICON_SRC="${REPO_ROOT}/platforms/macos/LinkAll/Resources/AppIconSource.png"
 LOCAL_PROPERTIES_PATH="${ANDROID_DIR}/local.properties"
 BRAND_DRAWABLE_DIR="${ANDROID_DIR}/app/src/main/res/drawable-nodpi"
 
@@ -100,9 +100,9 @@ generate_android_brand_asset() {
 
     mkdir -p "${BRAND_DRAWABLE_DIR}"
     if command -v sips >/dev/null 2>&1; then
-        sips -s format png -z 512 512 "${ICON_SRC}" --out "${BRAND_DRAWABLE_DIR}/deskdrop_logo.png" >/dev/null
+        sips -s format png -z 512 512 "${ICON_SRC}" --out "${BRAND_DRAWABLE_DIR}/linkall_logo.png" >/dev/null
     else
-        cp "${ICON_SRC}" "${BRAND_DRAWABLE_DIR}/deskdrop_logo.png"
+        cp "${ICON_SRC}" "${BRAND_DRAWABLE_DIR}/linkall_logo.png"
     fi
 }
 

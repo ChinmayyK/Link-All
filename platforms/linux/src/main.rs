@@ -1,9 +1,9 @@
-//! Deskdrop Linux — headless daemon + optional GTK4 tray.
+//! Link All Linux — headless daemon + optional GTK4 tray.
 //! Without --features gtk, runs as a pure headless daemon.
 //!
 //! Key guarantees vs the original:
 //!  • No echo loop — suppress counter prevents re-pushing received clipboard.
-//!  • IPC socket started so deskdrop-cli works on Linux.
+//!  • IPC socket started so linkall-cli works on Linux.
 //!  • TOFU prompts give actionable CLI instructions.
 //!  • notify-send is rate-limited (max 1 per 2 s).
 //!  • Clipboard poll backs off to 500 ms when idle.
@@ -11,7 +11,7 @@
 //!  • Image clipboard applied via arboard (PNG).
 
 #[cfg(target_os = "linux")]
-use deskdrop_core::{
+use linkall_core::{
     engine::{Engine, EngineConfig, EngineEvent},
     protocol::ClipboardContent,
 };
@@ -57,7 +57,7 @@ fn should_suppress() -> bool {
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    println!("deskdrop-linux is only supported on Linux");
+    println!("linkall-linux is only supported on Linux");
 }
 
 #[cfg(target_os = "linux")]
@@ -67,7 +67,7 @@ fn main() {
     }
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_env("DESKDROP_LOG")
+            tracing_subscriber::EnvFilter::try_from_env("LINKALL_LOG")
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
         )
         .init();
@@ -78,27 +78,27 @@ fn main() {
 
     let engine = Arc::new(
         rt.block_on(Engine::start(config, event_tx))
-            .expect("Deskdrop engine failed to start"),
+            .expect("Link All engine failed to start"),
     );
 
     tracing::info!(
-        "Deskdrop Linux started. IPC socket: {:?}",
-        deskdrop_core::ipc::socket_path()
+        "Link All Linux started. IPC socket: {:?}",
+        linkall_core::ipc::socket_path()
     );
 
     // ── IPC server ────────────────────────────────────────────────────────────
-    // Starts the Unix socket so `deskdrop-cli` can communicate with us.
+    // Starts the Unix socket so `linkall-cli` can communicate with us.
     // The IPC server deserializes commands, calls engine methods, and returns JSON.
     {
         let engine_ipc = engine.clone();
         rt.block_on(async move {
             // The IPC server takes a callback that maps IpcRequest → IpcResponse.
             // We reuse the same handler used by the standalone daemon binary.
-            let result = deskdrop_core::ipc::server::spawn_with_engine(engine_ipc).await;
+            let result = linkall_core::ipc::server::spawn_with_engine(engine_ipc).await;
             match result {
                 Ok(()) => tracing::info!(
                     "IPC server listening at {:?}",
-                    deskdrop_core::ipc::socket_path()
+                    linkall_core::ipc::socket_path()
                 ),
                 Err(err) => tracing::warn!("IPC server failed to start: {err:#}"),
             }
@@ -186,7 +186,7 @@ fn main() {
         }
 
         tracing::info!("Cleaning up resources...");
-        let _ = std::fs::remove_file(deskdrop_core::ipc::socket_path());
+        let _ = std::fs::remove_file(linkall_core::ipc::socket_path());
     });
 }
 
@@ -207,7 +207,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
                 match apply_clipboard_content(&content) {
                     Ok(()) => rate_limited_notify(
                         last_notify,
-                        "Deskdrop",
+                        "Link All",
                         &format!("Clipboard from {from_name}"),
                     ),
                     Err(e) => {
@@ -243,7 +243,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
             tracing::info!("connected to {}", device_name);
             rate_limited_notify(
                 last_notify,
-                "Deskdrop",
+                "Link All",
                 &format!("Connected to {device_name}"),
             );
         }
@@ -253,7 +253,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
         }
 
         // New device wants to pair.
-        // Headless: log prominently + notify; user responds via deskdrop-cli.
+        // Headless: log prominently + notify; user responds via linkall-cli.
         EngineEvent::PairingRequested {
             device_id,
             device_name,
@@ -270,8 +270,8 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
             tracing::warn!(
                 "🔐 Pairing request from '{}' ({})\n   Code:\n{fp}\n\n\
                  Accept only if the other device shows the same code:\n\
-                 To accept:  deskdrop-cli pair accept {}\n\
-                 To decline: deskdrop-cli pair decline {}",
+                 To accept:  linkall-cli pair accept {}\n\
+                 To decline: linkall-cli pair decline {}",
                 device_name,
                 device_id,
                 device_id,
@@ -281,7 +281,7 @@ async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &m
             rate_limited_notify(
                 last_notify,
                 &format!("{device_name} wants to pair · code {pin}"),
-                &format!("Run: deskdrop-cli pair accept {device_id}"),
+                &format!("Run: linkall-cli pair accept {device_id}"),
             );
         }
 
@@ -346,8 +346,8 @@ fn rate_limited_notify(last: &mut Instant, summary: &str, body: &str) {
 fn notify(summary: &str, body: &str) {
     let _ = std::process::Command::new("notify-send")
         .args([
-            "--app-name=Deskdrop",
-            "--icon=deskdrop",
+            "--app-name=Link All",
+            "--icon=linkall",
             "--urgency=normal",
             "--expire-time=3000",
             summary,

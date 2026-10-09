@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "deskdrop-core",
-    "deskdrop-cli",
+    "linkall-core",
+    "linkall-cli",
     "platforms/linux",
     "platforms/windows/tray",
 ]
@@ -10,7 +10,7 @@ resolver = "2"
 [workspace.package]
 version = "1.4.0"
 edition = "2021"
-authors = ["Deskdrop Contributors"]
+authors = ["Link All Contributors"]
 license = "AGPL-3.0-only"
 
 [profile.release]

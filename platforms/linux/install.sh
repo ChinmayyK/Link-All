@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deskdrop Linux installer
+# Link All Linux installer
 # Usage: ./install.sh [--uninstall]
 #
 # Installs the daemon binary, systemd user service, and .desktop file.
@@ -7,8 +7,8 @@
 
 set -euo pipefail
 
-BIN_NAME="deskdrop-gtk"
-CLI_NAME="deskdrop-cli"
+BIN_NAME="linkall-gtk"
+CLI_NAME="linkall-cli"
 INSTALL_DIR="$HOME/.local/bin"
 SERVICE_DIR="$HOME/.config/systemd/user"
 DESKTOP_DIR="$HOME/.local/share/applications"
@@ -25,23 +25,23 @@ bold()   { echo -e "\033[1m$*\033[0m"; }
 # ── Uninstall ─────────────────────────────────────────────────────────────────
 
 if [[ "${1:-}" == "--uninstall" ]]; then
-    bold "Uninstalling Deskdrop…"
-    systemctl --user stop    deskdrop.service 2>/dev/null || true
-    systemctl --user disable deskdrop.service 2>/dev/null || true
-    rm -f "$SERVICE_DIR/deskdrop.service"
-    rm -f "$DESKTOP_DIR/deskdrop.desktop"
-    find "$ICON_DIR" -name deskdrop.png -path '*/apps/*' -delete 2>/dev/null || true
+    bold "Uninstalling Link All…"
+    systemctl --user stop    linkall.service 2>/dev/null || true
+    systemctl --user disable linkall.service 2>/dev/null || true
+    rm -f "$SERVICE_DIR/linkall.service"
+    rm -f "$DESKTOP_DIR/linkall.desktop"
+    find "$ICON_DIR" -name linkall.png -path '*/apps/*' -delete 2>/dev/null || true
     rm -f "$INSTALL_DIR/$BIN_NAME"
     rm -f "$INSTALL_DIR/$CLI_NAME"
     systemctl --user daemon-reload 2>/dev/null || true
     update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-    green "Deskdrop uninstalled."
+    green "Link All uninstalled."
     exit 0
 fi
 
 # ── Pre-flight checks ─────────────────────────────────────────────────────────
 
-bold "Deskdrop Linux Installer"
+bold "Link All Linux Installer"
 echo ""
 
 # Check for required tools.
@@ -88,10 +88,10 @@ fi
 # Systemd user service.
 echo "Installing systemd user service…"
 # Substitute actual binary path.
-sed "s|/usr/local/bin/deskdrop-gtk|$INSTALL_DIR/$BIN_NAME|g" \
-    "$SCRIPT_DIR/deskdrop.service" > "$SERVICE_DIR/deskdrop.service"
+sed "s|/usr/local/bin/linkall-gtk|$INSTALL_DIR/$BIN_NAME|g" \
+    "$SCRIPT_DIR/linkall.service" > "$SERVICE_DIR/linkall.service"
 
-# Icons: the Deskdrop logo at each size the desktop asks for.
+# Icons: the Link All logo at each size the desktop asks for.
 echo "Installing icons…"
 mkdir -p "$ICON_DIR"
 cp -r "$SCRIPT_DIR/icons/hicolor/." "$ICON_DIR/"
@@ -99,33 +99,33 @@ gtk-update-icon-cache -q -t "$ICON_DIR" 2>/dev/null || true
 
 # .desktop file.
 echo "Installing desktop entry…"
-sed "s|/usr/local/bin/deskdrop-gtk|$INSTALL_DIR/$BIN_NAME|g;s|/usr/local/bin/deskdrop-cli|$INSTALL_DIR/$CLI_NAME|g" \
-    "$SCRIPT_DIR/deskdrop.desktop" > "$DESKTOP_DIR/deskdrop.desktop"
+sed "s|/usr/local/bin/linkall-gtk|$INSTALL_DIR/$BIN_NAME|g;s|/usr/local/bin/linkall-cli|$INSTALL_DIR/$CLI_NAME|g" \
+    "$SCRIPT_DIR/linkall.desktop" > "$DESKTOP_DIR/linkall.desktop"
 
 # ── Enable service ────────────────────────────────────────────────────────────
 
 systemctl --user daemon-reload
 
-if systemctl --user is-active deskdrop.service &>/dev/null; then
-    echo "Restarting Deskdrop service…"
-    systemctl --user restart deskdrop.service
+if systemctl --user is-active linkall.service &>/dev/null; then
+    echo "Restarting Link All service…"
+    systemctl --user restart linkall.service
 else
-    echo "Enabling and starting Deskdrop service…"
-    systemctl --user enable --now deskdrop.service
+    echo "Enabling and starting Link All service…"
+    systemctl --user enable --now linkall.service
 fi
 
 update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-xdg-mime default deskdrop.desktop x-scheme-handler/deskdrop 2>/dev/null || true
+xdg-mime default linkall.desktop x-scheme-handler/linkall 2>/dev/null || true
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 
 echo ""
-green "✅ Deskdrop installed successfully."
+green "✅ Link All installed successfully."
 echo ""
-echo "  Status: systemctl --user status deskdrop"
-echo "  Logs:   journalctl --user -u deskdrop -f"
-echo "  Stop:   systemctl --user stop deskdrop"
+echo "  Status: systemctl --user status linkall"
+echo "  Logs:   journalctl --user -u linkall -f"
+echo "  Stop:   systemctl --user stop linkall"
 echo "  Remove: $SCRIPT_DIR/install.sh --uninstall"
 echo ""
-echo "Deskdrop is now running in the background."
+echo "Link All is now running in the background."
 echo "It will discover nearby devices automatically via mDNS."

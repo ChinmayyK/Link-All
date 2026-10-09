@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "LinkAll.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "LinkAll.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

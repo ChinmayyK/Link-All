@@ -1,0 +1,195 @@
+<Window
+    x:Class="LinkAll.WinUI.QuickAccessWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:local="using:LinkAll.WinUI"
+    xmlns:services="using:LinkAll.WinUI.Services"
+    mc:Ignorable="d"
+    Title="Quick access">
+
+    <Window.SystemBackdrop>
+        <MicaBackdrop />
+    </Window.SystemBackdrop>
+
+    <!--
+        Keyboard-summoned launcher. Headline and status, search, a row of
+        target devices, then the clipboard timeline as one grouped list.
+        Diagnostics and quit sit in a footer so the header stays clear of
+        the caption buttons.
+    -->
+    <Grid Background="{ThemeResource AppBackgroundBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Border x:Name="AppTitleBar" Height="36" Grid.Row="0" Background="Transparent" />
+
+        <!-- Headline -->
+        <StackPanel Grid.Row="1" Padding="20,4,20,0" Spacing="4">
+            <TextBlock Text="Quick access" Style="{StaticResource AppPageTitle}" />
+            <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}"
+                       Style="{StaticResource AppSecondary}"
+                       TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <!-- Search -->
+        <AutoSuggestBox x:Name="TxtSearch" Grid.Row="2"
+                        Margin="20,16,20,0"
+                        PlaceholderText="Search clipboard history"
+                        QueryIcon="Find"
+                        TextChanged="TxtSearch_TextChanged"
+                        AutomationProperties.Name="Search clipboard history" />
+
+        <!-- Target devices -->
+        <StackPanel Grid.Row="3" Padding="20,20,20,0" Spacing="10">
+            <TextBlock Text="Send to" Style="{StaticResource AppSectionTitle}" />
+
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"
+                          HorizontalScrollMode="Auto" VerticalScrollMode="Disabled">
+                <ListView SelectionMode="None" Padding="0" x:Name="DeviceTargetsList"
+                          ItemContainerStyle="{StaticResource AppPlainListItem}">
+                    <ListView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="8" />
+                        </ItemsPanelTemplate>
+                    </ListView.ItemsPanel>
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="local:PeerViewModel">
+                            <Button Style="{StaticResource AppSecondaryButton}"
+                                    Padding="12,6"
+                                    Click="DeviceTarget_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Border Width="8" Height="8" CornerRadius="4" VerticalAlignment="Center"
+                                            Background="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(ConnectionColor), Mode=OneWay}" />
+                                    <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </ScrollViewer>
+
+            <!-- Empty state when there is nothing to send to. -->
+            <Border Style="{StaticResource AppCard}"
+                    Padding="{StaticResource CardPaddingCompact}"
+                    Visibility="{x:Bind local:BoolToVisibleConverter.ToVisibility(mgr.HasNoPeers), Mode=OneWay}">
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <FontIcon Grid.Column="0" Glyph="&#xE701;" FontSize="14"
+                              Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                              VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Style="{StaticResource AppSecondary}"
+                               TextWrapping="Wrap"
+                               Text="No devices yet. Pair one from the dashboard to send to it." />
+                </Grid>
+            </Border>
+        </StackPanel>
+
+        <TextBlock Grid.Row="4" Text="Timeline"
+                   Style="{StaticResource AppSectionTitle}"
+                   Margin="20,24,20,10" />
+
+        <!-- Timeline: one grouped panel, rows split by inset hairlines. The
+             panel sizes to its rows and scrolls once it fills the window. -->
+        <Border Grid.Row="5" Style="{StaticResource AppGroupCard}"
+                Margin="20,0,20,16"
+                VerticalAlignment="Top">
+            <!-- The -1 top margin tucks the first row's hairline under the panel border. -->
+            <ListView SelectionMode="None" x:Name="TimelineList"
+                      Padding="0" Margin="0,-1,0,0"
+                      ItemContainerStyle="{StaticResource AppPlainListItem}">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="local:HistoryItem">
+                        <Grid>
+                            <Border Style="{StaticResource AppDivider}"
+                                    Margin="66,0,0,0" VerticalAlignment="Top" />
+                            <Border Background="Transparent"
+                                    Padding="{StaticResource RowPadding}"
+                                    Tapped="HistoryItem_Click"
+                                    services:HoverEffects.EnableCardHover="True">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+
+                                    <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                                            VerticalAlignment="Center">
+                                        <FontIcon Glyph="{x:Bind Glyph}" FontSize="15"
+                                                  Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="{x:Bind display_text}"
+                                                   Style="{StaticResource AppBodyStrong}"
+                                                   TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind path}"
+                                                   Style="{StaticResource AppSecondary}"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   Visibility="{x:Bind local:BoolToVisibleConverter.ToVisibility(HasPath), Mode=OneWay}" />
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2"
+                                                VerticalAlignment="Center"
+                                                services:RevealEffects.RevealOnHover="True">
+                                        <Button Style="{StaticResource AppIconButtonSmall}"
+                                                Click="BtnPinItem_Click"
+                                                ToolTipService.ToolTip="{x:Bind PinTooltip, Mode=OneWay}"
+                                                AutomationProperties.Name="Pin or unpin this item">
+                                            <FontIcon Glyph="&#xE718;" FontSize="12"
+                                                      Foreground="{x:Bind local:StringToBrushConverter.ToSolidColorBrush(PinColor), Mode=OneWay}" />
+                                        </Button>
+                                        <Button Style="{StaticResource AppIconButtonSmall}"
+                                                Click="BtnDeleteItem_Click"
+                                                ToolTipService.ToolTip="Remove"
+                                                AutomationProperties.Name="Remove this item">
+                                            <FontIcon Glyph="&#xE74D;" FontSize="12" />
+                                        </Button>
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Border>
+
+        <!-- Footer -->
+        <Grid Grid.Row="6">
+            <Border Style="{StaticResource AppDivider}" VerticalAlignment="Top" />
+            <StackPanel Orientation="Horizontal" Spacing="4" Padding="12,8,12,8">
+                <Button Style="{StaticResource AppGhostButton}"
+                        Click="BtnHeaderDiagnostics_Click"
+                        ToolTipService.ToolTip="Diagnostics"
+                        AutomationProperties.Name="Diagnostics">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE9D9;" FontSize="13" />
+                        <TextBlock Text="Diagnostics" />
+                    </StackPanel>
+                </Button>
+                <Button Style="{StaticResource AppGhostButton}"
+                        Click="BtnHeaderQuit_Click"
+                        ToolTipService.ToolTip="Quit Link All"
+                        AutomationProperties.Name="Quit Link All">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon Glyph="&#xE711;" FontSize="13" />
+                        <TextBlock Text="Quit" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>

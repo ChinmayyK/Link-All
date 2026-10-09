@@ -1,4 +1,4 @@
-# Deskdrop
+# Link All
 
 <div align="center">
 
@@ -14,7 +14,7 @@
 
   <br />
 
-  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-devices.png" /><img src="assets/screenshots/light/mac-devices.png" width="820" alt="Deskdrop on macOS: a connected phone with its battery and storage, and quick actions" /></picture>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-devices.png" /><img src="assets/screenshots/light/mac-devices.png" width="820" alt="Link All on macOS: a connected phone with its battery and storage, and quick actions" /></picture>
 
   <table>
     <tr>
@@ -22,15 +22,15 @@
       <td align="center"><b>Android</b></td>
     </tr>
     <tr>
-      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-clipboard.png" /><img src="assets/screenshots/light/win-clipboard.png" width="420" alt="Deskdrop on Windows: shared clipboard history" /></picture><br /><br /><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-devices.png" /><img src="assets/screenshots/light/win-devices.png" width="420" alt="Deskdrop on Windows: paired devices" /></picture></td>
-      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-home.png" /><img src="assets/screenshots/light/android-home.png" width="180" alt="Deskdrop on Android: home screen" /></picture> &nbsp; <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-devices.png" /><img src="assets/screenshots/light/android-devices.png" width="180" alt="Deskdrop on Android: devices" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-clipboard.png" /><img src="assets/screenshots/light/win-clipboard.png" width="420" alt="Link All on Windows: shared clipboard history" /></picture><br /><br /><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-devices.png" /><img src="assets/screenshots/light/win-devices.png" width="420" alt="Link All on Windows: paired devices" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-home.png" /><img src="assets/screenshots/light/android-home.png" width="180" alt="Link All on Android: home screen" /></picture> &nbsp; <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-devices.png" /><img src="assets/screenshots/light/android-devices.png" width="180" alt="Link All on Android: devices" /></picture></td>
     </tr>
     <tr>
       <td align="center"><b>macOS menu bar</b></td>
       <td align="center"><b>Transfers on macOS</b></td>
     </tr>
     <tr>
-      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-menubar-card.png" /><img src="assets/screenshots/light/mac-menubar-card.png" width="300" alt="Deskdrop in the macOS menu bar" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-menubar-card.png" /><img src="assets/screenshots/light/mac-menubar-card.png" width="300" alt="Link All in the macOS menu bar" /></picture></td>
       <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-transfers-active.png" /><img src="assets/screenshots/light/mac-transfers-active.png" width="420" alt="A transfer in progress on macOS" /></picture></td>
     </tr>
   </table>
@@ -41,18 +41,18 @@
 
 ## Overview
 
-Deskdrop bridges disparate operating systems (macOS, Windows, Android, Linux) without relying on intermediate cloud infrastructure, proprietary ecosystem lock-in, or external routing servers. All communication takes place point-to-point over local wireless networks (Wi-Fi, LAN, or standalone Wi-Fi Direct / Mobile Hotspot connections).
+Link All bridges disparate operating systems (macOS, Windows, Android, Linux) without relying on intermediate cloud infrastructure, proprietary ecosystem lock-in, or external routing servers. All communication takes place point-to-point over local wireless networks (Wi-Fi, LAN, or standalone Wi-Fi Direct / Mobile Hotspot connections).
 
-At its core sits an event-driven asynchronous **Rust daemon (`deskdrop-core`)**, designed for zero idle resource consumption and low-latency local IPC communication with platform-native graphical frontends. Whether transferring multi-gigabyte payloads or synchronizing high-frequency clipboard updates, Deskdrop relies strictly on local system primitives and explicit end-to-end encryption.
+At its core sits an event-driven asynchronous **Rust daemon (`linkall-core`)**, designed for zero idle resource consumption and low-latency local IPC communication with platform-native graphical frontends. Whether transferring multi-gigabyte payloads or synchronizing high-frequency clipboard updates, Link All relies strictly on local system primitives and explicit end-to-end encryption.
 
 ---
 
 ## Core Capabilities
 
-Deskdrop focuses primarily on two battle-tested primitives: resilient local file transport and high-speed universal clipboard synchronization.
+Link All focuses primarily on two battle-tested primitives: resilient local file transport and high-speed universal clipboard synchronization.
 
 ### 1. Resumable & Zero-Copy File Transport
-Sending files across a local network shouldn't stall due to transient packet loss or intermittent interface drops. Deskdrop implements a streaming transport layer engineered for high saturation and resiliency:
+Sending files across a local network shouldn't stall due to transient packet loss or intermittent interface drops. Link All implements a streaming transport layer engineered for high saturation and resiliency:
 - **Zero-Copy Memory Pipelines (`bytes::Bytes`)**: The networking core operates on reference-counted memory slices. Buffer slicing ($O(1)$ complexity) across asynchronous reading channels prevents redundant heap allocation and RAM duplication during massive file relays.
 - **Adaptive Chunk Batching (`adaptive_batch_size`)**: Outbound file transmission dynamically adjusts read-ahead queue depth based on live acknowledgment feedback (`next_chunk - last_acked_chunk`). High-bandwidth links scale up concurrent operations, while congested links throttle down automatically to prevent memory spikes or timeout drops.
 - **Geometric Socket Auto-Tuning**: Sockets apply geometric buffer fallback progressions (`16 MB` down to `256 KB`), securing the largest OS kernel buffer (`SO_SNDBUF` / `SO_RCVBUF`) supported by the local network interface.
@@ -60,16 +60,15 @@ Sending files across a local network shouldn't stall due to transient packet los
 
 ### 2. Real-Time Universal Clipboard & Timeline
 - **Cross-Platform Activity Feed**: Copying text, URLs, or image payloads on one device transmits structured payload metadata across trusted peer sockets in real time. Items appear inside a searchable local history ring buffer with support for pinning and tagging.
-- **Configurable Content Filtering (`filter.rs`)**: To safeguard passwords, One-Time Passwords (OTPs), API keys, and credit cards from persisting on unattended hardware, Deskdrop evaluates clipboard contents against local pre-flight heuristic rules and regular expressions before initiating network broadcasts.
+- **Configurable Content Filtering (`filter.rs`)**: To safeguard passwords, One-Time Passwords (OTPs), API keys, and credit cards from persisting on unattended hardware, Link All evaluates clipboard contents against local pre-flight heuristic rules and regular expressions before initiating network broadcasts.
 - **Deduplicated FFI String Caching**: Across C-FFI boundaries (`PbEvent::cache_str`), common heap strings are recycled during high-frequency IPC updates, avoiding unneeded allocations within UI view loops.
 
 ---
 
 ## Extended Modules
 
-In addition to core file and clipboard synchronization, Deskdrop includes several secondary modules built atop the secure peer connection layer:
+In addition to core file and clipboard synchronization, Link All includes several secondary modules built atop the secure peer connection layer:
 - **Remote Directory Browsing**: Navigate explicitly permitted filesystem directories on remote paired machines over local sockets to fetch specific documents on demand.
-- **Wireless Continuity Camera**: Route live mobile camera feeds to desktop video clients over local Wi-Fi without proprietary drivers or cables.
 - **Notification & Call Handoff**: Mirror mobile SMS messages, phone call alerts, and application notifications directly to desktop notification centers.
 - **Power & Battery Monitoring**: Surface remote hardware battery status (`0–100%`) and charging states directly within desktop system trays.
 - **OS-Level Sleep Immunity**: Leverages platform power management primitives (`ProcessInfo.beginActivity` on macOS, `SetThreadExecutionState` on Windows, and selective wake locks on Android) during ongoing bulk transfers to prevent unintended system suspension.
@@ -78,24 +77,24 @@ In addition to core file and clipboard synchronization, Deskdrop includes severa
 
 ## Cryptography & Session Security
 
-Deskdrop operates under a zero-trust model for local wireless broadcast networks. Device discovery over mDNS does not imply trust.
+Link All operates under a zero-trust model for local wireless broadcast networks. Device discovery over mDNS does not imply trust.
 
 - **End-to-End Encryption**: Session handshakes utilize ephemeral **Curve25519 (X25519) ECDH** key exchanges, **HKDF-SHA256** key derivation, and **ChaCha20-Poly1305** authenticated encryption (`AEAD`).
 - **Replay Protection**: All network frames integrate strictly increasing 64-bit counter nonces, rejecting unordered or replayed packet transmission at the parsing layer.
 - **Memory Zeroization**: Secret Diffie-Hellman keys and session material are zeroed directly from physical RAM immediately upon derivation or termination via the `zeroize` crate to mitigate memory exposure.
 - **mDNS Privacy Enforcer**: Friendly device names are obfuscated during general network broadcasting; only unprivileged UUID identifiers are visible over open mDNS until a cryptographic pairing verification concludes.
 - **Code-Verified Pairing**: Pairing shows the same security code on both devices, derived from the encrypted session, so a Man-in-the-Middle shows a different one. A request stays open for 60 seconds on both sides and always ends the same way on each (accepted, declined, withdrawn or expired). Declining means "not now", never a silent block. Pairing can also be done by scanning a QR code, valid for 10 minutes.
-- **Reinstall-Aware Trust**: Reinstalling Deskdrop gives a device a new identity. Pairing the new install replaces its old entries instead of listing the device twice.
+- **Reinstall-Aware Trust**: Reinstalling Link All gives a device a new identity. Pairing the new install replaces its old entries instead of listing the device twice.
 
 ---
 
 ## Platform Feature Parity & Architecture
 
-Deskdrop combines a unified high-performance Rust core with platform-native interface runtimes:
+Link All combines a unified high-performance Rust core with platform-native interface runtimes:
 
 | Platform | Frontend Stack | IPC / Binding Mechanism | Current Status & Notes |
 | :--- | :--- | :--- | :--- |
-| **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications, continuity camera support) |
+| **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications) |
 | **Android** | Kotlin & Jetpack Compose | JNI Bridge | 🟢 **Production Ready** (Background service runtime, native share-sheet target, QR/PIN pairing) |
 | **Linux** | GTK3 & D-Bus | Unix Sockets / D-Bus | 🟢 **Production Ready** (XDG notification integration, `systemd` user service runtime) |
 | **Windows** | WinUI 3 / .NET 10 | In-process C-FFI / Named Pipes | 🟠 **Alpha / Experimental** (Active developmental architecture; GUI layer undergoing stabilization) |
@@ -104,9 +103,9 @@ Deskdrop combines a unified high-performance Rust core with platform-native inte
 
 ## Capability Comparison Matrix
 
-Below is a technical feature comparison between Deskdrop and existing cross-platform or proprietary continuity utilities:
+Below is a technical feature comparison between Link All and existing cross-platform or proprietary continuity utilities:
 
-| Capability / Domain | Deskdrop (Ours) | LocalSend | KDE Connect | Apple Handoff / AirDrop | Microsoft Phone Link |
+| Capability / Domain | Link All (Ours) | LocalSend | KDE Connect | Apple Handoff / AirDrop | Microsoft Phone Link |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Supported Operating Systems** | macOS, Windows, Android, Linux | macOS, Windows, Android, Linux, iOS | macOS, Windows, Android, Linux | macOS, iOS, iPadOS only | Windows, Android, iOS (Limited) |
 | **Primary Architecture** | Event-driven Rust daemon + Native UIs | Flutter (Dart) single-process app | Qt / C++ background daemon | Native OS kernel & system daemons | Native Windows OS / Background service |
@@ -130,8 +129,8 @@ To clean, recompile the core Rust daemon, and install both the macOS application
 
 ```bash
 # Clone repository
-git clone https://github.com/ChinmayyK/Deskdrop.git
-cd Deskdrop
+git clone https://github.com/ChinmayyK/Link-All.git
+cd Link-All
 
 # Compile and install targets in Debug mode
 ./scripts/reinstall-all.sh --debug
@@ -142,85 +141,85 @@ cd Deskdrop
 
 ### 2. Platform-Specific Manual Builds
 
-#### macOS App Bundle (`Deskdrop.app`)
+#### macOS App Bundle (`LinkAll.app`)
 ```bash
 # Compile macOS universal target and stage to /Applications
 ./scripts/build-macos.sh --debug
-cp -a platforms/macos/build/Deskdrop.app /Applications/
-open /Applications/Deskdrop.app
+cp -a platforms/macos/build/LinkAll.app /Applications/
+open /Applications/LinkAll.app
 ```
 
-#### Android APK (`com.deskdrop.debug`)
+#### Android APK (`app.linkall.debug`)
 ```bash
 # Assemble debugging APK and deploy to a USB-connected Android device via ADB
 ./scripts/build-android.sh --debug --fast-abi
 adb install -r platforms/android/app/build/outputs/apk/full/debug/app-full-debug.apk
-adb shell monkey -p com.deskdrop.debug -c android.intent.category.LAUNCHER 1
+adb shell monkey -p app.linkall.debug -c android.intent.category.LAUNCHER 1
 ```
 
-#### Linux Desktop (`deskdrop-linux`)
+#### Linux Desktop (`linkall-linux`)
 ```bash
 # Launch GTK native client directly via Cargo
-cargo run -p deskdrop-linux
+cargo run -p linkall-linux
 ```
 
-#### Windows Client (`Deskdrop.WinUI`, WinUI 3)
+#### Windows Client (`LinkAll.WinUI`, WinUI 3)
 ```bash
 # Compile native core dynamic library for Windows
-cargo build --release -p deskdrop-core
+cargo build --release -p linkall-core
 
 # Build and register desktop client using PowerShell installer script
-powershell -ExecutionPolicy Bypass -File platforms/windows/Deskdrop.WinUI/install_and_run.ps1
+powershell -ExecutionPolicy Bypass -File platforms/windows/LinkAll.WinUI/install_and_run.ps1
 ```
 
 ---
 
 ## Command-Line Interface (CLI)
 
-For headless operations, system administration, and custom terminal script automation, Deskdrop offers a native command-line utility (`deskdrop-cli`) communicating directly with the background daemon over low-latency IPC sockets:
+For headless operations, system administration, and custom terminal script automation, Link All offers a native command-line utility (`linkall-cli`) communicating directly with the background daemon over low-latency IPC sockets:
 
 ```bash
 # Print daemon health, version, and active listening ports
-cargo run -p deskdrop-cli -- status
+cargo run -p linkall-cli -- status
 
 # Benchmark IPC domain socket round-trip latency
-cargo run -p deskdrop-cli -- ping
+cargo run -p linkall-cli -- ping
 # Output: PONG (1.1ms)
 
 # Display real-time throughput metrics, transfer counters, and latency percentiles
-cargo run -p deskdrop-cli -- metrics
+cargo run -p linkall-cli -- metrics
 
 # Query recent local clipboard history records
-cargo run -p deskdrop-cli -- history --last 15
+cargo run -p linkall-cli -- history --last 15
 
 # Lock a history record to prevent automatic buffer eviction
-cargo run -p deskdrop-cli -- history pin <id>
+cargo run -p linkall-cli -- history pin <id>
 
 # Enumerate active discovered and trusted peer nodes on local subnet
-cargo run -p deskdrop-cli -- devices list
+cargo run -p linkall-cli -- devices list
 
 # Ask a device to pair, then answer or withdraw requests (handy on Linux)
-cargo run -p deskdrop-cli -- pair <device-id>
-cargo run -p deskdrop-cli -- pair accept <device-id>
-cargo run -p deskdrop-cli -- pair decline <device-id>
-cargo run -p deskdrop-cli -- pair cancel <device-id>
+cargo run -p linkall-cli -- pair <device-id>
+cargo run -p linkall-cli -- pair accept <device-id>
+cargo run -p linkall-cli -- pair decline <device-id>
+cargo run -p linkall-cli -- pair cancel <device-id>
 
 # Toggle sync permissions for specific hardware UUIDs
-cargo run -p deskdrop-cli -- devices peer-settings <device-id> pause
-cargo run -p deskdrop-cli -- devices peer-settings <device-id> resume
+cargo run -p linkall-cli -- devices peer-settings <device-id> pause
+cargo run -p linkall-cli -- devices peer-settings <device-id> resume
 ```
 
 ---
 
 ## Configuration & Local Storage
 
-Deskdrop maintains clean configuration boundaries conforming to OS standard conventions:
+Link All maintains clean configuration boundaries conforming to OS standard conventions:
 
 | Platform | Configuration & Storage Directory | Identity key |
 | :--- | :--- | :--- |
-| **macOS** | `~/Library/Application Support/deskdrop/` | same folder |
-| **Linux** | `~/.config/deskdrop/` | `~/.local/share/deskdrop/` |
-| **Windows** | `%APPDATA%\deskdrop\` | `%LOCALAPPDATA%\deskdrop\` |
+| **macOS** | `~/Library/Application Support/linkall/` | same folder |
+| **Linux** | `~/.config/linkall/` | `~/.local/share/linkall/` |
+| **Windows** | `%APPDATA%\linkall\` | `%LOCALAPPDATA%\linkall\` |
 
 - `settings.json`: User runtime configurations, interface bindings, and custom filtering heuristics.
 - `peers.json`: Locally cached network peers, mDNS mappings, and device nicknames.
@@ -240,6 +239,6 @@ Deskdrop maintains clean configuration boundaries conforming to OS standard conv
 - **Changelog**: Release history and API modifications are documented in [CHANGELOG.md](CHANGELOG.md).
 
 ### License & Commercial Notice
-Deskdrop is distributed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
+Link All is distributed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
 
 *Note on AGPL-3.0*: This license explicitly enforces network copyleft. Any modifications, derived network daemons, or cloud-relayed SaaS implementations built upon this engine must make their complete source code available under the same terms. See [LICENSE](LICENSE) for full legal text.

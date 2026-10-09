@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Allow incoming and outgoing network connections on LAN -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <key>com.apple.security.network.server</key>
+    <true/>
+
+    <!-- Required for mDNS Bonjour service registration -->
+    <key>com.apple.security.network.local-network</key>
+    <true/>
+
+    <!-- Clipboard access (required for monitoring pasteboard) -->
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>$(TeamIdentifierPrefix)app.linkall</string>
+    </array>
+
+    <!-- Hardened runtime — allow loading the Rust dylib -->
+    <key>com.apple.security.cs.allow-dyld-environment-variables</key>
+    <false/>
+    <!-- Required: liblinkall_core.dylib is built separately and may not share
+         the same code signing identity. Remove once dylib signing is unified. -->
+    <key>com.apple.security.cs.disable-library-validation</key>
+    <true/>
+</dict>
+</plist>

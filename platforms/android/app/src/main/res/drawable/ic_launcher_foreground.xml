@@ -6,5 +6,5 @@
     android:insetBottom="18dp">
     <bitmap
         android:gravity="center"
-        android:src="@drawable/deskdrop_logo" />
+        android:src="@drawable/linkall_logo" />
 </inset>

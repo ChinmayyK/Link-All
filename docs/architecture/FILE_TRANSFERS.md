@@ -1,10 +1,10 @@
 # Resumable File Transfers Architecture
 
-Deskdrop handles arbitrary file transfers alongside clipboard text using a highly robust, resumable pipeline designed to survive network partitions and flaky Wi-Fi.
+Link All handles arbitrary file transfers alongside clipboard text using a highly robust, resumable pipeline designed to survive network partitions and flaky Wi-Fi.
 
 ## 1. Chunked Pipelining (`chunked.rs`)
 
-Instead of attempting to stream large files as single, massive packets—which would tie up the TCP tunnel and block small clipboard text—Deskdrop utilizes a **Chunked File Pipeline**.
+Instead of attempting to stream large files as single, massive packets—which would tie up the TCP tunnel and block small clipboard text—Link All utilizes a **Chunked File Pipeline**.
 
 - **File Disassembly**: Large files are broken into `FILE_CHUNK_SIZE` byte slices (typically 256 KB).
 - **Interleaving**: These `FileChunk` packets can be safely interleaved with `ClipboardPush` or `BatteryStatus` telemetry packets, preventing Head-of-Line (HOL) blocking.
@@ -15,7 +15,7 @@ Instead of attempting to stream large files as single, massive packets—which w
 Network bandwidth fluctuates rapidly in mobile environments (e.g., walking between access points).
 
 - **Latency Probes**: The engine periodically fires lightweight ping/pong probes to measure Round-Trip Time (RTT).
-- **Dynamic Optimization**: If link quality degrades (`degraded_from()`), Deskdrop scales back the number of in-flight file chunks permitted in the TCP send buffer. When latency drops, the buffer is increased to maximize throughput.
+- **Dynamic Optimization**: If link quality degrades (`degraded_from()`), Link All scales back the number of in-flight file chunks permitted in the TCP send buffer. When latency drops, the buffer is increased to maximize throughput.
 
 ## 3. Resumability (`file_transfer.rs`)
 
@@ -27,7 +27,7 @@ If a connection drops completely during a large transfer:
 
 ## 4. Integrity and Security
 
-Deskdrop considers file reception to be high-risk due to potential path traversal and malware vectors.
+Link All considers file reception to be high-risk due to potential path traversal and malware vectors.
 
 - **Pre-Transfer Checksum**: The `Start` frame includes a full SHA-256 hash computed by the sender.
 - **Path Traversal Shielding (`MED-04`)**: Senders are not allowed to specify arbitrary target paths. All incoming files are stripped of `../` characters and saved strictly into the native OS root `Downloads` folder.

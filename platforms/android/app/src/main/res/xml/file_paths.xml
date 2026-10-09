@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <!-- Cache dir — for incoming images (not persisted long-term) -->
-    <cache-path name="deskdrop_cache" path="." />
+    <cache-path name="linkall_cache" path="." />
     <!-- Files dir — for anything we write to internal storage -->
-    <files-path name="deskdrop_files" path="." />
-    <!-- External Downloads/Deskdrop — for received files -->
-    <external-path name="deskdrop_downloads" path="Deskdrop/" />
+    <files-path name="linkall_files" path="." />
+    <!-- Download/Link All on shared storage — where received files are saved -->
+    <external-path name="linkall_downloads" path="Download/Link All/" />
     <!-- External files dir — fallback on devices without external storage -->
-    <external-files-path name="deskdrop_ext_files" path="." />
+    <external-files-path name="linkall_ext_files" path="." />
 </paths>

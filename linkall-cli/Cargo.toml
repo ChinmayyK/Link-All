@@ -1,0 +1,18 @@
+[package]
+name = "linkall-cli"
+version.workspace = true
+edition = "2021"
+description = "Link All command-line management tool"
+license = "AGPL-3.0-only"
+
+[[bin]]
+name = "linkall-cli"
+path = "src/main.rs"
+
+[dependencies]
+linkall-core = { version = "1.2.4", path = "../linkall-core" }
+anyhow = "1"
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+dirs = "5"
+tokio = { version = "1", features = ["full"] }

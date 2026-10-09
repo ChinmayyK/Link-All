@@ -21,7 +21,7 @@ for arg in "$@"; do
     esac
 done
 
-echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE})...${NC}\n"
+echo -e "${BLUE}▶ Starting total clean and rebuild for Link All (${BUILD_TYPE})...${NC}\n"
 
 # ==========================================
 # 0. Version Bump & Clean
@@ -30,16 +30,16 @@ echo -e "${BLUE}▶ Starting total clean and rebuild for Deskdrop (${BUILD_TYPE}
 # scripts/bump-version.sh --patch
 
 
-echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/deskdrop)...${NC}"
-rm -rf ~/Library/Application\ Support/deskdrop
+echo -e "${BLUE}▶ Wiping macOS app data (~/Library/Application Support/linkall)...${NC}"
+rm -rf ~/Library/Application\ Support/linkall
 
 # ==========================================
 # 1. macOS Reinstall
 # ==========================================
 echo -e "${BLUE}▶ [macOS] Stopping existing processes...${NC}"
-pkill -x Deskdrop || true
-pkill -x Deskdrop || true
-pkill -x deskdrop-daemon || true
+pkill -x Link All || true
+pkill -x Link All || true
+pkill -x linkall-daemon || true
 
 echo -e "${BLUE}▶ [macOS] Building latest version...${NC}"
 export SKIP_DMG=true
@@ -50,16 +50,16 @@ else
 fi
 
 echo -e "${BLUE}▶ [macOS] Uninstalling old version...${NC}"
-rm -rf /Applications/Deskdrop.app
+rm -rf /Applications/Link\ All.app
 
 echo -e "${BLUE}▶ [macOS] Installing new version to /Applications...${NC}"
-cp -a platforms/macos/build/Deskdrop.app /Applications/
+cp -a platforms/macos/build/Link\ All.app /Applications/
 
 echo -e "${BLUE}▶ [macOS] Deleting local build bundle to keep repository clean...${NC}"
-rm -rf platforms/macos/build/Deskdrop.app
+rm -rf platforms/macos/build/Link\ All.app
 
 echo -e "${GREEN}▶ [macOS] ✅ Installed! Launching...${NC}"
-open /Applications/Deskdrop.app
+open /Applications/Link\ All.app
 
 echo -e "\n----------------------------------------\n"
 
@@ -73,11 +73,11 @@ echo -e "${BLUE}▶ [Android] Building latest APK...${NC}"
 if [ "$BUILD_TYPE" = "release" ]; then
     bash scripts/build-android.sh --release --fast-abi
     APK_PATH="platforms/android/app/build/outputs/apk/full/release/app-full-release.apk"
-    APP_ID="com.deskdrop"
+    APP_ID="app.linkall"
 else
     bash scripts/build-android.sh --debug --fast-abi
     APK_PATH="platforms/android/app/build/outputs/apk/full/debug/app-full-debug.apk"
-    APP_ID="com.deskdrop.debug"
+    APP_ID="app.linkall"
 fi
 
 echo -e "${BLUE}▶ [Android] Uninstalling old version from connected device...${NC}"

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Single source of truth for Deskdrop's release version.
+# Single source of truth for Link All's release version.
 #
 # Every shippable artifact carries its own version string, and they all have to
 # agree: a tag that says v1.3.0 must not produce an APK labelled 1.2.4. That is
 # exactly the drift that accumulated across 1.2.5-1.2.8. The previous Python
-# version of this script pointed at platforms/windows/Deskdrop.Windows/, a path
+# version of this script pointed at platforms/windows/LinkAll.Windows/, a path
 # that does not exist, and skipped it silently because the write was guarded by
 # an existence check. Nothing verified the result afterwards, so the drift was
 # invisible until release time.
@@ -35,11 +35,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 CARGO="$ROOT/Cargo.toml"
 GRADLE="$ROOT/platforms/android/app/build.gradle"
-WXS="$ROOT/platforms/windows/installer/Deskdrop.wxs"
+WXS="$ROOT/platforms/windows/installer/LinkAll.wxs"
+CSPROJ="$ROOT/platforms/windows/LinkAll.WinUI/LinkAll.WinUI.csproj"
 PLISTS=(
-  "$ROOT/platforms/macos/Deskdrop/Info.plist"
+  "$ROOT/platforms/macos/LinkAll/Info.plist"
   "$ROOT/platforms/macos/ShareExtension/Info.plist"
-  "$ROOT/platforms/macos/VirtualCamera/Info.plist"
 )
 
 # ---- readers ---------------------------------------------------------------
@@ -57,6 +57,7 @@ cargo_version()  { sed -n 's/^version = "\([^"]*\)".*/\1/p' "$CARGO" | head -1; 
 gradle_version() { sed -n 's/.*versionName "\([^"]*\)".*/\1/p' "$GRADLE" | head -1; }
 gradle_build()   { sed -n 's/.*versionCode \([0-9]*\).*/\1/p' "$GRADLE" | head -1; }
 wxs_version()    { sed -n 's/^ *Version="\([^"]*\)".*/\1/p' "$WXS" | head -1; }
+csproj_version() { sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' "$CSPROJ" | head -1; }
 
 # ---- writers ---------------------------------------------------------------
 
@@ -81,6 +82,7 @@ apply() { # <version> <build>
   sed_inplace "s/versionName \"[^\"]*\"/versionName \"$v\"/" "$GRADLE"
   sed_inplace "s/versionCode [0-9]*/versionCode $b/" "$GRADLE"
   sed_inplace "s/^\( *Version=\"\)[^\"]*\"/\1$v\"/" "$WXS"
+  sed_inplace "s/<Version>[^<]*<\/Version>/<Version>$v<\/Version>/" "$CSPROJ"
 
   local p
   for p in "${PLISTS[@]}"; do
@@ -97,6 +99,7 @@ survey() {
   printf 'rust workspace\t%s\t-\n'  "$(cargo_version)"
   printf 'android\t%s\t%s\n'        "$(gradle_version)" "$(gradle_build)"
   printf 'windows installer\t%s\t-\n' "$(wxs_version)"
+  printf 'windows app\t%s\t-\n' "$(csproj_version)"
   local p label
   for p in "${PLISTS[@]}"; do
     label="macos $(basename "$(dirname "$p")")"

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# build-macos.sh — Build the Deskdrop.app bundle for macOS
+# build-macos.sh — Build the Link All.app bundle for macOS
 #
 # Requirements:
 #   - Rust toolchain (cargo)
@@ -13,10 +13,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-CORE_DIR="${REPO_ROOT}/deskdrop-core"
+CORE_DIR="${REPO_ROOT}/linkall-core"
 MACOS_DIR="${REPO_ROOT}/platforms/macos"
-SOURCE_DIR_NAME="Deskdrop"
-PRODUCT_NAME="Deskdrop"
+SOURCE_DIR_NAME="LinkAll"
+PRODUCT_NAME="Link All"
 BUILD_TYPE="${1:---release}"
 APP_BUNDLE="${MACOS_DIR}/build/${PRODUCT_NAME}.app"
 TARGET_DIR="${REPO_ROOT}/target/release"
@@ -29,26 +29,26 @@ log() { echo "▶ $*"; }
 
 log "Building Rust core (${BUILD_TYPE})..."
 cd "${REPO_ROOT}"
-cargo build --release -p deskdrop-core --features compress --lib --bin deskdrop-daemon
+cargo build --release -p linkall-core --features compress --lib --bin linkall-daemon
 
-DYLIB_SRC="${TARGET_DIR}/libdeskdrop_core.dylib"
-DAEMON_SRC="${TARGET_DIR}/deskdrop-daemon"
+DYLIB_SRC="${TARGET_DIR}/liblinkall_core.dylib"
+DAEMON_SRC="${TARGET_DIR}/linkall-daemon"
 
 # ── 2. Create .app bundle skeleton ───────────────────────────────────────────
 
 log "Creating ${PRODUCT_NAME}.app bundle..."
 rm -rf "${APP_BUNDLE}"
-mkdir -p "${APP_BUNDLE}/Contents/"{MacOS,Frameworks,Resources,Library/SystemExtensions}
+mkdir -p "${APP_BUNDLE}/Contents/"{MacOS,Frameworks,Resources}
 
 # Copy dylib.
-cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
-cp "${DAEMON_SRC}" "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
-chmod +x "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
+cp "${DYLIB_SRC}" "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
+cp "${DAEMON_SRC}" "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
+chmod +x "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
 
 # Fix dylib install name.
 install_name_tool \
-    -id "@rpath/libdeskdrop_core.dylib" \
-    "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
+    -id "@rpath/liblinkall_core.dylib" \
+    "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
 
 # ── 3. Compile Swift app ─────────────────────────────────────────────────────
 
@@ -65,7 +65,7 @@ MACRO_PLUGIN_DIR="${REPO_ROOT}/.build-tools/swift-plugins"
 
 swiftc \
     "${SWIFT_FILES[@]}" \
-    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/DeskdropBridge.h" \
+    -import-objc-header "${MACOS_DIR}/${SOURCE_DIR_NAME}/LinkAllBridge.h" \
     -sdk "${SDK_PATH}" \
     -target "${MACOS_TARGET}" \
     $( [[ -d "${MACRO_PLUGIN_DIR}" ]] && echo "-plugin-path ${MACRO_PLUGIN_DIR}" ) \
@@ -75,44 +75,9 @@ swiftc \
     -framework UserNotifications \
     -F "${APP_BUNDLE}/Contents/Frameworks" \
     -L "${APP_BUNDLE}/Contents/Frameworks" \
-    -ldeskdrop_core \
+    -llinkall_core \
     -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
     -o "${APP_BUNDLE}/Contents/MacOS/${PRODUCT_NAME}"
-
-# ── 3.5. Compile Virtual Camera Extension ────────────────────────────────────
-
-log "Compiling Virtual Camera System Extension..."
-EXT_DIR="${APP_BUNDLE}/Contents/Library/SystemExtensions/com.deskdrop.VirtualCamera.systemextension"
-mkdir -p "${EXT_DIR}/Contents/MacOS"
-
-swiftc \
-    "${MACOS_DIR}/VirtualCamera/main.swift" \
-    "${MACOS_DIR}/VirtualCamera/VirtualCameraProvider.swift" \
-    "${MACOS_DIR}/VirtualCamera/VirtualCameraStream.swift" \
-    -sdk "${SDK_PATH}" \
-    -target "${MACOS_TARGET}" \
-    -framework Foundation \
-    -framework CoreMediaIO \
-    -framework CoreVideo \
-    -framework CoreMedia \
-    -framework ImageIO \
-    -o "${EXT_DIR}/Contents/MacOS/com.deskdrop.VirtualCamera"
-
-cp "${MACOS_DIR}/VirtualCamera/Info.plist" "${EXT_DIR}/Contents/Info.plist"
-
-# Write a basic entitlements file for the extension (do not put inside Contents!)
-cat > "${APP_BUNDLE}/../VirtualCamera.entitlements" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>com.apple.security.app-sandbox</key>
-    <true/>
-    <key>com.apple.security.network.client</key>
-    <true/>
-</dict>
-</plist>
-EOF
 
 # ── 4. Copy resources ─────────────────────────────────────────────────────────
 
@@ -132,7 +97,7 @@ done
 # Generate AppIcon.icns from the bundled source PNG.
 if [[ -f "${ICON_SRC}" ]]; then
     log "Generating app icon..."
-    ICON_TMP_DIR="$(mktemp -d /tmp/deskdrop-icon.XXXXXX)"
+    ICON_TMP_DIR="$(mktemp -d /tmp/linkall-icon.XXXXXX)"
     ICONSET_DIR="${ICON_TMP_DIR}/AppIcon.iconset"
     mkdir -p "${ICONSET_DIR}"
     for size in 16 32 128 256 512; do
@@ -156,7 +121,7 @@ elif [[ -x /Applications/Xcode.app/Contents/Developer/usr/bin/actool ]]; then
 fi
 if [[ -d "${ICON_BUNDLE}" && -n "${ACTOOL}" ]]; then
     log "Compiling themed app icon..."
-    ICON_OUT="$(mktemp -d /tmp/deskdrop-appicon.XXXXXX)"
+    ICON_OUT="$(mktemp -d /tmp/linkall-appicon.XXXXXX)"
     if ${ACTOOL} "${ICON_BUNDLE}" --compile "${ICON_OUT}" --platform macosx --target-device mac \
            --minimum-deployment-target 26.0 --app-icon AppIcon --include-all-app-icons \
            --output-partial-info-plist "${ICON_OUT}/partial.plist" >/dev/null 2>&1 \
@@ -176,24 +141,17 @@ log "Code signing with identity: ${IDENTITY}"
 codesign \
     --force \
     --sign "${IDENTITY}" \
-    "${APP_BUNDLE}/Contents/Frameworks/libdeskdrop_core.dylib"
+    "${APP_BUNDLE}/Contents/Frameworks/liblinkall_core.dylib"
 
 codesign \
     --force \
     --sign "${IDENTITY}" \
-    "${APP_BUNDLE}/Contents/MacOS/deskdrop-daemon"
+    "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
 
 codesign \
     --force \
     --sign "${IDENTITY}" \
-    --entitlements "${APP_BUNDLE}/../VirtualCamera.entitlements" \
-    --options runtime \
-    "${EXT_DIR}"
-
-codesign \
-    --force \
-    --sign "${IDENTITY}" \
-    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/Deskdrop.entitlements" \
+    --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/LinkAll.entitlements" \
     --options runtime \
     "${APP_BUNDLE}"
 
@@ -212,22 +170,22 @@ if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     log "Creating DMG..."
     # No --app-drop-link: that symlink points at the shared /Applications,
     # which non-admin (e.g. managed corporate) users can't write to without
-    # an administrator password. Deskdrop relocates itself to the per-user
+    # an administrator password. Link All relocates itself to the per-user
     # ~/Applications on first launch instead (see AppDelegate.
     # relocateToUserApplicationsIfNeeded), so users just double-click it
     # straight from the mounted DMG.
     create-dmg \
-        --volname "Deskdrop" \
+        --volname "Link All" \
         --window-size 600 400 \
         --icon-size 128 \
-        "${MACOS_DIR}/build/Deskdrop.dmg" \
+        "${MACOS_DIR}/build/LinkAll.dmg" \
         "${APP_BUNDLE}" || {
             log "create-dmg failed (headless CI), falling back to zip..."
-            (cd "${MACOS_DIR}/build" && zip -rq "Deskdrop-macOS.zip" "${PRODUCT_NAME}.app")
+            (cd "${MACOS_DIR}/build" && zip -rq "LinkAll-macOS.zip" "${PRODUCT_NAME}.app")
         }
     log "✅ DMG (or zip fallback) created."
 else
     log "Creating zip archive..."
-    (cd "${MACOS_DIR}/build" && zip -rq "Deskdrop-macOS.zip" "${PRODUCT_NAME}.app")
-    log "✅ ZIP: ${MACOS_DIR}/build/Deskdrop-macOS.zip"
+    (cd "${MACOS_DIR}/build" && zip -rq "LinkAll-macOS.zip" "${PRODUCT_NAME}.app")
+    log "✅ ZIP: ${MACOS_DIR}/build/LinkAll-macOS.zip"
 fi
