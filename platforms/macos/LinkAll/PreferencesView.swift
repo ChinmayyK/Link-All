@@ -95,7 +95,7 @@ struct PreferencesView: View {
         switch tab {
         case .general:       GeneralPane(copy: $copy)
         case .sync:          SyncPane(copy: $copy, patternDraft: $patternDraft)
-        case .notifications: TransferNotificationPreferencesView()
+        case .notifications: NotificationsPane()
         case .network:       NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
                             .onChange(of: portString) { v in
                                 if let p = UInt16(v), p > 1024 { copy.port = p; portIsInvalid = false }
@@ -244,6 +244,50 @@ private struct PrefsFooter: View {
 
     private func footerNote(_ text: String, color: Color) -> some View {
         Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(color)
+    }
+}
+
+// MARK: - Notifications Pane
+
+// The same rows as the other panes. This tab used to embed a macOS Form,
+// which collapses to nothing inside the settings ScrollView.
+private struct NotificationsPane: View {
+    @AppStorage("showTransferNotifications") private var showTransferNotifications = true
+    @AppStorage("keepVisibleDuringTransfer") private var keepVisibleDuringTransfer = false
+    @AppStorage("playCompletionSound") private var playCompletionSound = true
+    @AppStorage("minFileSizeThresholdMB") private var minFileSizeThresholdMB = 0.0
+
+    var body: some View {
+        PrefsSection(title: "Transfers", icon: "arrow.up.arrow.down.circle.fill", tint: CRTheme.accentPurple) {
+            PrefsRow(icon: "bell.fill", label: "Transfer notifications",
+                     description: "Show progress and completion for files you send and receive.") {
+                Toggle("", isOn: $showTransferNotifications).labelsHidden()
+            }
+            PrefsDivider()
+            PrefsRow(icon: "pin.fill", label: "Keep visible while sending",
+                     description: "Leave the progress notification on screen until the transfer ends.") {
+                Toggle("", isOn: $keepVisibleDuringTransfer).labelsHidden()
+            }
+            .disabled(!showTransferNotifications)
+            PrefsDivider()
+            PrefsRow(icon: "speaker.wave.2.fill", label: "Completion sound",
+                     description: "Play a sound when a transfer finishes.") {
+                Toggle("", isOn: $playCompletionSound).labelsHidden()
+            }
+            .disabled(!showTransferNotifications)
+            PrefsDivider()
+            PrefsRow(icon: "line.3.horizontal.decrease.circle", label: "Only for files larger than",
+                     description: "Smaller transfers finish without a notification. 0 shows all of them.") {
+                HStack(spacing: 6) {
+                    TextField("0", value: $minFileSizeThresholdMB, format: .number)
+                        .crInput()
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 70)
+                    Text("MB").font(.system(size: 13)).foregroundStyle(CRTheme.inkSoft)
+                }
+            }
+            .disabled(!showTransferNotifications)
+        }
     }
 }
 

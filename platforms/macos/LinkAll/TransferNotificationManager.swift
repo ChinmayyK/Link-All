@@ -495,31 +495,3 @@ public struct CollapsedTransfersIndicatorView: View {
         )
     }
 }
-
-// MARK: - Preferences UI View
-
-public struct TransferNotificationPreferencesView: View {
-    @ObservedObject var preferences: TransferNotificationPreferences = .shared
-    
-    public init() {}
-    
-    public var body: some View {
-        Form {
-            Section(header: Text("Transfer Notifications").font(.headline)) {
-                Toggle("Show transfer notifications", isOn: $preferences.showTransferNotifications)
-                Toggle("Keep notification visible during transfer", isOn: $preferences.keepVisibleDuringTransfer)
-                Toggle("Play completion sound", isOn: $preferences.playCompletionSound)
-                
-                HStack {
-                    Text("Show notifications only for files larger than:")
-                    Spacer()
-                    TextField("0", value: $preferences.minFileSizeThresholdMB, format: .number)
-                        .frame(width: 60)
-                        .multilineTextAlignment(.trailing)
-                    Text("MB")
-                }
-            }
-        }
-        .padding()
-    }
-}
