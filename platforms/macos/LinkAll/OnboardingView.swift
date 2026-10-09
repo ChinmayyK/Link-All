@@ -16,7 +16,10 @@ struct RootContainerView: View {
                 })
             }
         }
-        .frame(minWidth: 1200, minHeight: 760)
+        // Opens at 1200x792 (the ideal size, which the window adopts) but
+        // may shrink to the window's minSize, so the content never spills
+        // past the window edges on smaller screens.
+        .frame(minWidth: 900, idealWidth: 1200, minHeight: 600, idealHeight: 792)
         .ignoresSafeArea(.all, edges: .top)
     }
 }

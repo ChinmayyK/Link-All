@@ -423,7 +423,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func setupWindows() {
         dashboardController = Self.makeWindow(
             title: "Link All",
-            size:  NSSize(width: 1200, height: 760),
+            size:  NSSize(width: 1200, height: 792),
             rootView: RootContainerView(store: store)
         )
         quickAccessController = Self.makePanel(
@@ -1107,7 +1107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         window.backgroundColor            = .clear
         window.isOpaque                   = false
         window.hasShadow                  = false
-        window.contentViewController = NSHostingController(rootView: rootView)
+        let host = NSHostingController(rootView: rootView)
+        // The SwiftUI minimum is a limit, not the size to open at: without
+        // this the hosting controller shrank the window to it.
+        if #available(macOS 13.0, *) { host.sizingOptions = [.minSize] }
+        window.contentViewController = host
+        window.setFrame(frame, display: false)
         return NSWindowController(window: window)
     }
 

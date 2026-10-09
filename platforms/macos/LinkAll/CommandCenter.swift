@@ -12,6 +12,10 @@ struct CommandCenterRootView: View {
     }
 
     var body: some View {
+        GeometryReader { geo in
+        // The device panel needs room: below this width the middle column
+        // would be squeezed, so the panel steps aside.
+        let showsDevicePanel = geo.size.width >= 1080
         HStack(spacing: 0) {
             // Left Column: Navigation Sidebar (240px)
             // All three columns share one colour, split only by dividers.
@@ -51,15 +55,18 @@ struct CommandCenterRootView: View {
             }
             .background(CRTheme.surface)
             
-            Divider()
-            
-            // Right Column: Smart Device Panel (320px)
-            LiveDevicePanel(store: store)
-                .frame(width: 320)
-                .background(CRTheme.surface)
+            if showsDevicePanel {
+                Divider()
+                
+                // Right Column: Smart Device Panel (320px)
+                LiveDevicePanel(store: store)
+                    .frame(width: 320)
+                    .background(CRTheme.surface)
+            }
+        }
         }
         .ignoresSafeArea(.all, edges: .top)
-        .frame(minWidth: 1100, minHeight: 700)
+        .frame(minWidth: 900, idealWidth: 1200, minHeight: 600, idealHeight: 792)
         .background(CRVisualEffect(material: .underWindowBackground, blendingMode: .behindWindow).ignoresSafeArea())
         .sheet(item: $renameTarget) { device in
             // Fallback for store requirements
