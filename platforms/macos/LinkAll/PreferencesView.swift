@@ -30,28 +30,32 @@ struct PreferencesView: View {
                     .padding(.horizontal, 40)
                     .padding(.top, 40)
 
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(SettingsTab.allCases) { t in 
-                            PrefsTabChip(tab: t, isSelected: tab == t) { tab = t } 
-                        }
-                    }
-                    .padding(.horizontal, 40)
-                    .padding(.bottom, 16)
+                // All five tabs on one row: with icons when they fit, text
+                // only when the column is narrower, scrolling only as a
+                // last resort.
+                ViewThatFits(in: .horizontal) {
+                    tabRow(showsIcons: true)
+                    tabRow(showsIcons: false)
+                    ScrollView(.horizontal, showsIndicators: false) { tabRow(showsIcons: false) }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 16)
             }
-            .background(CRTheme.surfaceElevated)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CRTheme.surface)
 
             Rectangle().fill(CRTheme.stroke).frame(height: 1)
 
             // Content
             ScrollView(.vertical, showsIndicators: false) {
+                // One container, so the padding wraps the pane once. On the
+                // bare pane it applied to each section, opening big gaps.
                 VStack(alignment: .leading, spacing: 0) {
                     pane
-                        .padding(.horizontal, 40)
-                        .padding(.top, 32)
-                        .padding(.bottom, 28)
                 }
+                .padding(.horizontal, 40)
+                .padding(.top, 32)
+                .padding(.bottom, 28)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -80,6 +84,8 @@ struct PreferencesView: View {
             )
         }
         .background(CRTheme.surface.ignoresSafeArea())
+        // Native on/off switches, not checkboxes, for every setting.
+        .toggleStyle(.switch)
         // Fresh values each time the window opens, not whatever was last
         // cached; the controls show defaults only until this returns.
         .task {
@@ -89,6 +95,16 @@ struct PreferencesView: View {
         .onChange(of: copy) { _ in
             if saveState != .saving { saveState = .idle }
         }
+    }
+
+    private func tabRow(showsIcons: Bool) -> some View {
+        HStack(spacing: 6) {
+            ForEach(SettingsTab.allCases) { t in
+                PrefsTabChip(tab: t, isSelected: tab == t, showsIcon: showsIcons) { tab = t }
+            }
+        }
+        .padding(.horizontal, 40)
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     @ViewBuilder private var pane: some View {
@@ -133,27 +149,30 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
 }
 
 private struct PrefsTabChip: View {
-    let tab: SettingsTab; let isSelected: Bool; let action: () -> Void
+    let tab: SettingsTab; let isSelected: Bool; var showsIcon = true; let action: () -> Void
     @State private var hovered = false
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(isSelected ? tab.tint : Color.clear)
-                        .frame(width: 24, height: 24)
-                    Image(systemName: isSelected ? tab.icon : tab.icon)
-                        .font(.system(size: 13, weight: isSelected ? .bold : .medium))
-                        .foregroundStyle(isSelected ? Color.white : CRTheme.inkSoft)
+            HStack(spacing: 8) {
+                if showsIcon {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isSelected ? tab.tint : Color.clear)
+                            .frame(width: 22, height: 22)
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                            .foregroundStyle(isSelected ? Color.white : CRTheme.inkSoft)
+                    }
                 }
                 Text(tab.label)
-                    .font(.system(size: 14, weight: isSelected ? .semibold : .medium))
+                    .font(.system(size: 13.5, weight: isSelected ? .semibold : .medium))
                     .foregroundStyle(isSelected ? CRTheme.ink : CRTheme.inkSoft)
+                    .lineLimit(1)
             }
-            .padding(.horizontal, 14).padding(.vertical, 8)
+            .padding(.horizontal, 12).padding(.vertical, showsIcon ? 7 : 10)
             .background {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? CRTheme.surface : (hovered ? CRTheme.surfaceElevated : .clear))
+                    .fill(isSelected ? CRTheme.surfaceElevated : (hovered ? CRTheme.surfaceStrong : .clear))
                     .overlay {
                         if isSelected {
                             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -710,15 +729,15 @@ private struct PrefsSection<Content: View>: View {
             .padding(.leading, 4)
 
             VStack(spacing: 0) { content() }
-                .background(.regularMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: .black.opacity(0.08), radius: 14, y: 6)
+                .background(CRTheme.surfaceElevated)
+                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .shadow(color: .black.opacity(0.06), radius: 10, y: 4)
                 .overlay {
-                    RoundedRectangle(cornerRadius: 18, style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.2), lineWidth: 1.0)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(CRTheme.stroke, lineWidth: 1)
                 }
         }
-        .padding(.bottom, 32)
+        .padding(.bottom, 28)
     }
 }
 
