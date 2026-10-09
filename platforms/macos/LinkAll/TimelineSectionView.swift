@@ -43,7 +43,7 @@ struct TimelineSectionView: View {
                 filterRow
             }
             .padding(.horizontal, 24).padding(.vertical, 14)
-            .background(CRTheme.surfaceElevated)
+            .background(CRTheme.surface)
 
             CRDivider()
 

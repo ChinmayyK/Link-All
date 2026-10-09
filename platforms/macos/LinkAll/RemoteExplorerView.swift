@@ -173,7 +173,7 @@ private struct RemoteExplorerPane: View {
     
     private var contextAwareBackground: some View {
         ZStack {
-            CRTheme.surfaceElevated
+            CRTheme.surface
             
             // Subtle tinted blurred circles based on state
             let color1 = selectedCategory == "Images" ? CRTheme.brandViolet : (selectedCategory == "Videos" ? CRTheme.brandCyan : CRTheme.brandElectric)

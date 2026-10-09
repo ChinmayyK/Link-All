@@ -148,7 +148,7 @@ private struct FeedToolbar: View {
             }
         }
         .padding(.horizontal, 13).padding(.vertical, 9)
-        .background(CRTheme.surfaceElevated)
+        .background(CRTheme.surface)
         .animation(.crFast, value: searchText.isEmpty && filterKind == .all)
     }
 }

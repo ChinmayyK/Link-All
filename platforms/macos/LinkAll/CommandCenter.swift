@@ -14,11 +14,12 @@ struct CommandCenterRootView: View {
     var body: some View {
         HStack(spacing: 0) {
             // Left Column: Navigation Sidebar (240px)
+            // All three columns share one colour, split only by dividers.
             CommandSidebarView(store: store)
                 .frame(width: 240)
-                .background(CRTheme.surfaceElevated)
+                .background(CRTheme.surface.ignoresSafeArea())
             
-            Divider().opacity(0.5)
+            Divider()
             
             // Center Column: Main Workspace (Flexible)
             VStack(spacing: 0) {
@@ -50,12 +51,12 @@ struct CommandCenterRootView: View {
             }
             .background(CRTheme.surface)
             
-            Divider().opacity(0.5)
+            Divider()
             
             // Right Column: Smart Device Panel (320px)
             LiveDevicePanel(store: store)
                 .frame(width: 320)
-                .background(CRTheme.surfaceElevated)
+                .background(CRTheme.surface)
         }
         .ignoresSafeArea(.all, edges: .top)
         .frame(minWidth: 1100, minHeight: 700)

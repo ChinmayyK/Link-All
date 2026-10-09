@@ -39,8 +39,10 @@ enum CRTheme {
     static let brandPink     = Color(hex: 0xFF2D55)
 
     // ── Semantic surfaces ─────────────────────────────────────────────────────
+    // Dark mode is true black throughout; fills and cards step up to
+    // #121212 / #141414 so they still read as raised against it.
     static var surface:         Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x000000)) }
-    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x0A0A0A)) }
+    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x121212)) }
     static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x141414)) }
 
     // ── Row states ────────────────────────────────────────────────────────────
@@ -229,7 +231,7 @@ private struct CRInputModifier: ViewModifier {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(invalid
                           ? CRTheme.accentRed.opacity(0.06)
-                          : (dark ? Color(white: 1, opacity: 0.07) : CRTheme.surface))
+                          : (dark ? Color(white: 1, opacity: 0.07) : CRTheme.rowHover))
                     .overlay {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
                             .strokeBorder(
