@@ -168,6 +168,18 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             reject_reason,
         } => {
             ctx.touch_last_seen();
+            // Only the device a transfer is going to may start or decline it;
+            // anyone else accepting would have the file streamed to them.
+            let addressed_here = shared
+                .file_transfers
+                .lock()
+                .await
+                .get_outbound(&transfer_id)
+                .is_some_and(|t| t.target_device == Some(peer_id) || t.target_device.is_none());
+            if !addressed_here {
+                tracing::warn!(peer_id = %peer_id, "ignoring FileTransferAccept for a transfer not sent to this peer");
+                return Flow::Continue;
+            }
             if !accepted {
                 let mut mgr = shared.file_transfers.lock().await;
                 // The receiver declined a folder: send none of the rest.
@@ -448,6 +460,19 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             {
                 return Flow::Continue;
             }
+            {
+                let mgr = shared.file_transfers.lock().await;
+                if let Some(transfer) = mgr.get_inbound(&transfer_id) {
+                    if transfer.from_device != peer_id {
+                        tracing::warn!(
+                            "Ignoring FileTransferComplete from {} for transfer owned by {}",
+                            peer_id,
+                            transfer.from_device
+                        );
+                        return Flow::Continue;
+                    }
+                }
+            }
             // Finalize: verify SHA-256 and write to disk.
             let _ = ctx
                 .disk_tx
@@ -474,6 +499,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
 
             let (file_name, peer_name, file_bytes) = {
                 let mut mgr = shared.file_transfers.lock().await;
+                if !mgr.get_outbound(&transfer_id).is_some_and(|t| {
+                    t.target_device == Some(peer_id) || t.target_device.is_none()
+                }) {
+                    return Flow::Continue;
+                }
                 let (fname, fbytes) = mgr
                     .get_outbound_mut(&transfer_id)
                     .map(|t| (t.meta.file_name.clone(), t.meta.size_bytes))
