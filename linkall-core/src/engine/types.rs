@@ -320,6 +320,9 @@ pub struct EngineConfig {
     pub trust_store_path: PathBuf,
     pub peer_store_path: PathBuf,
     pub identity_path: PathBuf,
+    /// Where settings.json is read and written. Embedded hosts point it into
+    /// their own data folder; tests point it at a temp file.
+    pub settings_path: PathBuf,
     pub connect_timeout: Duration,
     pub heartbeat_interval: Duration,
     pub heartbeat_timeout: Duration,
@@ -359,6 +362,7 @@ impl Default for EngineConfig {
             trust_store_path: default_trust_store_path(),
             peer_store_path: default_peer_store_path(),
             identity_path: IdentityStore::default_path(),
+            settings_path: default_settings_path(),
             connect_timeout: Duration::from_secs(3),
             heartbeat_interval: Duration::from_secs(5),
             heartbeat_timeout: Duration::from_secs(12),

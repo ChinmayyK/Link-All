@@ -163,6 +163,7 @@ mod tests {
             trust_store_path: tmp.path().join("trust.json"),
             peer_store_path: tmp.path().join("peers.json"),
             identity_path: tmp.path().join("identity.key"),
+            settings_path: tmp.path().join("settings.json"),
             data_dir: tmp.path().join("data"),
             file_save_dir: Some(tmp.path().join("received")),
             bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
