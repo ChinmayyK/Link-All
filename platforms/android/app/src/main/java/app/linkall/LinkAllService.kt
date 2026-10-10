@@ -822,12 +822,7 @@ class LinkAllService : Service() {
             if (!engineStarted.getAndSet(true)) {
                 val deviceName = resolvedDeviceName()
                 val dataDir = File(filesDir, "linkall").also { it.mkdirs() }.absolutePath
-                val fileSaveDir = File(
-                    android.os.Environment.getExternalStoragePublicDirectory(
-                        android.os.Environment.DIRECTORY_DOWNLOADS
-                    ),
-                    "Link All"
-                ).apply { mkdirs() }
+                val fileSaveDir = receiveStagingDir()
                 LinkAllJni.initContext(applicationContext)
                 engineHandle = LinkAllJni.start(
                     deviceName,
@@ -2511,6 +2506,33 @@ class LinkAllService : Service() {
     private fun getDownloadsDir(): File {
         val base = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         return File(base, "Link All").also { it.mkdirs() }
+    }
+
+    /**
+     * Where the engine writes files as they arrive. Download/Link All when this
+     * app can write there (older Android, or all-files access); otherwise the
+     * app's own folder. Files outside Download/Link All are copied into
+     * Downloads through MediaStore once complete, so either way the user ends
+     * up with the file in Downloads.
+     */
+    private fun receiveStagingDir(): File {
+        val publicDir = File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS
+            ),
+            "Link All"
+        )
+        val writable = try {
+            publicDir.mkdirs()
+            val probe = File(publicDir, ".write-test")
+            probe.createNewFile().also { probe.delete() } || publicDir.canWrite()
+        } catch (_: Exception) {
+            false
+        }
+        if (writable) return publicDir
+        Log.w(TAG, "Cannot write to $publicDir; receiving into the app's own folder")
+        val base = getExternalFilesDir(null) ?: filesDir
+        return File(base, "incoming").also { it.mkdirs() }
     }
 
     private fun saveFileToPublicDownloads(sourceFile: File): String? {
