@@ -1092,7 +1092,9 @@ impl FileTransferManager {
         match self.inbound.entry(tid) {
             std::collections::hash_map::Entry::Occupied(entry) => {
                 let transfer = entry.into_mut();
-                transfer.from_device = from_device;
+                if transfer.from_device != from_device {
+                    anyhow::bail!("transfer ID already in use by another peer");
+                }
                 transfer.from_device_name = from_device_name;
                 // The sender re-announces after a reconnect. When that beats
                 // this side noticing the old session died, the transfer
@@ -1210,6 +1212,10 @@ impl FileTransferManager {
                 let _ = std::fs::remove_file(dest);
             }
         }
+    }
+
+    pub fn get_inbound(&self, tid: &TransferId) -> Option<&InboundTransfer> {
+        self.inbound.get(tid)
     }
 
     pub fn get_inbound_mut(&mut self, tid: &TransferId) -> Option<&mut InboundTransfer> {

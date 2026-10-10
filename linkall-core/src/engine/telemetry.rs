@@ -204,6 +204,15 @@ impl crate::engine::Engine {
 /// Forgets the call `device` reported, if it is the active one, and tells the
 /// UI the call is over. Used when this device declines it and when `device`
 /// disconnects, so a lost "idle" from the phone cannot leave a call showing.
+/// Drop everything cached about `device`: its call and the battery, network
+/// and storage it last reported. For a device that is no longer paired.
+pub(crate) async fn forget_device_status(shared: &EngineShared, device: Uuid) {
+    clear_call_from(shared, device).await;
+    shared.device_status.peer_batteries.remove(&device);
+    shared.device_status.peer_networks.remove(&device);
+    shared.device_status.peer_storage.remove(&device);
+}
+
 pub(crate) async fn clear_call_from(shared: &EngineShared, device: Uuid) {
     let ended = {
         let mut call = shared.device_status.active_call.lock().await;

@@ -202,7 +202,7 @@ private struct StepOneFindDevice: View {
             }
             .buttonStyle(.plain)
             .onHover { isHovered in if isHovered { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
-            .sheet(isPresented: $showingQR) { QRCodePairingSheet(store: store) }
+            .sheet(isPresented: $showingQR) { QRCodeSheetView(store: store) }
         }
     }
 }

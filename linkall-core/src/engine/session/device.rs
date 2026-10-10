@@ -180,7 +180,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         }
         AppMessage::CallAction {
             action,
-            origin_device,
+            origin_device: _,
         } => {
             ctx.touch_last_seen();
             if action == "system:explicit_disconnect" {
@@ -198,12 +198,12 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 tracing::warn!("Ignoring CallAction from untrusted peer {}", peer_id);
                 return Flow::Continue;
             }
-            tracing::info!("Received CallAction: {} from {:?}", action, origin_device);
+            tracing::info!("Received CallAction: {} from {}", action, peer_id);
             let _ = shared
                 .event_tx
                 .send(EngineEvent::CallActionRequest {
                     action,
-                    from_device: origin_device,
+                    from_device: peer_id,
                 })
                 .await;
         }

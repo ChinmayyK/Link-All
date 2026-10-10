@@ -1551,6 +1551,7 @@ mod tests {
             trust_store_path: temp_dir.path().join("trust.json"),
             peer_store_path: temp_dir.path().join("peers.json"),
             identity_path: temp_dir.path().join("identity.bin"),
+            settings_path: temp_dir.path().join("settings.json"),
             data_dir: temp_dir.path().join("data"),
             enable_discovery: false,
             ..EngineConfig::default()

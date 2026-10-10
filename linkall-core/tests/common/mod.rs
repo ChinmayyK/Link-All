@@ -53,6 +53,7 @@ pub async fn start_pair(tmp: &TempDir, a_trusts_b: bool, b_trusts_a: bool) -> (N
             trust_store_path: trust_path,
             peer_store_path: tmp.path().join(format!("peers{i}.json")),
             identity_path: tmp.path().join(format!("identity{i}.key")),
+            settings_path: tmp.path().join(format!("settings{i}.json")),
             data_dir: tmp.path().join(format!("data{i}")),
             file_save_dir: Some(tmp.path().join(format!("received{i}"))),
             bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),

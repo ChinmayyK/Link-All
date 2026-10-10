@@ -14,15 +14,10 @@ impl Engine {
         self.shared.settings.lock().unwrap().clone()
     }
 
-    /// Where this engine's settings.json lives. Android can't use a fixed
-    /// path (it used to be hard-coded to the `.debug` package's directory,
-    /// which a release build can't write), so it lives in the app's data dir.
+    /// Where this engine's settings.json lives. The daemon shares the default
+    /// path; Android and tests set their own in `EngineConfig`.
     pub(super) fn settings_path(&self) -> PathBuf {
-        if cfg!(target_os = "android") {
-            self.shared.config.data_dir.join("settings.json")
-        } else {
-            default_settings_path()
-        }
+        self.shared.config.settings_path.clone()
     }
 
     /// Tell every connected peer whether we share our clipboard, so they

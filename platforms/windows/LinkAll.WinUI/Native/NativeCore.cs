@@ -79,8 +79,6 @@ namespace LinkAll.WinUI
             IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
             byte[] data, UIntPtr len);
 
-        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int linkall_push_video_frame(IntPtr handle, byte[] data, UIntPtr size);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int linkall_send_file_path(
@@ -133,6 +131,15 @@ namespace LinkAll.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr linkall_event_transfer_dest_path(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_event_transfer_percent(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern long linkall_event_transfer_total_bytes(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern long linkall_event_transfer_bytes_received(IntPtr ev);
 
         // Remote Explorer FFI Functions
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]

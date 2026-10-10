@@ -24,6 +24,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         }
         AppMessage::DeviceSyncState { enabled } => {
             ctx.touch_last_seen();
+            if !shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false)
+            {
+                return Flow::Continue;
+            }
             tracing::info!(peer = %peer_name, enabled, "received device sync state");
             let _ = shared
                 .peer_manager

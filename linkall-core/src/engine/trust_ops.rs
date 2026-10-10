@@ -418,6 +418,7 @@ impl Engine {
             let _ = self.shared.trust.lock().await.revoke_peer(device_id);
             // Drain pending RPC waiters for forgotten device
             drain_remote_waiters(&self.shared, device_id).await;
+            super::telemetry::forget_device_status(&self.shared, device_id).await;
             // Disconnect the session — device will not auto-reconnect
             let session = self.shared.peer_manager.shutdown_peer_session(device_id)?;
             if let Some(session) = session {
@@ -453,6 +454,7 @@ pub(super) async fn retire_old_installs(shared: &EngineShared, kept: Uuid) {
             for id in retired {
                 tracing::info!(old = %id, new = %kept, "retired an old install of a paired device");
                 let _ = shared.peer_manager.forget_device(id);
+                super::telemetry::forget_device_status(shared, id).await;
             }
         }
         Err(e) => tracing::warn!("could not retire old installs: {e:#}"),

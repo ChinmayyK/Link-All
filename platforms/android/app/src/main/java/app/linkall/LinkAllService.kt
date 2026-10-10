@@ -822,12 +822,7 @@ class LinkAllService : Service() {
             if (!engineStarted.getAndSet(true)) {
                 val deviceName = resolvedDeviceName()
                 val dataDir = File(filesDir, "linkall").also { it.mkdirs() }.absolutePath
-                val fileSaveDir = File(
-                    android.os.Environment.getExternalStoragePublicDirectory(
-                        android.os.Environment.DIRECTORY_DOWNLOADS
-                    ),
-                    "Link All"
-                ).apply { mkdirs() }
+                val fileSaveDir = receiveStagingDir()
                 LinkAllJni.initContext(applicationContext)
                 engineHandle = LinkAllJni.start(
                     deviceName,
@@ -1501,12 +1496,23 @@ class LinkAllService : Service() {
                 // Offload the heavy file copy to a background coroutine so we don't block the JNI thread and freeze the UI
                 serviceScope.launch {
                     val srcFile = File(destPath)
+                    if (!srcFile.exists()) {
+                        Log.w(TAG, "Completed file does not exist at destPath: $destPath")
+                        // Don't leave the progress notification stuck.
+                        updateActivityTransferFailed(tid)
+                        cancelFileTransferNotification(tid)
+                        return@launch
+                    }
                     val publicUriStr = if (srcFile.parentFile?.name == "Link All") {
                         android.media.MediaScannerConnection.scanFile(this@LinkAllService, arrayOf(destPath), null, null)
                         null
                     } else {
                         val uriStr = saveFileToPublicDownloads(srcFile)
-                        try { srcFile.delete() } catch (_: Exception) {}
+                        if (uriStr != null) {
+                            try { srcFile.delete() } catch (_: Exception) {}
+                        } else {
+                            Log.w(TAG, "saveFileToPublicDownloads returned null for $destPath; preserving source file to avoid data loss")
+                        }
                         uriStr
                     }
                     
@@ -2500,6 +2506,33 @@ class LinkAllService : Service() {
     private fun getDownloadsDir(): File {
         val base = getExternalFilesDir(android.os.Environment.DIRECTORY_DOWNLOADS) ?: filesDir
         return File(base, "Link All").also { it.mkdirs() }
+    }
+
+    /**
+     * Where the engine writes files as they arrive. Download/Link All when this
+     * app can write there (older Android, or all-files access); otherwise the
+     * app's own folder. Files outside Download/Link All are copied into
+     * Downloads through MediaStore once complete, so either way the user ends
+     * up with the file in Downloads.
+     */
+    private fun receiveStagingDir(): File {
+        val publicDir = File(
+            android.os.Environment.getExternalStoragePublicDirectory(
+                android.os.Environment.DIRECTORY_DOWNLOADS
+            ),
+            "Link All"
+        )
+        val writable = try {
+            publicDir.mkdirs()
+            val probe = File(publicDir, ".write-test")
+            probe.createNewFile().also { probe.delete() } || publicDir.canWrite()
+        } catch (_: Exception) {
+            false
+        }
+        if (writable) return publicDir
+        Log.w(TAG, "Cannot write to $publicDir; receiving into the app's own folder")
+        val base = getExternalFilesDir(null) ?: filesDir
+        return File(base, "incoming").also { it.mkdirs() }
     }
 
     private fun saveFileToPublicDownloads(sourceFile: File): String? {
