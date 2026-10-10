@@ -67,7 +67,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .map(|p| p.trusted)
                 .unwrap_or(false);
             let settings = shared.settings.lock().unwrap().clone();
-            let mut auto_accept = (is_trusted || settings.auto_accept_file_transfers)
+            let mut auto_accept = (is_trusted && settings.auto_accept_file_transfers)
                 && (settings.auto_accept_max_bytes == 0
                     || file_bytes <= settings.auto_accept_max_bytes);
 

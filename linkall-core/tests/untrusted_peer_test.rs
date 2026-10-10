@@ -67,3 +67,46 @@ async fn qr_pairing_checks_the_computers_key() {
         .await
         .expect("the key the computer shows must match the one it presents");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn disabling_auto_accept_prompts_for_incoming_file() {
+    let tmp = TempDir::new().unwrap();
+    let (mut receiver, sender) = start_pair(&tmp, true, true).await;
+    connect(&sender, &receiver).await;
+
+    // Disable auto-accept on the receiver
+    receiver
+        .engine
+        .patch_settings(r#"{"auto_accept_file_transfers": false}"#.to_string())
+        .await
+        .unwrap();
+
+    sender
+        .engine
+        .send_file(
+            b"hello world".to_vec(),
+            "test.txt".to_string(),
+            "text/plain".to_string(),
+            Some(receiver.id),
+        )
+        .await
+        .unwrap();
+
+    let got = timeout(Duration::from_secs(3), async {
+        while let Some(event) = receiver.events.recv().await {
+            if let EngineEvent::FileTransferIncoming { file_name, .. } = event {
+                if file_name == "test.txt" {
+                    return true;
+                }
+            }
+        }
+        false
+    })
+    .await;
+
+    assert!(
+        matches!(got, Ok(true)),
+        "receiver must prompt via FileTransferIncoming when auto-accept is false"
+    );
+}
+
