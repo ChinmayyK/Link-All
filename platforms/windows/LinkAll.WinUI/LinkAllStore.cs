@@ -2116,6 +2116,22 @@ namespace LinkAll.WinUI
             }
         }
 
+        // Progress events land between status polls. Only rows the poll already
+        // created are moved forward: the poll groups folder items and owns
+        // status, so it stays the one place rows are added or finished.
+        public void UpdateTransferProgress(string transferId, int percent, long bytesReceived, long bytesTotal)
+        {
+            App.MainDispatcherQueue?.TryEnqueue(() =>
+            {
+                var match = ActiveTransfers.FirstOrDefault(t => t.transfer_id == transferId);
+                if (match == null) return;
+                match.percent = percent;
+                match.bytes_received = bytesReceived;
+                if (bytesTotal > 0) match.bytes_total = bytesTotal;
+                NotifyTransferMetrics();
+            });
+        }
+
         private void NotifyPendingClipboardMetrics()
         {
             OnPropertyChanged(nameof(PendingClipboardCount));

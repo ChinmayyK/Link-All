@@ -159,6 +159,18 @@ namespace LinkAll.WinUI.Services
                             });
                             break;
                         }
+                        case NativeCore.PB_EVENT_FILE_TRANSFER_PROGRESS:
+                        {
+                            var transferId = NativeCore.PtrToUtf8String(NativeCore.linkall_event_transfer_id(ev)) ?? "";
+                            int pct = NativeCore.linkall_event_transfer_percent(ev);
+                            long total = NativeCore.linkall_event_transfer_total_bytes(ev);
+                            long received = NativeCore.linkall_event_transfer_bytes_received(ev);
+                            if (!string.IsNullOrEmpty(transferId))
+                            {
+                                LinkAllStore.Shared.UpdateTransferProgress(transferId, pct, received, total);
+                            }
+                            break;
+                        }
                         case NativeCore.PB_EVENT_CALL_STATE_CHANGED:
                         {
                             var call = new PhoneCall(

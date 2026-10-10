@@ -132,6 +132,15 @@ namespace LinkAll.WinUI
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr linkall_event_transfer_dest_path(IntPtr ev);
 
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_event_transfer_percent(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern long linkall_event_transfer_total_bytes(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern long linkall_event_transfer_bytes_received(IntPtr ev);
+
         // Remote Explorer FFI Functions
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int linkall_send_remote_files_query(
