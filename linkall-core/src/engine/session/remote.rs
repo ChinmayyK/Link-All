@@ -18,6 +18,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             limit,
         } => {
             ctx.touch_last_seen();
+            if origin_device != peer_id {
+                return Flow::Continue;
+            }
             if !shared
                 .peer_manager
                 .get(peer_id)
@@ -30,7 +33,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .event_tx
                 .send(EngineEvent::RemoteFilesQueryReceived {
                     request_id,
-                    from_device: origin_device,
+                    from_device: peer_id,
                     summary_only,
                     category,
                     source,
@@ -77,6 +80,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             size_px,
         } => {
             ctx.touch_last_seen();
+            if origin_device != peer_id {
+                return Flow::Continue;
+            }
             if !shared
                 .peer_manager
                 .get(peer_id)
@@ -89,7 +95,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .event_tx
                 .send(EngineEvent::RemoteThumbnailRequestReceived {
                     request_id,
-                    from_device: origin_device,
+                    from_device: peer_id,
                     file_id,
                     size_px,
                 })
@@ -140,11 +146,19 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             {
                 return Flow::Continue;
             }
+            if origin_device != peer_id {
+                tracing::warn!(
+                    peer_id = %peer_id,
+                    claimed_device = %origin_device,
+                    "ignoring RemoteFilePullRequest: origin_device does not match session peer"
+                );
+                return Flow::Continue;
+            }
             let _ = shared
                 .event_tx
                 .send(EngineEvent::RemoteFilePullRequestReceived {
                     request_id,
-                    from_device: origin_device,
+                    from_device: peer_id,
                     file_id,
                 })
                 .await;

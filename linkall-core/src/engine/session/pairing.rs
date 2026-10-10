@@ -13,6 +13,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             pin: _req_pin,
         } => {
             ctx.touch_last_seen();
+            if origin_device != peer_id {
+                tracing::warn!(
+                    peer_id = %peer_id,
+                    claimed_device = %origin_device,
+                    "ignoring PairingRequest: origin_device does not match session peer"
+                );
+                return Flow::Continue;
+            }
 
             // Self-healing trust: if we already trust this peer cryptographically,
             // and they are asking to pair again (perhaps they lost their app data),
