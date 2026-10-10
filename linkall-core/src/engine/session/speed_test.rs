@@ -5,20 +5,22 @@ use super::*;
 pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
     let shared = &ctx.shared;
     let peer_id = ctx.peer_id;
+    // Only a paired device may start or take part in a speed test.
+    if !shared
+        .peer_manager
+        .get(peer_id)
+        .map(|p| p.trusted)
+        .unwrap_or(false)
+    {
+        ctx.touch_last_seen();
+        return Flow::Continue;
+    }
     match msg {
         AppMessage::SpeedTestRequest {
             test_id,
             duration_secs,
         } => {
             ctx.touch_last_seen();
-            if !shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false)
-            {
-                return Flow::Continue;
-            }
 
             let mut can_accept = false;
             {
