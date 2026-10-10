@@ -109,4 +109,3 @@ async fn disabling_auto_accept_prompts_for_incoming_file() {
         "receiver must prompt via FileTransferIncoming when auto-accept is false"
     );
 }
-

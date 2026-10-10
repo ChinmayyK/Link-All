@@ -499,9 +499,10 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
 
             let (file_name, peer_name, file_bytes) = {
                 let mut mgr = shared.file_transfers.lock().await;
-                if !mgr.get_outbound(&transfer_id).is_some_and(|t| {
-                    t.target_device == Some(peer_id) || t.target_device.is_none()
-                }) {
+                if !mgr
+                    .get_outbound(&transfer_id)
+                    .is_some_and(|t| t.target_device == Some(peer_id) || t.target_device.is_none())
+                {
                     return Flow::Continue;
                 }
                 let (fname, fbytes) = mgr
