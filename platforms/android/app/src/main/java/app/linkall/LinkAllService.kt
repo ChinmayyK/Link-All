@@ -1501,12 +1501,23 @@ class LinkAllService : Service() {
                 // Offload the heavy file copy to a background coroutine so we don't block the JNI thread and freeze the UI
                 serviceScope.launch {
                     val srcFile = File(destPath)
+                    if (!srcFile.exists()) {
+                        Log.w(TAG, "Completed file does not exist at destPath: $destPath")
+                        // Don't leave the progress notification stuck.
+                        updateActivityTransferFailed(tid)
+                        cancelFileTransferNotification(tid)
+                        return@launch
+                    }
                     val publicUriStr = if (srcFile.parentFile?.name == "Link All") {
                         android.media.MediaScannerConnection.scanFile(this@LinkAllService, arrayOf(destPath), null, null)
                         null
                     } else {
                         val uriStr = saveFileToPublicDownloads(srcFile)
-                        try { srcFile.delete() } catch (_: Exception) {}
+                        if (uriStr != null) {
+                            try { srcFile.delete() } catch (_: Exception) {}
+                        } else {
+                            Log.w(TAG, "saveFileToPublicDownloads returned null for $destPath; preserving source file to avoid data loss")
+                        }
                         uriStr
                     }
                     
