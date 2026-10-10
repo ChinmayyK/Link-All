@@ -279,7 +279,7 @@ namespace LinkAll.WinUI.Services
                             var title = NativeCore.PtrToUtf8String(NativeCore.linkall_event_notification_title(ev)) ?? "";
                             var body = NativeCore.PtrToUtf8String(NativeCore.linkall_event_text(ev)) ?? "";
                             var device = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_name(ev)) ?? "your phone";
-                            if (title.Length > 0 || body.Length > 0)
+                            if ((title.Length > 0 || body.Length > 0) && App.PhoneNotificationMirroringEnabled)
                             {
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                     NotificationHelper.ShowToast(
