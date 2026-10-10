@@ -491,8 +491,7 @@ impl IpcResponse {
 pub fn socket_path() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        let username = std::env::var("USERNAME").unwrap_or_else(|_| "default".to_string());
-        PathBuf::from(format!(r"\\.\pipe\linkall_{}", username))
+        PathBuf::from(crate::ipc_windows::get_pipe_name())
     }
 
     #[cfg(not(windows))]

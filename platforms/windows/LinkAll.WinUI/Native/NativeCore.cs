@@ -79,8 +79,6 @@ namespace LinkAll.WinUI
             IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string name,
             byte[] data, UIntPtr len);
 
-        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int linkall_push_video_frame(IntPtr handle, byte[] data, UIntPtr size);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int linkall_send_file_path(
