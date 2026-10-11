@@ -37,6 +37,9 @@ CARGO="$ROOT/Cargo.toml"
 GRADLE="$ROOT/platforms/android/app/build.gradle"
 WXS="$ROOT/platforms/windows/installer/LinkAll.wxs"
 CSPROJ="$ROOT/platforms/windows/LinkAll.WinUI/LinkAll.WinUI.csproj"
+# The Microsoft Store package. Its Identity Version has four parts and the
+# Store requires the last to be 0, so 2.0.0 is written as 2.0.0.0.
+APPX="$ROOT/platforms/windows/LinkAll.WinUI/Package.appxmanifest"
 PLISTS=(
   "$ROOT/platforms/macos/LinkAll/Info.plist"
   "$ROOT/platforms/macos/ShareExtension/Info.plist"
@@ -58,6 +61,7 @@ gradle_version() { sed -n 's/.*versionName "\([^"]*\)".*/\1/p' "$GRADLE" | head 
 gradle_build()   { sed -n 's/.*versionCode \([0-9]*\).*/\1/p' "$GRADLE" | head -1; }
 wxs_version()    { sed -n 's/^ *Version="\([^"]*\)".*/\1/p' "$WXS" | head -1; }
 csproj_version() { sed -n 's/.*<Version>\([^<]*\)<\/Version>.*/\1/p' "$CSPROJ" | head -1; }
+appx_version()   { sed -n 's/^ *Version="\([^"]*\)\.0".*/\1/p' "$APPX" | head -1; }
 
 # ---- writers ---------------------------------------------------------------
 
@@ -83,6 +87,7 @@ apply() { # <version> <build>
   sed_inplace "s/versionCode [0-9]*/versionCode $b/" "$GRADLE"
   sed_inplace "s/^\( *Version=\"\)[^\"]*\"/\1$v\"/" "$WXS"
   sed_inplace "s/<Version>[^<]*<\/Version>/<Version>$v<\/Version>/" "$CSPROJ"
+  sed_inplace "s/^\( *Version=\"\)[^\"]*\"/\1$v.0\"/" "$APPX"
 
   local p
   for p in "${PLISTS[@]}"; do
@@ -100,6 +105,7 @@ survey() {
   printf 'android\t%s\t%s\n'        "$(gradle_version)" "$(gradle_build)"
   printf 'windows installer\t%s\t-\n' "$(wxs_version)"
   printf 'windows app\t%s\t-\n' "$(csproj_version)"
+  printf 'windows store package\t%s\t-\n' "$(appx_version)"
   local p label
   for p in "${PLISTS[@]}"; do
     label="macos $(basename "$(dirname "$p")")"
