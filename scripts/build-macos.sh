@@ -168,16 +168,23 @@ log "✅ Built: ${APP_BUNDLE}"
 
 if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     log "Creating DMG..."
-    # No --app-drop-link: that symlink points at the shared /Applications,
-    # which non-admin (e.g. managed corporate) users can't write to without
-    # an administrator password. Link All relocates itself to the per-user
-    # ~/Applications on first launch instead (see AppDelegate.
-    # relocateToUserApplicationsIfNeeded), so users just double-click it
-    # straight from the mounted DMG.
+    # The usual layout: the app on the left, an Applications shortcut on the
+    # right, and an arrow between them (platforms/macos/dmg/background.svg,
+    # exported as a 1x + 2x TIFF). Users who can't write to /Applications
+    # (non-admin, managed Macs) can open the app straight from the DMG
+    # instead: it copies itself to ~/Applications on first launch (see
+    # AppDelegate.relocateToUserApplicationsIfNeeded), and an app dragged to
+    # /Applications runs from there unchanged.
     create-dmg \
         --volname "Link All" \
+        --background "${MACOS_DIR}/dmg/background.tiff" \
+        --window-pos 200 120 \
         --window-size 600 400 \
         --icon-size 128 \
+        --text-size 13 \
+        --icon "${PRODUCT_NAME}.app" 150 185 \
+        --hide-extension "${PRODUCT_NAME}.app" \
+        --app-drop-link 450 185 \
         "${MACOS_DIR}/build/LinkAll.dmg" \
         "${APP_BUNDLE}" || {
             log "create-dmg failed (headless CI), falling back to zip..."
