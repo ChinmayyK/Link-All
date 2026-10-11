@@ -133,8 +133,10 @@
                                     </Border>
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                        <!-- Two lines, so a clip reads as more than its first few words. -->
                                         <TextBlock Text="{x:Bind display_text}"
                                                    Style="{StaticResource AppBodyStrong}"
+                                                   TextWrapping="Wrap" MaxLines="2"
                                                    TextTrimming="CharacterEllipsis" />
                                         <TextBlock Text="{x:Bind path}"
                                                    Style="{StaticResource AppSecondary}"

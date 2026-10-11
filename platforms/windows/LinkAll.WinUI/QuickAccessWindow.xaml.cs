@@ -35,13 +35,13 @@ namespace LinkAll.WinUI
 
             // Resize the window. AppWindow.Resize takes physical pixels while
             // the XAML content is measured in DIPs - scale by the monitor's
-            // DPI so this is 360x600 DIPs on every display, not just 100%
+            // DPI so this is 420x620 DIPs on every display, not just 100%
             // scaled ones (see the matching note in DashboardWindow.xaml.cs).
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             LinkAll.WinUI.Services.WindowIconHelper.Apply(appWindow);
-            LinkAll.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 360, 600);
+            LinkAll.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 420, 620);
 
             TimelineList.ItemsSource = LinkAllStore.Shared.History;
             if (DeviceTargetsList != null) DeviceTargetsList.ItemsSource = LinkAllStore.WithoutStaleDuplicates(LinkAllStore.Shared.Peers).ToList();
