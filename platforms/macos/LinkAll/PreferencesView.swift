@@ -340,6 +340,13 @@ private struct GeneralPane: View {
             }
         }
 
+        PrefsSection(title: "File Browsing", icon: "folder.badge.person.crop", tint: CRTheme.accentIndigo) {
+            PrefsRow(icon: "folder.fill", label: "Let devices browse files",
+                     description: "Paired phones can list, preview and fetch files from this Mac's Documents, Downloads, Pictures, Movies and Music folders.") {
+                Toggle("", isOn: $copy.allowFileBrowsing).labelsHidden()
+            }
+        }
+
         PrefsSection(title: "Ambient Continuity", icon: "star.fill", tint: CRTheme.accentYellow) {
             PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
                      description: "Instantly sends Mac screenshots to connected Android devices.") {
@@ -788,7 +795,7 @@ extension LinkAllSettingsSnapshot {
             ignorePatterns: [], clipboardPollMs: 100,
             maxPushesPerSec: 10, rateLimitBurst: 3,
             smartSyncDuplicateWindowMs: 1500, smartSyncDebounceMs: 150,
-            startOnLogin: false
+            startOnLogin: false, allowFileBrowsing: false
         )
     }
 }

@@ -123,6 +123,31 @@
                                        Style="{StaticResource AppMetric}"
                                        VerticalAlignment="Center" />
                         </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <!-- Off until the owner turns it on; while off, a phone
+                             that tries to browse is told so. -->
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Let devices browse files" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Paired phones can list, preview and fetch files from this PC's Documents, Downloads, Pictures, Videos and Music folders"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="FileBrowsingToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnFileBrowsingToggled"
+                                          AutomationProperties.Name="Let devices browse files" />
+                        </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>

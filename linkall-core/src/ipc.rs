@@ -76,6 +76,7 @@ pub struct PartialSettings {
     pub require_tofu_confirmation: Option<bool>,
     pub show_receive_notification: Option<bool>,
     pub ignore_patterns: Option<Vec<String>>,
+    pub allow_file_browsing: Option<bool>,
 }
 
 fn default_remote_files_limit() -> u32 {
@@ -368,6 +369,8 @@ pub enum IpcRequest {
         show_receive_notification: Option<bool>,
         #[serde(default)]
         ignore_patterns: Option<Vec<String>>,
+        #[serde(default)]
+        allow_file_browsing: Option<bool>,
     },
 
     // ── Call continuity ───────────────────────────────────────────────────────
@@ -1336,6 +1339,7 @@ pub async fn handle_ipc_request(
             require_tofu_confirmation,
             show_receive_notification,
             ignore_patterns,
+            allow_file_browsing,
         } => {
             match eng
                 .save_settings_partial(crate::ipc::PartialSettings {
@@ -1357,6 +1361,7 @@ pub async fn handle_ipc_request(
                     require_tofu_confirmation,
                     show_receive_notification,
                     ignore_patterns,
+                    allow_file_browsing,
                 })
                 .await
             {

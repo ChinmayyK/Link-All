@@ -277,5 +277,15 @@ object LinkAllJni {
         error: String?
     ): Int
 
+    // Remote browsing, this phone as the client. All three block; call off the main thread.
+    /** The device's listing as RemoteFilesResult JSON, or {"error": "..."}. */
+    @JvmStatic external fun queryRemoteFiles(
+        handle: Long, deviceId: String, summaryOnly: Boolean, category: String?,
+        searchQuery: String?, offset: Int, limit: Int
+    ): String?
+    @JvmStatic external fun requestRemoteThumbnail(handle: Long, deviceId: String, fileId: Long, sizePx: Int): ByteArray?
+    /** Asks the device to send one listed file; it arrives as a normal transfer. */
+    @JvmStatic external fun pullRemoteFile(handle: Long, deviceId: String, fileId: Long): Int
+
     @JvmStatic external fun setSyncEnabled(handle: Long, enabled: Boolean): Int
 }

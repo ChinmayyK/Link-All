@@ -71,6 +71,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.linkall.ActivityEntry
+import app.linkall.R
+import androidx.compose.ui.res.painterResource
 import app.linkall.ActivityKind
 import app.linkall.PeerSnapshot
 import app.linkall.SpeedTestProgress
@@ -125,6 +127,8 @@ fun HomeTab(
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
     var showSendSheet by remember { mutableStateOf(false) }
+    var showBrowsePicker by remember { mutableStateOf(false) }
+    val browseFiles = LocalBrowseFiles.current
 
 
     Column(
@@ -137,9 +141,9 @@ fun HomeTab(
         // device list and transfer rows, not up here.
         HomeTopBar(
             c = c,
+            isDark = isDark,
             deviceName = deviceName,
-            connected = connected,
-            hasPeers = peers.isNotEmpty(),
+            peers = peers,
             onScanQr = onActionPairMagicLink,
             onManualIp = onManualIp
         )
@@ -178,6 +182,20 @@ fun HomeTab(
                     clip?.let { "Send copied text · ${it.length} characters" } ?: "Send what you last copied",
                     enabled = enabled,
                     onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
+                )
+            }
+
+            SectionHeader(c, "Get", if (enabled) null else "Connect a device first")
+            Panel(c) {
+                ActionRow(
+                    c, Icons.Outlined.FolderOpen, "Browse files",
+                    when (connected.size) {
+                        0 -> "Open files on your other devices"
+                        1 -> "Open files on ${connected.first().name}"
+                        else -> "Open files on any of ${connected.size} devices"
+                    },
+                    enabled = enabled,
+                    onClick = { if (connected.size == 1) browseFiles(connected.first()) else showBrowsePicker = true }
                 )
             }
         }
@@ -246,6 +264,10 @@ fun HomeTab(
         Spacer(Modifier.height(140.dp))
     }
 
+    if (showBrowsePicker) {
+        BrowseDevicePicker(c, connected, onPick = browseFiles, onDismiss = { showBrowsePicker = false })
+    }
+
     if (showSendSheet) {
         SendSheet(
             c = c,
@@ -259,57 +281,39 @@ fun HomeTab(
 @Composable
 private fun HomeTopBar(
     c: DdColors,
+    isDark: Boolean,
     deviceName: String,
-    connected: List<PeerSnapshot>,
-    hasPeers: Boolean,
+    peers: List<PeerSnapshot>,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit
 ) {
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            // No app name: the launcher already says it. This phone's name is what
-            // other devices list it as when pairing, so that is what's worth showing.
-            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                if (deviceName.isNotBlank()) {
-                    Text("Visible as ", style = DdType.small, color = c.textMuted, maxLines = 1)
-                    Text(deviceName, style = DdType.title, color = c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
-        }
-        if (hasPeers) {
-            Spacer(Modifier.height(6.dp))
-            LinkStatusLine(c, connected)
+    // Redraws "synced 2m ago" once a minute while Home is on screen.
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(60_000)
+            value = System.currentTimeMillis()
         }
     }
-}
-
-/** "● Connected  192.168.1.20 · synced 1h ago", or "○ Not connected". */
-@Composable
-private fun LinkStatusLine(c: DdColors, connected: List<PeerSnapshot>) {
-    val lead = connected.firstOrNull()
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (lead != null) {
-            Box(Modifier.size(8.dp).background(c.live, CircleShape))
-            Spacer(Modifier.width(8.dp))
-            // Who, not where: the address lives on the Devices tab.
-            val who = if (connected.size == 1) lead.name else "${connected.size} devices"
-            Text(
-                "Connected to $who",
-                style = DdType.label,
-                color = c.live,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f, fill = false)
+    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Image(
+                painter = painterResource(if (isDark) R.drawable.header_logo_dark else R.drawable.header_logo_light),
+                contentDescription = null,
+                modifier = Modifier.size(30.dp)
             )
-            agoLabel(connected.mapNotNull { it.lastSyncSecs }.maxOrNull())?.let { synced ->
-                Spacer(Modifier.width(10.dp))
-                Text("synced $synced", style = DdType.small, color = c.textMuted, maxLines = 1)
+            Spacer(Modifier.width(10.dp))
+            Text("Link All", style = DdType.title.copy(fontSize = 19.sp), color = c.text, modifier = Modifier.weight(1f))
+            AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
+        }
+        // Paired devices only; a device still pairing shows in its own panel below.
+        val linked = peers.filter { it.trusted }.sortedByDescending { it.isConnected }
+        if (linked.isNotEmpty()) {
+            Spacer(Modifier.height(16.dp))
+            val synced = remember(linked, now) {
+                agoLabel(linked.filter { it.isConnected }.mapNotNull { it.lastSyncSecs }.maxOrNull())
             }
-        } else {
-            Box(Modifier.size(8.dp).border(1.5.dp, c.textMuted, CircleShape))
-            Spacer(Modifier.width(8.dp))
-            Text("Not connected", style = DdType.label, color = c.textMuted, maxLines = 1)
+            if (linked.size <= LINK_MAP_MAX) LinkMap(c, deviceName, linked, synced)
+            else DeviceChips(c, linked, synced)
         }
     }
 }
@@ -600,6 +604,7 @@ internal fun DeviceRow(
 ) {
     val haptic = LocalHapticFeedback.current
     var menuOpen by remember { mutableStateOf(false) }
+    val browseFiles = LocalBrowseFiles.current
     val (status, statusColor) = when {
         speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
         peer.pairingRequested && !peer.trusted -> "Wants to pair" to c.accent
@@ -664,6 +669,7 @@ internal fun DeviceRow(
                         add(SheetAction(Icons.Outlined.Check, "Accept pairing") { onRespond(true) })
                         add(SheetAction(Icons.Outlined.Close, "Decline") { onRespond(false) })
                     } else if (peer.isConnected) {
+                        add(SheetAction(Icons.Outlined.FolderOpen, "Browse files", "Get files from ${peer.name}") { browseFiles(peer) })
                         add(SheetAction(Icons.Outlined.UploadFile, "Send files", "Photos, videos, documents, anything", onClick = onSendFiles))
                         add(SheetAction(Icons.Outlined.DriveFolderUpload, "Send a folder", "Everything in it, subfolders included", onClick = onSendFolder))
                         add(SheetAction(Icons.Outlined.Speed, "Test speed", "How fast this link is right now", onClick = onSpeedTest))

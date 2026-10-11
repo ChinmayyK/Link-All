@@ -184,6 +184,8 @@ fun MainScreen(
 
     val hasConnectedDevices = remember(peers) { peers.any { it.isConnected } }
 
+    var browsingPeerId by rememberSaveable { mutableStateOf<String?>(null) }
+    CompositionLocalProvider(LocalBrowseFiles provides { peer: PeerSnapshot -> browsingPeerId = peer.id }) {
         CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices, flat = true) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
@@ -337,7 +339,15 @@ fun MainScreen(
                     isDark = isDark
                 )
             }
+
+            // Over everything, dock included; Back closes it.
+            browsingPeerId?.let { id ->
+                peers.firstOrNull { it.id == id }?.let { peer ->
+                    RemoteBrowserScreen(isDark, peer, onClose = { browsingPeerId = null })
+                } ?: LaunchedEffect(id) { browsingPeerId = null } // forgotten meanwhile
+            }
         }
+    }
     }
 }
 

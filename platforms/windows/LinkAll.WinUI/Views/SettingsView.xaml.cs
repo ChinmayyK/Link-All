@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace LinkAll.WinUI.Views
@@ -22,6 +23,7 @@ namespace LinkAll.WinUI.Views
             StartupToggle.IsOn = IsLaunchAtStartupEnabled();
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
+            _ = LoadFileBrowsingAsync();
 
             ThemeSelector.SelectedIndex = LinkAll.WinUI.Services.ThemeService.CurrentPreference switch
             {
@@ -34,6 +36,32 @@ namespace LinkAll.WinUI.Views
         private void OnScreenshotSyncToggled(object sender, RoutedEventArgs e)
         {
             App.SetScreenshotSyncEnabled(ScreenshotSyncToggle.IsOn);
+        }
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _showingSavedFileBrowsing;
+
+        private async Task LoadFileBrowsingAsync()
+        {
+            var on = await Task.Run(() =>
+            {
+                using var doc = DaemonClient.GetSettings();
+                return doc != null
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("allow_file_browsing", out var value)
+                    && value.ValueKind == JsonValueKind.True;
+            });
+            _showingSavedFileBrowsing = true;
+            FileBrowsingToggle.IsOn = on;
+            _showingSavedFileBrowsing = false;
+        }
+
+        private async void OnFileBrowsingToggled(object sender, RoutedEventArgs e)
+        {
+            if (_showingSavedFileBrowsing) return;
+            var on = FileBrowsingToggle.IsOn;
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("allow_file_browsing", on))));
+            DaemonActions.ReportIfFailed("Let devices browse files", resp);
         }
 
         private void OnPhoneNotificationsToggled(object sender, RoutedEventArgs e)

@@ -77,6 +77,25 @@ class LinkAllService : Service() {
         // the write lock before freeing the engine.
         val engineLock = java.util.concurrent.locks.ReentrantReadWriteLock()
 
+        /** The running engine, shared so screens can make their own blocking calls. */
+        @Volatile private var liveEngineHandle: Long = 0L
+
+        /**
+         * Runs [action] with the running engine, or returns null when it isn't
+         * running. It blocks while the engine is being stopped, so call it off
+         * the main thread.
+         */
+        fun <T> withLiveEngine(action: (Long) -> T): T? {
+            val lock = engineLock.readLock()
+            lock.lock()
+            try {
+                val h = liveEngineHandle
+                return if (h != 0L) action(h) else null
+            } finally {
+                lock.unlock()
+            }
+        }
+
         val quickSendContextFlow = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
 
         // Notification channels
@@ -180,7 +199,9 @@ class LinkAllService : Service() {
 
     // ── State ─────────────────────────────────────────────────────────────────
 
-    private var engineHandle: Long = 0L
+    private var engineHandle: Long
+        get() = liveEngineHandle
+        set(value) { liveEngineHandle = value }
     private val handler = Handler(Looper.getMainLooper())
     private var lastClipboardSignature: String? = null
     private var serviceStartTime = 0L
@@ -1249,6 +1270,7 @@ class LinkAllService : Service() {
                     appliedLocally = true
                 ))
                 applyText(text, from)
+                persistStatus()
             }
 
             // ── Clipboard text — TIMELINE-FIRST (available, not auto-applied) ─
@@ -1283,6 +1305,7 @@ class LinkAllService : Service() {
                     // Show a dismissable notification with an "Apply" action.
                     showClipboardAvailableNotification(from, preview, text, textContentHash(text))
                 }
+                persistStatus()
             }
 
             // ── Clipboard image — AUTO-APPLIED ────────────────────────────────
@@ -1300,7 +1323,11 @@ class LinkAllService : Service() {
                 addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.CLIPBOARD_IMAGE,
                     preview = "image ($mime)", appliedLocally = applied))
                 if (applied) applyBinaryClipboard(bytes, imageNameForMime(mime), mime, from, isFile = false)
+                persistStatus()
             }
+
+            // A peer acknowledged our clipboard; the core moved its last-sync time.
+            LinkAllJni.CR_EVENT_CLIPBOARD_SYNCED -> persistStatus()
 
             // ── File received (legacy clipboard file) ─────────────────────────
             LinkAllJni.CR_EVENT_CLIPBOARD_FILE -> {
