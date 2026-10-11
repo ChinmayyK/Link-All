@@ -90,27 +90,41 @@ private struct RemoteExplorerPane: View {
     // Pagination State
     @State private var displayLimit: Int = 500
     
+    /// A computer serves its standard folders: no apps, WhatsApp, camera or
+    /// Bluetooth folders, and its Pictures folder stands in for the camera roll.
+    private var isPhone: Bool { device.os == .android }
+
     // Library Categories
-    private let libraryCategories: [(id: String?, label: String, icon: String)] = [
-        (nil, "All Files", "square.grid.2x2.fill"),
-        ("Images", "Images", "photo.fill"),
-        ("Videos", "Videos", "film.fill"),
-        ("Audio", "Audio", "waveform"),
-        ("Documents", "Documents", "doc.text.fill"),
-        ("Apks", "APKs & Apps", "app.dashed"),
-        ("Archives", "Archives", "archivebox.fill")
-    ]
-    
+    private var libraryCategories: [(id: String?, label: String, icon: String)] {
+        var categories: [(id: String?, label: String, icon: String)] = [
+            (nil, "All Files", "square.grid.2x2.fill"),
+            ("Images", "Images", "photo.fill"),
+            ("Videos", "Videos", "film.fill"),
+            ("Audio", "Audio", "waveform"),
+            ("Documents", "Documents", "doc.text.fill")
+        ]
+        if isPhone { categories.append(("Apks", "APKs & Apps", "app.dashed")) }
+        categories.append(("Archives", "Archives", "archivebox.fill"))
+        return categories
+    }
+
     // Locations (Sources)
-    private let locationSources: [(id: String?, label: String, icon: String)] = [
-        (nil, "All Locations", "tray.full.fill"),
-        ("Downloads", "Downloads", "arrow.down.circle.fill"),
-        ("WhatsApp", "WhatsApp", "message.fill"),
-        ("Camera", "Camera Roll", "camera.fill"),
-        ("Bluetooth", "Bluetooth", "wave.3.left.circle.fill"),
-        ("Other", "Other Folders", "folder.fill")
-    ]
-    
+    private var locationSources: [(id: String?, label: String, icon: String)] {
+        isPhone ? [
+            (nil, "All Locations", "tray.full.fill"),
+            ("Downloads", "Downloads", "arrow.down.circle.fill"),
+            ("WhatsApp", "WhatsApp", "message.fill"),
+            ("Camera", "Camera Roll", "camera.fill"),
+            ("Bluetooth", "Bluetooth", "wave.3.left.circle.fill"),
+            ("Other", "Other Folders", "folder.fill")
+        ] : [
+            (nil, "All Locations", "tray.full.fill"),
+            ("Downloads", "Downloads", "arrow.down.circle.fill"),
+            ("Camera", "Pictures", "photo.on.rectangle"),
+            ("Other", "Other Folders", "folder.fill")
+        ]
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // macOS Native Toolbar
