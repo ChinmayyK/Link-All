@@ -143,11 +143,13 @@ fn human_size(bytes: u64) -> String {
         value /= 1024.0;
         unit += 1;
     }
-    if value >= 100.0 {
-        format!("{value:.0} {}", UNITS[unit])
+    // One decimal below 100, dropped when it is zero: "12.9 KB", "46 MB".
+    let shown = if value >= 100.0 {
+        format!("{value:.0}")
     } else {
-        format!("{value:.1} {}", UNITS[unit])
-    }
+        format!("{value:.1}").trim_end_matches(".0").to_string()
+    };
+    format!("{shown} {}", UNITS[unit])
 }
 
 fn capitalize(word: &str) -> String {
@@ -793,7 +795,8 @@ mod tests {
     #[test]
     fn human_size_picks_a_unit() {
         assert_eq!(human_size(900), "900 B");
-        assert_eq!(human_size(48_234_496), "46.0 MB");
+        assert_eq!(human_size(48_234_496), "46 MB");
+        assert_eq!(human_size(13_210), "12.9 KB");
         assert_eq!(human_size(188_743_680), "180 MB");
     }
 
