@@ -1249,6 +1249,7 @@ class LinkAllService : Service() {
                     appliedLocally = true
                 ))
                 applyText(text, from)
+                persistStatus()
             }
 
             // ── Clipboard text — TIMELINE-FIRST (available, not auto-applied) ─
@@ -1283,6 +1284,7 @@ class LinkAllService : Service() {
                     // Show a dismissable notification with an "Apply" action.
                     showClipboardAvailableNotification(from, preview, text, textContentHash(text))
                 }
+                persistStatus()
             }
 
             // ── Clipboard image — AUTO-APPLIED ────────────────────────────────
@@ -1300,7 +1302,11 @@ class LinkAllService : Service() {
                 addActivity(ActivityEntry(deviceName = from, kind = ActivityKind.CLIPBOARD_IMAGE,
                     preview = "image ($mime)", appliedLocally = applied))
                 if (applied) applyBinaryClipboard(bytes, imageNameForMime(mime), mime, from, isFile = false)
+                persistStatus()
             }
+
+            // A peer acknowledged our clipboard; the core moved its last-sync time.
+            LinkAllJni.CR_EVENT_CLIPBOARD_SYNCED -> persistStatus()
 
             // ── File received (legacy clipboard file) ─────────────────────────
             LinkAllJni.CR_EVENT_CLIPBOARD_FILE -> {
