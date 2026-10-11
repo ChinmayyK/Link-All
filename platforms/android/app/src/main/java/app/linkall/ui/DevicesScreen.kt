@@ -135,8 +135,13 @@ fun DevicesTab(
                         c, Icons.Outlined.Devices,
                         "No devices yet. Open Link All on your computer on the same Wi-Fi, or use + to scan its code."
                     ) {
+                        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
                         Spacer(Modifier.height(12.dp))
                         PillButton(c, "Can't find it? Connect by IP", filled = false, compact = true, icon = Icons.Outlined.Lan, onClick = onManualIp)
+                        Spacer(Modifier.height(8.dp))
+                        PillButton(c, "Get Link All for your computer", filled = false, compact = true, icon = Icons.Outlined.Download) {
+                            uriHandler.openUri("https://linkall.chinmaykudalkar.com/download")
+                        }
                     }
                 }
             }
