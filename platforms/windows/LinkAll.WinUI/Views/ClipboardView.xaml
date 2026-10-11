@@ -2,6 +2,7 @@
     x:Class="LinkAll.WinUI.Views.ClipboardView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:LinkAll.WinUI.UI"
     xmlns:local="using:LinkAll.WinUI.Views"
     xmlns:winui="using:LinkAll.WinUI"
     xmlns:services="using:LinkAll.WinUI.Services"
@@ -81,7 +82,8 @@
     </Page.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-        <StackPanel Padding="{StaticResource PagePadding}" Spacing="24" MaxWidth="1000">
+        <ui:PageColumn MaxContentWidth="1000">
+        <StackPanel Padding="{StaticResource PagePadding}" Spacing="24">
 
             <!-- Header -->
             <Grid ColumnSpacing="16">
@@ -231,5 +233,6 @@
                 </Border>
             </StackPanel>
         </StackPanel>
+        </ui:PageColumn>
     </ScrollViewer>
 </Page>
