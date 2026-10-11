@@ -129,6 +129,8 @@ Get the latest build for each platform from [GitHub Releases](https://github.com
 | Android 8.0+ | `LinkAll-android.apk` |
 | Linux x86_64 | `LinkAll-linux-x86_64.tar.gz` |
 
+**First launch on macOS:** Link All isn't notarized by Apple yet, so macOS asks once. Open Link All, click **Done** when macOS says it can't verify it, then go to **System Settings › Privacy & Security** and click **Open Anyway** next to Link All. On Windows, if SmartScreen warns about an unrecognised app, choose **More info › Run anyway**.
+
 The Android app is also coming to Google Play. That build leaves out the features Play reserves for default SMS, dialer and file-manager apps: SMS code forwarding, answering calls, and letting a computer browse the phone's files. Everything else, including browsing your computers from the phone, works the same.
 
 ---

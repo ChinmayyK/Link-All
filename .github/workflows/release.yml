@@ -285,6 +285,8 @@ jobs:
             echo
             echo "Checksums are in \`sha256sums.txt\`."
             echo
+            echo "**First launch on macOS:** Link All isn't notarized by Apple yet. Open it, click **Done** when macOS says it can't verify it, then go to **System Settings › Privacy & Security** and click **Open Anyway** next to Link All. On Windows, if SmartScreen warns, choose **More info › Run anyway**."
+            echo
             cat changes.md
           } > release-notes.md
 
