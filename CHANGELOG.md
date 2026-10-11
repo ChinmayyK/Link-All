@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Link All (called Deskdrop until 1.4.0) are documented here.
+All notable changes to Link All are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 Versioning follows [Semantic Versioning](https://semver.org/).
 
@@ -10,7 +10,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [2.0.0] - 2026-10-11
 
-Deskdrop is now Link All. This is the first published release since 1.3.3, so it also carries everything listed under 1.4.0.
+Link All is continuity for every device you own, whatever it runs. Your Windows PC, Mac, Android phone and Linux machine share one clipboard, pass files and folders, show the phone's notifications and calls on the computer, and browse each other's files, straight over your own network with no cloud and no account.
+
+It also includes everything listed under 1.4.0.
 
 ### Added
 - **Android:** Browse, search and preview files on your Mac or Windows PC, and fetch any of them to the phone. Pick a device from Home › Get › Browse files or from a device's sheet.
@@ -18,10 +20,10 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **Android:** Home opens with a map of this phone and the devices it is linked to, solid for connected and dashed for offline. With more than four devices it becomes a row of chips.
 - **Android:** Connected computers appear in the share sheet. The Link All notification can be swiped away, and you can pick a light or dark theme.
 - **CLI:** `pause`, `resume` and `send-folder` commands.
+- **Windows:** A Microsoft Store (MSIX) package. In it, "Start with Windows" uses the package's startup task, and pairings stay in the same data folder as the MSI install.
 - **macOS:** The disk image opens with the usual install layout: drag Link All onto the Applications shortcut, or open it straight from the disk image to have it install itself.
 
 ### Changed
-- **All platforms:** Deskdrop is now Link All. Existing installs keep their pairings, settings and history; the data folder moves from `deskdrop` to `linkall` on first launch. The Android app has a new ID (`app.linkall`) and installs beside the old one, so pair it once more and remove the old app. Received files now go to `Downloads/Link All`. Release downloads are named `LinkAll-*`.
 - **All platforms:** Activity reads as plain sentences ("Sent Launch-film-4K.mov to MacBook Pro · 640 MB") with sizes in KB, MB or GB, instead of bracketed device names and raw kilobytes.
 - **Windows:** The Activity page shows the activity log (transfers, clips and connections) rather than repeating clipboard history. Clipboard shows each clip once with file sizes, Quick Access gives previews the whole row and fits three devices, and page content stays centred on wide windows.
 - **macOS:** Browsing a computer shows its own folders (Downloads, Pictures, Other Folders) instead of phone places like WhatsApp and Camera Roll.
@@ -32,6 +34,10 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **macOS:** The drop target on the screen edge. Drop files on the Link All menu bar icon instead.
 
 ### Fixed
+- **Android (Google Play build):** Incoming calls show the caller's name, read from the phone app's call notification, instead of "Unknown Caller". A ring waits up to a second for the name so the computer shows it from the start. Computers say which phone is ringing when no name is available.
+- **macOS:** The transfer pill no longer blocks clicks below it or takes focus from the app in use.
+- **Android:** "Show my pairing code" follows dark mode.
+- **macOS:** The event log says "Sent" for files this Mac sent, not "Received".
 - **All platforms:** Copied links sync again when "Block sensitive text" is on. Its token check treated most links as secrets; now only a password in the address or a token-like parameter blocks one.
 - **All platforms:** A phone with its screen off no longer drops off the computer after 30 seconds of quiet.
 - **Security:** Pairing by QR code checks the computer's key; the Mac stops trusting devices while its QR code is open; unpaired devices can no longer send calls, warnings, sync-state or speed-test messages; a transfer can only be controlled by its own peer; Windows IPC pipes are owner-only.
@@ -56,9 +62,9 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **Pairing:** A device on an older version is told it needs an update instead of failing silently.
 - **Windows:** The system tray helper is now a native Rust exe (`platforms/windows/tray`, ~0.3 MB) instead of a WinForms app with its own self-contained .NET runtime (~110 MB). Same process name, pipes and menu.
 - **Windows:** Only English language resources ship; WinUI's built-in control text shows in English on other display languages.
-- **Windows:** The app targets .NET 10 and publishes with Native AOT: `Deskdrop.exe` is native code and no .NET runtime ships with it. Daemon requests are built as `JsonObject`s and all JSON reading goes through a source-generated `DeskdropJsonContext`, so nothing relies on reflection. The unused `System.Drawing.Common` package is removed.
+- **Windows:** The app targets .NET 10 and publishes with Native AOT: `LinkAll.exe` is native code and no .NET runtime ships with it. Daemon requests are built as `JsonObject`s and all JSON reading goes through a source-generated `LinkAllJsonContext`, so nothing relies on reflection. The unused `System.Drawing.Common` package is removed.
 - **Windows:** The Rust engine DLL and tray helper link the C runtime statically, so they no longer need `vcruntime140.dll` (missing on some clean installs).
-- **Build:** Windows releases ship as a per-user MSI and a portable zip of the whole app folder instead of a single-file `Deskdrop.exe`. The MSI now installs every published file; before it listed only `Deskdrop.exe` and `deskdrop_core.dll`.
+- **Build:** Windows releases ship as a per-user MSI and a portable zip of the whole app folder instead of a single-file exe. The MSI now installs every published file; before it listed only the app exe and its core DLL.
 
 - **Android (battery):** No Wi-Fi lock is held while idle; only a transfer that is moving bytes takes one. The clipboard is polled at full rate only when it can be read (app in the foreground, an enabled accessibility service, or Android 9 and below), otherwise every 2 s instead of 2–5 times a second. Notification mirroring skips group summaries, media/progress/navigation updates and re-posts with unchanged text. Battery level is reported in 5% steps while the screen is off.
 - **Core (battery):** LAN discovery sweeps (~250 TCP connects each) pause while the device sleeps, and the steady UDP discovery beacon slows from every 15 s to every 60 s.
@@ -74,7 +80,7 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **Build:** A plain `dotnet build` no longer writes a stale 113 MB copy of the tray helper into `publish\`.
 - **Core:** Transfers interrupted by a reconnect now resume reliably; about half of them used to end with "missing chunks". Three races are closed: the old connection's teardown no longer pauses a transfer the new connection already resumed, a stale send loop can no longer skip chunks after a resume, and chunks still arriving on the old connection are dropped instead of being queued on a disk writer that is about to be torn down (which left the resumed copies skipped as duplicates).
 - **Windows:** The taskbar progress bar uses source-generated COM interop; the old `[ComImport]` code is not supported under Native AOT and would have thrown on the first transfer. Value converters are `partial` for the same reason.
-- **Windows:** The MSI now builds with WiX 5 (it had an invalid XML comment, an unsupported `Condition` attribute, and a `<Files>` path that produced an empty installer), and installing a rebuilt MSI of the same version replaces the installed app instead of registering a second Deskdrop entry. The native `Deskdrop.pdb` (~52 MB) no longer ships.
+- **Windows:** The MSI now builds with WiX 5 (it had an invalid XML comment, an unsupported `Condition` attribute, and a `<Files>` path that produced an empty installer), and installing a rebuilt MSI of the same version replaces the installed app instead of registering a second Link All entry. The native `LinkAll.pdb` (~52 MB) no longer ships.
 
 ## [1.3.3] - 2026-09-05
 ### Fixed
@@ -158,14 +164,14 @@ which release first contained a given change.
 - **Security** — `Reassembler::feed(Start)` had no total-payload size cap; malicious peers could announce `u64::MAX` bytes and tie up in-flight state indefinitely; capped at 512 MB / 8 192 chunks (#8)
 - **Correctness** — `fingerprint_display()` doc comment showed wrong format (16 pairs of 2 chars) vs actual output (8 groups of 4 chars); corrected and test added (#10)
 - **Correctness** — `crypto_vectors_test.rs` session key vector was a non-asserting stub; real HKDF-SHA256 vector computed and asserted (#11)
-- **Correctness** — CLI unknown command printed bare `"Unknown command: foo"` with no quoting and wrong help hint; now prints `"Unknown command: 'foo'\n\nRun \`deskdrop-cli help\` to see all available commands."` (#15)
+- **Correctness** — CLI unknown command printed bare `"Unknown command: foo"` with no quoting and wrong help hint; now prints `"Unknown command: 'foo'\n\nRun \`linkall-cli help\` to see all available commands."` (#15)
 
-- Rust core engine (`deskdrop-core`) with:
+- Rust core engine (`linkall-core`) with:
   - X25519 ephemeral ECDH key exchange
   - HKDF-SHA256 session key derivation
   - ChaCha20-Poly1305 AEAD encryption with monotonic nonce counter
   - Replay attack protection
-  - mDNS-SD service discovery (`_deskdrop._tcp.local.`)
+  - mDNS-SD service discovery
   - Framed TCP transport with sub-500 ms LAN propagation
   - TOFU (Trust On First Use) device trust model
   - PIN-based pairing as alternative to TOFU
@@ -206,7 +212,7 @@ which release first contained a given change.
 
 - **Android** platform (`platforms/android/`):
   - Foreground service with `foregroundServiceType=dataSync`
-  - JNI calls into libdeskdrop_core.so
+  - JNI calls into liblinkall_core.so
   - Clipboard monitoring via `ClipboardManager`
   - PIN-based pairing full-screen activity
   - Settings activity
@@ -219,7 +225,7 @@ which release first contained a given change.
   - `.desktop` file for XDG autostart
   - systemd user service unit with security hardening
 
-- **CLI** (`deskdrop-cli`):
+- **CLI** (`linkall-cli`):
   - `status`, `ping`, `push`, `peers`
   - `devices list`, `devices revoke`
   - `history`, `history --last N`, `history --search`, `history clear`
@@ -249,4 +255,4 @@ which release first contained a given change.
 
 - [Security Policy](SECURITY.md)
 - [Contributing](CONTRIBUTING.md)
-- [GitHub](https://github.com/deskdrop/deskdrop)
+- [GitHub](https://github.com/ChinmayyK/Link-All)
