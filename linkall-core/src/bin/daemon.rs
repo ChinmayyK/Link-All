@@ -1009,6 +1009,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             require_tofu_confirmation,
             show_receive_notification,
             ignore_patterns,
+            allow_file_browsing,
         } => {
             let mut patch = serde_json::Map::new();
             macro_rules! maybe {
@@ -1039,6 +1040,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             maybe!("require_tofu_confirmation", require_tofu_confirmation);
             maybe!("show_receive_notification", show_receive_notification);
             maybe!("ignore_patterns", ignore_patterns);
+            maybe!("allow_file_browsing", allow_file_browsing);
 
             let patch_str = serde_json::to_string(&patch)?;
             let updated = {

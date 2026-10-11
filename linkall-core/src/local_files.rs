@@ -26,9 +26,23 @@ struct IndexedFile {
 
 static INDEX: Mutex<Option<HashMap<u64, IndexedFile>>> = Mutex::new(None);
 
+/// Sent back when this computer's owner hasn't allowed browsing.
+const BROWSING_OFF: &str =
+    "File browsing is off on this computer. Turn on \"Let devices browse files\" in its Link All settings.";
+
 /// Answers the explorer requests a desktop host is responsible for. Returns
 /// without doing anything for every other event.
 pub fn handle_event(engine: &Engine, event: &EngineEvent) {
+    let is_request = matches!(
+        event,
+        EngineEvent::RemoteFilesQueryReceived { .. }
+            | EngineEvent::RemoteThumbnailRequestReceived { .. }
+            | EngineEvent::RemoteFilePullRequestReceived { .. }
+    );
+    if is_request && !engine.shared.settings.lock().unwrap().allow_file_browsing {
+        refuse(engine, event);
+        return;
+    }
     match event {
         EngineEvent::RemoteFilesQueryReceived {
             request_id,
@@ -134,6 +148,53 @@ pub fn handle_event(engine: &Engine, event: &EngineEvent) {
             });
         }
         _ => {}
+    }
+}
+
+/// Tells the asking device browsing is off, so it can say so instead of waiting.
+fn refuse(engine: &Engine, event: &EngineEvent) {
+    let engine = engine.clone();
+    match event {
+        EngineEvent::RemoteFilesQueryReceived {
+            request_id,
+            from_device,
+            ..
+        } => {
+            let (request_id, from_device) = (*request_id, *from_device);
+            tokio::spawn(async move {
+                engine
+                    .send_remote_files_response(
+                        from_device,
+                        request_id,
+                        None,
+                        Vec::new(),
+                        0,
+                        Some(BROWSING_OFF.into()),
+                    )
+                    .await
+            });
+        }
+        EngineEvent::RemoteThumbnailRequestReceived {
+            request_id,
+            from_device,
+            file_id,
+            ..
+        } => {
+            let (request_id, from_device, file_id) = (*request_id, *from_device, *file_id);
+            tokio::spawn(async move {
+                engine
+                    .send_remote_thumbnail_response(
+                        from_device,
+                        request_id,
+                        file_id,
+                        Vec::new(),
+                        Some(BROWSING_OFF.into()),
+                    )
+                    .await
+            });
+        }
+        // A pull names a file from an earlier listing; with browsing off there is none to send.
+        _ => tracing::info!("remote file pull refused: browsing is off"),
     }
 }
 

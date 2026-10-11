@@ -114,6 +114,9 @@ impl Engine {
         if let Some(v) = p.ignore_patterns {
             s.ignore_patterns = v;
         }
+        if let Some(v) = p.allow_file_browsing {
+            s.allow_file_browsing = v;
+        }
         let persisted = self.persist_settings_snapshot(s)?;
         self.apply_settings(persisted).await;
         Ok(())

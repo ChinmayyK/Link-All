@@ -1013,6 +1013,12 @@ async fn test_tier4_scenario_device_reconnect_retry() {
 #[tokio::test]
 async fn test_desktop_host_serves_listing_and_thumbnail() {
     let (engine_a, _dev_a, engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
+    engine_b
+        .apply_settings(linkall_core::settings::Settings {
+            allow_file_browsing: true,
+            ..Default::default()
+        })
+        .await;
     tokio::spawn(async move {
         while let Some(event) = rx_b.recv().await {
             linkall_core::local_files::handle_event(&engine_b, &event);
@@ -1032,4 +1038,37 @@ async fn test_desktop_host_serves_listing_and_thumbnail() {
         .await
         .expect("desktop host should answer the thumbnail request");
     assert_eq!(thumb.error.as_deref(), Some("File not found"));
+}
+
+/// A computer answers with an explanation, not silence, while its owner
+/// hasn't turned file browsing on (the default).
+#[cfg(not(target_os = "android"))]
+#[tokio::test]
+async fn test_desktop_refuses_browsing_until_allowed() {
+    let (engine_a, _dev_a, engine_b, dev_b, mut rx_b, _tmp) = setup_test_nodes().await;
+    engine_b
+        .apply_settings(linkall_core::settings::Settings::default())
+        .await;
+    let serving = engine_b.clone();
+    tokio::spawn(async move {
+        while let Some(ev) = rx_b.recv().await {
+            linkall_core::local_files::handle_event(&serving, &ev);
+        }
+    });
+
+    let err = engine_a
+        .query_remote_files_sync(dev_b, true, None, None, None, 0, 50, 5)
+        .await
+        .expect_err("browsing is off by default");
+    assert!(
+        err.to_string().contains("File browsing is off"),
+        "unexpected error: {err}"
+    );
+
+    let thumb = engine_a
+        .request_remote_thumbnail_sync(dev_b, 1, 128, 5)
+        .await
+        .expect("a refusal still answers");
+    assert!(thumb.data.is_empty());
+    assert!(thumb.error.is_some());
 }

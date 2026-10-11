@@ -121,6 +121,10 @@ pub struct Settings {
     /// Maximum file size in bytes to auto-accept (0 = unlimited).
     pub auto_accept_max_bytes: u64,
 
+    /// Let paired devices list, preview and fetch files from this computer's
+    /// standard folders (see `local_files`). Off until the user turns it on.
+    pub allow_file_browsing: bool,
+
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start Link All automatically on login.
     pub start_on_login: bool,
@@ -217,6 +221,7 @@ impl Default for Settings {
             auto_apply_debounce_ms: 500,
             auto_accept_file_transfers: true, // auto-accept from trusted/paired peers without approval
             auto_accept_max_bytes: 0,         // 0 = unlimited size by default
+            allow_file_browsing: false,
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,
