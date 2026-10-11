@@ -18,6 +18,7 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **Android:** Home opens with a map of this phone and the devices it is linked to, solid for connected and dashed for offline. With more than four devices it becomes a row of chips.
 - **Android:** Connected computers appear in the share sheet. The Link All notification can be swiped away, and you can pick a light or dark theme.
 - **CLI:** `pause`, `resume` and `send-folder` commands.
+- **macOS:** The disk image opens with the usual install layout: drag Link All onto the Applications shortcut, or open it straight from the disk image to have it install itself.
 
 ### Changed
 - **All platforms:** Deskdrop is now Link All. Existing installs keep their pairings, settings and history; the data folder moves from `deskdrop` to `linkall` on first launch. The Android app has a new ID (`app.linkall`) and installs beside the old one, so pair it once more and remove the old app. Received files now go to `Downloads/Link All`. Release downloads are named `LinkAll-*`.
