@@ -14,7 +14,7 @@
 
   <br />
 
-  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-devices.png" /><img src="assets/screenshots/light/mac-devices.png" width="820" alt="Link All on macOS: a connected phone with its battery and storage, and quick actions" /></picture>
+  <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/mac-devices.png" /><img src="assets/screenshots/light/mac-devices.png" width="820" alt="Link All on macOS: this Mac's devices, with a phone's battery and storage, and quick actions" /></picture>
 
   <table>
     <tr>
@@ -22,8 +22,8 @@
       <td align="center"><b>Android</b></td>
     </tr>
     <tr>
-      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-clipboard.png" /><img src="assets/screenshots/light/win-clipboard.png" width="420" alt="Link All on Windows: shared clipboard history" /></picture><br /><br /><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-devices.png" /><img src="assets/screenshots/light/win-devices.png" width="420" alt="Link All on Windows: paired devices" /></picture></td>
-      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-home.png" /><img src="assets/screenshots/light/android-home.png" width="180" alt="Link All on Android: home screen" /></picture> &nbsp; <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-devices.png" /><img src="assets/screenshots/light/android-devices.png" width="180" alt="Link All on Android: devices" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-clipboard.png" /><img src="assets/screenshots/light/win-clipboard.png" width="420" alt="Link All on Windows: shared clipboard history" /></picture><br /><br /><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/win-devices.png" /><img src="assets/screenshots/light/win-devices.png" width="420" alt="Link All on Windows: home with three connected devices" /></picture></td>
+      <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-home.png" /><img src="assets/screenshots/light/android-home.png" width="180" alt="Link All on Android: home, with this phone linked to three devices" /></picture> &nbsp; <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-devices.png" /><img src="assets/screenshots/light/android-devices.png" width="180" alt="Link All on Android: devices" /></picture></td>
     </tr>
     <tr>
       <td align="center"><b>macOS menu bar</b></td>
@@ -68,7 +68,7 @@ Sending files across a local network shouldn't stall due to transient packet los
 ## Extended Modules
 
 In addition to core file and clipboard synchronization, Link All includes several secondary modules built atop the secure peer connection layer:
-- **Remote Directory Browsing**: Navigate explicitly permitted filesystem directories on remote paired machines over local sockets to fetch specific documents on demand.
+- **Remote File Browsing**: Search, preview and fetch files on a paired device. A phone can browse a computer's Downloads, Documents, Pictures, Videos and Music once that computer turns on **Let devices browse files** (off by default). A computer can browse a phone with the Android build from GitHub Releases; the Google Play build leaves this out, because Play limits all-files access to file managers.
 - **Notification & Call Handoff**: Mirror mobile SMS messages, phone call alerts, and application notifications directly to desktop notification centers.
 - **Power & Battery Monitoring**: Surface remote hardware battery status (`0–100%`) and charging states directly within desktop system trays.
 - **OS-Level Sleep Immunity**: Leverages platform power management primitives (`ProcessInfo.beginActivity` on macOS, `SetThreadExecutionState` on Windows, and selective wake locks on Android) during ongoing bulk transfers to prevent unintended system suspension.
@@ -97,7 +97,7 @@ Link All combines a unified high-performance Rust core with platform-native inte
 | **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications) |
 | **Android** | Kotlin & Jetpack Compose | JNI Bridge | 🟢 **Production Ready** (Background service runtime, native share-sheet target, QR/PIN pairing) |
 | **Linux** | GTK3 & D-Bus | Unix Sockets / D-Bus | 🟢 **Production Ready** (XDG notification integration, `systemd` user service runtime) |
-| **Windows** | WinUI 3 / .NET 10 | In-process C-FFI / Named Pipes | 🟠 **Alpha / Experimental** (Active developmental architecture; GUI layer undergoing stabilization) |
+| **Windows** | WinUI 3 / .NET 10 | In-process C-FFI / Named Pipes | 🟢 **Production Ready** (Native AOT, tray helper, per-user MSI and portable zip) |
 
 ---
 
@@ -115,6 +115,21 @@ Below is a technical feature comparison between Link All and existing cross-plat
 | **Sensitive Data Filtering (OTP Guard)**| Yes (Configurable regex / heuristics)| N/A | No | No | No |
 | **Remote Filesystem Access** | Yes (Zero-trust secure directory browsing)| No | Yes (SFTP filesystem mounting) | No | No (Gallery sync only) |
 | **Notification & Call Mirroring** | Yes | No | Yes | Yes (Apple hardware only) | Yes |
+
+---
+
+## Download
+
+Get the latest build for each platform from [GitHub Releases](https://github.com/ChinmayyK/Link-All/releases/latest):
+
+| Platform | File |
+| :--- | :--- |
+| macOS 13+ (Apple Silicon) | `LinkAll.dmg` |
+| Windows 10/11 x64 | `LinkAll-windows-x64.msi` (installer) or `LinkAll-windows-x64.zip` (portable) |
+| Android 8.0+ | `LinkAll-android.apk` |
+| Linux x86_64 | `LinkAll-linux-x86_64.tar.gz` |
+
+The Android app is also coming to Google Play. That build leaves out the features Play reserves for default SMS, dialer and file-manager apps: SMS code forwarding, answering calls, and letting a computer browse the phone's files. Everything else, including browsing your computers from the phone, works the same.
 
 ---
 

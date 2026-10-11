@@ -19,7 +19,7 @@
   <Package
     Name="Link All"
     Manufacturer="Link All"
-    Version="1.4.0"
+    Version="2.0.0"
     UpgradeCode="f47ac10b-58cc-4372-a567-0e02b2c3d479"
     Scope="perUser">
     <!-- perUser: installs to %LocalAppData%\Programs\LinkAll and never

@@ -7,12 +7,35 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ---
 
 ## [Unreleased]
+
+## [2.0.0] - 2026-10-11
+
+Deskdrop is now Link All. This is the first published release since 1.3.3, so it also carries everything listed under 1.4.0.
+
+### Added
+- **Android:** Browse, search and preview files on your Mac or Windows PC, and fetch any of them to the phone. Pick a device from Home › Get › Browse files or from a device's sheet.
+- **macOS, Windows:** A "Let devices browse files" switch in General settings decides whether paired devices can see this computer's Downloads, Documents, Pictures, Videos and Music. It is off until you turn it on.
+- **Android:** Home opens with a map of this phone and the devices it is linked to, solid for connected and dashed for offline. With more than four devices it becomes a row of chips.
+- **Android:** Connected computers appear in the share sheet. The Link All notification can be swiped away, and you can pick a light or dark theme.
+- **CLI:** `pause`, `resume` and `send-folder` commands.
+
 ### Changed
 - **All platforms:** Deskdrop is now Link All. Existing installs keep their pairings, settings and history; the data folder moves from `deskdrop` to `linkall` on first launch. The Android app has a new ID (`app.linkall`) and installs beside the old one, so pair it once more and remove the old app. Received files now go to `Downloads/Link All`. Release downloads are named `LinkAll-*`.
+- **All platforms:** Activity reads as plain sentences ("Sent Launch-film-4K.mov to MacBook Pro · 640 MB") with sizes in KB, MB or GB, instead of bracketed device names and raw kilobytes.
+- **Windows:** The Activity page shows the activity log (transfers, clips and connections) rather than repeating clipboard history. Clipboard shows each clip once with file sizes, Quick Access gives previews the whole row and fits three devices, and page content stays centred on wide windows.
+- **macOS:** Browsing a computer shows its own folders (Downloads, Pictures, Other Folders) instead of phone places like WhatsApp and Camera Roll.
+- **Android:** A Google Play build alongside the full build. It leaves out SMS code forwarding, answering calls and letting a computer browse the phone, which Play reserves for default SMS, dialer and file-manager apps.
+
 ### Removed
 - **All platforms:** The phone camera stream to the computer (Continuity Camera), including the macOS virtual camera extension. Android no longer asks for camera access.
+
 ### Fixed
+- **All platforms:** Copied links sync again when "Block sensitive text" is on. Its token check treated most links as secrets; now only a password in the address or a token-like parameter blocks one.
 - **All platforms:** A phone with its screen off no longer drops off the computer after 30 seconds of quiet.
+- **Security:** Pairing by QR code checks the computer's key; the Mac stops trusting devices while its QR code is open; unpaired devices can no longer send calls, warnings, sync-state or speed-test messages; a transfer can only be controlled by its own peer; Windows IPC pipes are owner-only.
+- **Transfers:** Auto-accept for trusted devices is honoured, a paused transfer is not sent before the receiver accepts, and NTFS alternate data streams are kept out of received file names.
+- **Android:** No crash after receiving a file or on pairing requests on Android 16. A received file is kept when saving to Downloads fails.
+- **Windows:** Text from the daemon is decoded as UTF-8, so "·" and "…" no longer show as garbled characters, and each phone notification shows once.
 
 ## [1.4.0] - 2026-10-02
 ### Added
