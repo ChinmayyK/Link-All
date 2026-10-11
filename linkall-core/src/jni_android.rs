@@ -2589,3 +2589,132 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_sendRemoteThumbnailResponse(
     ));
     0
 }
+
+// ── Remote file browsing: this phone as the client ───────────────────────────
+// Blocking calls; the app makes them off the main thread.
+
+fn jni_opt_string(env: &mut JNIEnv, s: &JString) -> Option<String> {
+    if s.is_null() {
+        return None;
+    }
+    env.get_string(s)
+        .ok()
+        .map(String::from)
+        .filter(|v| !v.is_empty())
+}
+
+/// Lists files on `target_device_id`. Returns the `RemoteFilesResult` as JSON,
+/// or `{"error": "..."}` when the device refuses, times out or isn't connected.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "system" fn Java_app_linkall_LinkAllJni_queryRemoteFiles(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    summary_only: jboolean,
+    category: JString,
+    search_query: JString,
+    offset: jint,
+    limit: jint,
+) -> jstring {
+    let json = (|| -> Result<String, String> {
+        if handle == 0 {
+            return Err("Link All isn't running".into());
+        }
+        let target = jni_opt_string(&mut env, &target_device_id)
+            .and_then(|s| uuid::Uuid::parse_str(&s).ok())
+            .ok_or("Unknown device")?;
+        let category = jni_opt_string(&mut env, &category)
+            .as_deref()
+            .and_then(crate::ipc::parse_remote_file_category);
+        let search = jni_opt_string(&mut env, &search_query);
+        let h = unsafe { &*(handle as *const AndroidHandle) };
+        let res = rt()
+            .block_on(h.engine.query_remote_files_sync(
+                target,
+                summary_only != 0,
+                category,
+                None,
+                search,
+                offset.max(0) as u32,
+                limit.clamp(1, 200) as u32,
+                15,
+            ))
+            .map_err(|e| e.to_string())?;
+        // File ids are u64 hashes on desktops; Java has no u64 and org.json
+        // turns larger values into doubles. Send the same 64 bits as an i64,
+        // which the thumbnail and pull calls turn back with `as u64`.
+        let mut value = serde_json::to_value(&res).map_err(|e| e.to_string())?;
+        if let Some(files) = value.get_mut("files").and_then(|f| f.as_array_mut()) {
+            for (file, entry) in files.iter_mut().zip(&res.files) {
+                file["file_id"] = serde_json::json!(entry.file_id as i64);
+            }
+        }
+        Ok(value.to_string())
+    })()
+    .unwrap_or_else(|e| serde_json::json!({ "error": e }).to_string());
+    env.new_string(json)
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
+}
+
+/// A preview of one listed file, or null when the device has none for it.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_requestRemoteThumbnail(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    file_id: jlong,
+    size_px: jint,
+) -> jbyteArray {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let Some(target) =
+        jni_opt_string(&mut env, &target_device_id).and_then(|s| uuid::Uuid::parse_str(&s).ok())
+    else {
+        return std::ptr::null_mut();
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.request_remote_thumbnail_sync(
+        target,
+        file_id as u64,
+        size_px.clamp(32, 1024) as u32,
+        10,
+    )) {
+        Ok(res) if res.error.is_none() && !res.data.is_empty() => env
+            .byte_array_from_slice(&res.data)
+            .map(|a| a.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        _ => std::ptr::null_mut(),
+    }
+}
+
+/// Asks `target_device_id` to send one listed file here; it arrives as an
+/// ordinary incoming transfer. Returns 0 when the request was sent.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_pullRemoteFile(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    file_id: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(target) =
+        jni_opt_string(&mut env, &target_device_id).and_then(|s| uuid::Uuid::parse_str(&s).ok())
+    else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.send_remote_file_pull_request(
+        target,
+        uuid::Uuid::new_v4(),
+        file_id as u64,
+    ));
+    0
+}
