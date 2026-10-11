@@ -206,6 +206,8 @@ struct IpcSettings: Codable {
     let rate_limit_burst: Double
     let smart_sync_duplicate_window_ms: UInt64
     let smart_sync_debounce_ms: UInt64
+    // Optional so an older daemon's reply still decodes.
+    let allow_file_browsing: Bool?
 }
 
 struct IpcResponse<T: Codable>: Codable {
@@ -689,7 +691,8 @@ extension LinkAllIPCClient {
             maxPushesPerSec: Int(s.max_pushes_per_sec), rateLimitBurst: Int(s.rate_limit_burst),
             smartSyncDuplicateWindowMs: s.smart_sync_duplicate_window_ms,
             smartSyncDebounceMs: s.smart_sync_debounce_ms,
-            startOnLogin: false
+            startOnLogin: false,
+            allowFileBrowsing: s.allow_file_browsing ?? false
         )
     }
 
@@ -715,6 +718,7 @@ extension LinkAllIPCClient {
             "require_tofu_confirmation":        snapshot.requireTofuConfirmation,
             "show_receive_notification":        snapshot.showReceiveNotification,
             "ignore_patterns":                  snapshot.ignorePatterns,
+            "allow_file_browsing":              snapshot.allowFileBrowsing,
         ]
         _ = try await send(cmd: cmd)
     }
