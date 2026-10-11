@@ -257,25 +257,42 @@ jobs:
         run: |
           find release-artifacts -type f -exec sha256sum {} + | sed 's|release-artifacts/.*/||' > sha256sums.txt
 
+      # The notes are this version's CHANGELOG section under a downloads
+      # table, so every release says what changed without hand edits. The
+      # build stops if the CHANGELOG has no section for the tag.
+      - name: Write release notes
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          awk -v v="$version" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > changes.md
+          if ! grep -q '[^[:space:]]' changes.md; then
+            echo "ERROR: CHANGELOG.md has no section for $version" >&2
+            exit 1
+          fi
+          {
+            echo "## Link All $version"
+            echo
+            echo "### Downloads"
+            echo "| Platform | File |"
+            echo "|---|---|"
+            echo "| macOS 13+ (Apple Silicon) | \`LinkAll.dmg\` |"
+            echo "| Windows 10/11 x64 | \`LinkAll-windows-x64.msi\` (installer) or \`LinkAll-windows-x64.zip\` (portable) |"
+            echo "| Android 8.0+ | \`LinkAll-android.apk\` |"
+            echo "| Linux x86_64 | \`LinkAll-linux-x86_64.tar.gz\` |"
+            echo
+            echo "Checksums are in \`sha256sums.txt\`."
+            echo
+            cat changes.md
+          } > release-notes.md
+
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
           name: "Link All ${{ github.ref_name }}"
-          body: |
-            ## Link All ${{ github.ref_name }}
-
-            Proximity-Based Shared Clipboard — no account, no cloud, no setup.
-
-            ### Downloads
-            | Platform | File |
-            |---|---|
-            | Windows 10/11 x64 | `LinkAll-windows-x64.msi` (installer) or `LinkAll-windows-x64.zip` (portable) |
-            | Android 8.0+      | `LinkAll-android.apk` |
-            | Linux x86_64      | `LinkAll-linux-x86_64.tar.gz` |
-            | macOS (Apple Silicon) | `LinkAll.dmg` |
-
-            ### What's new
-            See [CHANGELOG.md](CHANGELOG.md).
+          body_path: release-notes.md
           files: |
             release-artifacts/**/*.msi
             release-artifacts/**/*.zip
