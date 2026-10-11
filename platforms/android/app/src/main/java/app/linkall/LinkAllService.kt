@@ -149,6 +149,8 @@ class LinkAllService : Service() {
         const val EXTRA_CALLER_NAME = "caller_name"
         /** How often a live call's state is repeated to peers; matches CALL_REFRESH in the core. */
         private const val CALL_REFRESH_MS = 10_000L
+        /** How long a nameless ring waits for the number or the phone app's call notification. */
+        private const val CALL_NAME_WAIT_MS = 1_200L
         const val ACTION_FORGET_PEER        = "app.linkall.FORGET_PEER"
         const val ACTION_SEND_PAIRING_REQUEST = "app.linkall.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "app.linkall.RESPOND_TO_PAIRING"
@@ -3133,6 +3135,28 @@ class LinkAllService : Service() {
         }
         val known = number.ifEmpty { lastCallNumber }
         val contact = callerName(known)
+        // Android says "ringing" before it hands over the number or the phone
+        // app posts its call notification. Hold a nameless ring briefly so
+        // the computer shows the caller from the start, not "unknown" first.
+        callHoldHandler.removeCallbacks(sendHeldRing)
+        if (stateStr == "ringing" && known.isEmpty() && contact.isEmpty() && !ringSent) {
+            callHoldHandler.postDelayed(sendHeldRing, CALL_NAME_WAIT_MS)
+            return
+        }
+        publishCallState(stateStr, known, contact)
+    }
+
+    /** Whether peers have been told about the current ring. */
+    private var ringSent = false
+    private val callHoldHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val sendHeldRing = Runnable {
+        if (lastCallState == "ringing" && !ringSent) {
+            publishCallState("ringing", lastCallNumber, callerName(lastCallNumber))
+        }
+    }
+
+    private fun publishCallState(stateStr: String, known: String, contact: String) {
+        ringSent = stateStr == "ringing" || (stateStr == "offhook" && ringSent)
         Log.i(TAG, "Call state: $stateStr hasNumber=${known.isNotEmpty()} hasContact=${contact.isNotEmpty()}")
         val h = engineHandle
         if (h != 0L) {
@@ -3274,6 +3298,12 @@ class LinkAllService : Service() {
         notificationCallerName = name
         if (lastCallState != "ringing" && lastCallState != "offhook") return
         if (resolveContactName(lastCallNumber).isNotEmpty()) return
+        if (lastCallState == "ringing" && !ringSent) {
+            // The ring was being held for a name: send it now, with this one.
+            callHoldHandler.removeCallbacks(sendHeldRing)
+            publishCallState("ringing", lastCallNumber, name)
+            return
+        }
         Log.i(TAG, "Call state: caller named by the call notification")
         if (engineHandle != 0L) {
             withEngine { live -> LinkAllJni.pushCallState(live, lastCallState, lastCallNumber, name) }
