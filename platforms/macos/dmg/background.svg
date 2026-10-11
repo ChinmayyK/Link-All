@@ -1,16 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="600" height="400" viewBox="0 0 600 400">
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="440" viewBox="0 0 600 440">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#f7f9fc"/>
       <stop offset="1" stop-color="#eaeff6"/>
     </linearGradient>
   </defs>
-  <rect width="600" height="400" fill="url(#bg)"/>
+  <rect width="600" height="440" fill="url(#bg)"/>
   <!-- Arrow from the app (x 150) to Applications (x 450), at icon height. -->
   <g fill="none" stroke="#2f6fe0" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M238 185 H352" stroke-dasharray="1 13"/>
-    <path d="M344 171 L362 185 L344 199"/>
+    <path d="M238 165 H352" stroke-dasharray="1 13"/>
+    <path d="M344 151 L362 165 L344 179"/>
   </g>
-  <text x="300" y="322" text-anchor="middle" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="15" font-weight="500" fill="#3a4250">Drag Link All to Applications</text>
-  <text x="300" y="344" text-anchor="middle" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="12" fill="#7a8394">Or open it from here, and it installs itself for you.</text>
+  <text x="300" y="292" text-anchor="middle" font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="15" font-weight="600" fill="#3a4250">Drag Link All to Applications</text>
+  <!-- First-open help: Link All isn't notarized, so macOS asks once. -->
+  <rect x="40" y="322" width="520" height="86" rx="12" fill="#ffffff" fill-opacity="0.75" stroke="#d5dce8"/>
+  <text font-family="-apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif" font-size="12.5" fill="#3a4250">
+    <tspan x="62" y="348" font-weight="600">Opening it the first time</tspan>
+    <tspan x="62" y="369" fill="#5b6475">If macOS says it can't verify Link All, click Done. Then open System Settings ›</tspan>
+    <tspan x="62" y="387" fill="#5b6475">Privacy &amp; Security, and click Open Anyway next to Link All. You only do this once.</tspan>
+  </text>
 </svg>

@@ -180,12 +180,12 @@ if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
         --volicon "${APP_BUNDLE}/Contents/Resources/AppIcon.icns" \
         --background "${MACOS_DIR}/dmg/background.tiff" \
         --window-pos 200 120 \
-        --window-size 600 400 \
+        --window-size 600 468 \
         --icon-size 128 \
         --text-size 13 \
-        --icon "${PRODUCT_NAME}.app" 150 185 \
+        --icon "${PRODUCT_NAME}.app" 150 165 \
         --hide-extension "${PRODUCT_NAME}.app" \
-        --app-drop-link 450 185 \
+        --app-drop-link 450 165 \
         "${MACOS_DIR}/build/LinkAll.dmg" \
         "${APP_BUNDLE}" || {
             log "create-dmg failed (headless CI), falling back to zip..."
