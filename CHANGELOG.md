@@ -29,6 +29,7 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 
 ### Removed
 - **All platforms:** The phone camera stream to the computer (Continuity Camera), including the macOS virtual camera extension. Android no longer asks for camera access.
+- **macOS:** The drop target on the screen edge. Drop files on the Link All menu bar icon instead.
 
 ### Fixed
 - **All platforms:** Copied links sync again when "Block sensitive text" is on. Its token check treated most links as secrets; now only a password in the address or a token-like parameter blocks one.

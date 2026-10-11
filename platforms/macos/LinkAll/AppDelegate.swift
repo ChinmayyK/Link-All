@@ -436,7 +436,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             size:  NSSize(width: 520, height: 400),
             rootView: CommandPaletteView(store: store)
         )
-        EdgeDropWindowManager.shared.setup(with: store)
     }
 
     // MARK: - Store bindings
