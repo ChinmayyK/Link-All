@@ -92,15 +92,22 @@ namespace LinkAll.WinUI
 
         /// <summary>
         /// The feed as a list of things, not events: drops "applied" echoes of
-        /// an item already listed, and keeps only the newest copy of a clip
+        /// an item already listed, a transfer's "started" row once it has finished,
+        /// and keeps only the newest copy of a clip
         /// sent more than once. The feed is newest first.
         /// </summary>
         public static IEnumerable<ActivityEntry> WithoutRepeats(IEnumerable<ActivityEntry> feed)
         {
+            var all = feed.ToList();
+            var finished = all
+                .Where(e => e.kind is "file_transfer_complete" or "file_transfer_failed" && !string.IsNullOrEmpty(e.transfer_id))
+                .Select(e => e.transfer_id!)
+                .ToHashSet();
             var seenClips = new HashSet<string>();
-            foreach (var e in feed)
+            foreach (var e in all)
             {
                 if (e.kind == "clipboard_applied") continue;
+                if (e.kind == "file_transfer_started" && !string.IsNullOrEmpty(e.transfer_id) && finished.Contains(e.transfer_id)) continue;
                 var isClip = e.kind is "clipboard_text" or "clipboard_image" or "remote_clipboard_available";
                 var key = !string.IsNullOrEmpty(e.content_hash) ? e.content_hash : e.text_preview;
                 if (isClip && !string.IsNullOrEmpty(key) && !seenClips.Add(key)) continue;

@@ -157,7 +157,7 @@ namespace LinkAll.WinUI
 
         private static string? ReadLineWithTimeout(Stream stream, int timeoutMs)
         {
-            var sb   = new StringBuilder();
+            var line = new System.IO.MemoryStream();
             var buf  = new byte[1];
             var dl   = DateTime.Now.AddMilliseconds(timeoutMs);
             while (DateTime.Now < dl)
@@ -171,9 +171,9 @@ namespace LinkAll.WinUI
                     break;
                 }
                 if (buf[0] == '\n') break;
-                sb.Append((char)buf[0]);
+                line.WriteByte(buf[0]);
             }
-            return sb.Length > 0 ? sb.ToString() : null;
+            return line.Length > 0 ? Encoding.UTF8.GetString(line.ToArray()) : null;
         }
 
         public static JsonDocument? PushText(string text) =>
