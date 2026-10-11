@@ -246,7 +246,7 @@ public partial class App : Application
 
             try
             {
-                UpgradeStartupEntry();
+                if (!LinkAll.WinUI.Services.StartupRegistration.IsPackaged) UpgradeStartupEntry();
                 if (IsBackgroundLaunch(activatedArgs))
                 {
                     // Started at sign-in: stay in the tray, like the Mac app in
@@ -345,6 +345,8 @@ public partial class App : Application
 
     private static bool IsBackgroundLaunch(Microsoft.Windows.AppLifecycle.AppActivationArguments? args)
     {
+        // The Store build starts at sign-in through its StartupTask, which has no arguments.
+        if (args?.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.StartupTask) return true;
         string? line = (args?.Data as Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs)?.Arguments;
         var words = (line ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries)
             .Concat(Environment.GetCommandLineArgs().Skip(1));

@@ -118,6 +118,13 @@
     <TrayExe>$(LinkAllRepoRoot)target\release\linkall-tray.exe</TrayExe>
   </PropertyGroup>
 
+  <!-- The Store (MSIX) package takes its files from the project's items, not
+       from the publish folder the copy targets below write to, so the tray
+       helper is listed as content when packaging. -->
+  <ItemGroup Condition="'$(WindowsPackageType)' == 'MSIX'">
+    <Content Include="$(TrayExe)" Link="tray\LinkAll.Tray.exe" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <Target Name="BuildTrayApp" BeforeTargets="Build" Condition="'$(SkipTrayBuild)' != 'true'">
     <Exec Command="cargo build --release -p linkall-tray" WorkingDirectory="$(LinkAllRepoRoot)" />
   </Target>

@@ -11,8 +11,8 @@ namespace LinkAll.WinUI.Views
         public LinkAllStore mgr => LinkAllStore.Shared;
         public string DeviceName => LinkAll.WinUI.Services.LocalSettingsStore.DeviceName;
 
-        private const string StartupRegistryKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        private const string StartupRegistryValueName = "LinkAll";
+        // Set while the switch shows the saved state, so that doesn't count as the user toggling it.
+        private bool _showingSavedStartup;
 
         public SettingsView()
         {
@@ -20,7 +20,7 @@ namespace LinkAll.WinUI.Views
             var version = typeof(SettingsView).Assembly.GetName().Version;
             if (version != null)
                 VersionText.Text = $"Version {version.Major}.{version.Minor}.{version.Build}  \u00B7  No cloud, no account, no telemetry";
-            StartupToggle.IsOn = IsLaunchAtStartupEnabled();
+            _ = LoadStartupAsync();
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
             _ = LoadFileBrowsingAsync();
@@ -85,42 +85,34 @@ namespace LinkAll.WinUI.Views
             DashboardWindow.Current?.NavigateTo("Devices");
         }
 
-        private static bool IsLaunchAtStartupEnabled()
+        private async Task LoadStartupAsync()
         {
             try
             {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupRegistryKeyPath, writable: false);
-                return key?.GetValue(StartupRegistryValueName) != null;
+                var on = await LinkAll.WinUI.Services.StartupRegistration.IsEnabledAsync();
+                _showingSavedStartup = true;
+                StartupToggle.IsOn = on;
             }
-            catch (Exception ex)
-            {
-                App.HandleError(ex);
-                return false;
-            }
+            catch (Exception ex) { App.HandleError(ex); }
+            finally { _showingSavedStartup = false; }
         }
 
-        private void OnStartupToggled(object sender, RoutedEventArgs e)
+        private async void OnStartupToggled(object sender, RoutedEventArgs e)
         {
+            if (_showingSavedStartup) return;
             try
             {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(StartupRegistryKeyPath, writable: true);
-                if (key == null) return;
-
-                if (StartupToggle.IsOn)
+                var wanted = StartupToggle.IsOn;
+                var on = await LinkAll.WinUI.Services.StartupRegistration.SetEnabledAsync(wanted);
+                // Windows can refuse (turned off in Task Manager, or by policy): show what it did.
+                if (on != wanted)
                 {
-                    var exePath = Environment.ProcessPath ?? System.IO.Path.Combine(AppContext.BaseDirectory, "LinkAll.exe");
-                    // --background: start in the tray at sign-in, without a window.
-                    key.SetValue(StartupRegistryValueName, $"\"{exePath}\" --background");
-                }
-                else
-                {
-                    key.DeleteValue(StartupRegistryValueName, throwOnMissingValue: false);
+                    _showingSavedStartup = true;
+                    StartupToggle.IsOn = on;
+                    _showingSavedStartup = false;
                 }
             }
-            catch (Exception ex)
-            {
-                App.HandleError(ex);
-            }
+            catch (Exception ex) { App.HandleError(ex); }
         }
 
         private void OnReplayOnboardingClicked(object sender, RoutedEventArgs e) => App.ShowOnboarding(force: true);
