@@ -177,6 +177,7 @@ if command -v create-dmg &>/dev/null && [[ "${SKIP_DMG:-}" != "true" ]]; then
     # /Applications runs from there unchanged.
     create-dmg \
         --volname "Link All" \
+        --volicon "${APP_BUNDLE}/Contents/Resources/AppIcon.icns" \
         --background "${MACOS_DIR}/dmg/background.tiff" \
         --window-pos 200 120 \
         --window-size 600 400 \
