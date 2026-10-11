@@ -8,12 +8,20 @@ final class LinkAllToastWindowManager: NSObject {
     private let panel: ToastOverlayPanel
     private let hostingView: NSHostingView<ToastOverlayPanelView>
     private var cancellables = Set<AnyCancellable>()
+    /// Height of the cards, as the view measures it. The panel is exactly
+    /// this tall: a taller transparent panel sat above other apps' windows
+    /// and swallowed their clicks.
+    private var contentHeight: CGFloat = 0
+    private var shrinkWork: DispatchWorkItem?
 
     init(store: LinkAllStore) {
         self.store = store
         self.panel = ToastOverlayPanel()
-        self.hostingView = NSHostingView(rootView: ToastOverlayPanelView(store: store))
+        self.hostingView = NSHostingView(rootView: ToastOverlayPanelView(store: store, onHeightChange: { _ in }))
         super.init()
+        hostingView.rootView = ToastOverlayPanelView(store: store) { [weak self] height in
+            self?.contentHeightChanged(height)
+        }
 
         hostingView.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = hostingView
@@ -56,11 +64,28 @@ final class LinkAllToastWindowManager: NSObject {
         }
     }
 
+    /// Grow at once so a new card is never clipped; shrink after the
+    /// removal animation has played.
+    private func contentHeightChanged(_ height: CGFloat) {
+        shrinkWork?.cancel()
+        if height >= contentHeight {
+            contentHeight = height
+            layoutPanel()
+        } else {
+            let work = DispatchWorkItem { [weak self] in
+                self?.contentHeight = height
+                self?.layoutPanel()
+            }
+            shrinkWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+        }
+    }
+
     @objc private func layoutPanel() {
         guard let screen = activeScreen else { return }
         let visible = screen.visibleFrame
         let width: CGFloat = 360
-        let height: CGFloat = min(visible.height - 24, 520)
+        let height: CGFloat = max(1, min(visible.height - 24, contentHeight))
         let isBottomRight = UserDefaults.standard.bool(forKey: "overlayPositionBottomRight")
         
         let yPos: CGFloat = isBottomRight 
@@ -89,16 +114,14 @@ private final class ToastOverlayPanel: NSPanel {
     init() {
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: 400, height: 400),
-            styleMask: [.titled, .fullSizeContentView],
+            // Non-activating: clicking a card's button never takes focus
+            // from the app being used.
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
-        titlebarAppearsTransparent = true
-        titleVisibility = .hidden
-        standardWindowButton(.closeButton)?.isHidden = true
-        standardWindowButton(.miniaturizeButton)?.isHidden = true
-        standardWindowButton(.zoomButton)?.isHidden = true
-        
+        becomesKeyOnlyIfNeeded = true
+
         level = .statusBar
         hasShadow = false
         isOpaque = false
@@ -108,12 +131,13 @@ private final class ToastOverlayPanel: NSPanel {
         collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
     }
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
 }
 
 private struct ToastOverlayPanelView: View {
     @ObservedObject var store: LinkAllStore
+    let onHeightChange: (CGFloat) -> Void
 
     var body: some View {
         VStack(alignment: .center, spacing: 8) {
@@ -149,11 +173,17 @@ private struct ToastOverlayPanelView: View {
                 ))
                 .zIndex(Double(toast.id.hashValue))
             }
-            Spacer(minLength: 0)
         }
         .padding(.top, 4)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
         .padding(10)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(GeometryReader { geo in
+            Color.clear
+                .onAppear { onHeightChange(geo.size.height) }
+                .onChange(of: geo.size.height) { onHeightChange($0) }
+        })
+        .frame(maxHeight: .infinity, alignment: .top)
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: store.toasts.map(\.id.uuidString) + store.batchedTransfers.map(\.id))
     }
 }
