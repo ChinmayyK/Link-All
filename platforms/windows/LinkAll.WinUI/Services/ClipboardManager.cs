@@ -419,7 +419,7 @@ namespace LinkAll.WinUI.Services
                 Source = source,
                 TypeIcon = icon,
                 Time = DateTime.Now,
-                RelativeTime = "Just now",
+                RelativeTime = "just now",
                 display_text = summary,
                 is_text = icon == "📝"
             };

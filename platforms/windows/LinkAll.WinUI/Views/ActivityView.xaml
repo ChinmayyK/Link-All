@@ -12,7 +12,8 @@
     <!--
         The log, in the shared Android/Windows layout: large heading with a
         live count, a filter box, then one grouped list with hairline rows.
-        Row actions reveal on hover so the log reads as text.
+        Each row is the daemon's own sentence for the event, so the log
+        reads the same on every platform.
     -->
     <Grid Padding="{StaticResource PagePadding}" RowSpacing="18" MaxWidth="1000">
         <Grid.RowDefinitions>
@@ -31,7 +32,7 @@
                  Grid.Row="1"
                  MaxWidth="380"
                  HorizontalAlignment="Left"
-                 PlaceholderText="Filter events, paths and text"
+                 PlaceholderText="Filter events"
                  MinHeight="32"
                  TextChanged="TxtSearch_TextChanged"
                  AutomationProperties.Name="Filter activity" />
@@ -68,62 +69,38 @@
                       IsItemClickEnabled="False"
                       ItemContainerStyle="{StaticResource AppPlainListItem}">
                 <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="root:HistoryItem">
-                        <Grid Padding="16,11" ColumnSpacing="12" Background="Transparent">
+                    <DataTemplate x:DataType="root:ActivityEntry">
+                        <Grid Padding="16,11" ColumnSpacing="12" Background="Transparent"
+                              Tapped="ActivityRow_Tapped">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <Border Grid.ColumnSpan="4" Height="1" Margin="50,-11,-16,0"
+                            <Border Grid.ColumnSpan="3" Height="1" Margin="50,-11,-16,0"
                                     VerticalAlignment="Top"
                                     Background="{ThemeResource AppDividerBrush}" />
 
                             <Border Grid.Column="0" Width="36" Height="36"
                                     CornerRadius="{StaticResource RadiusMedium}"
                                     Background="{ThemeResource AppSurfaceSubtleBrush}">
-                                <FontIcon Glyph="{x:Bind Glyph}"
+                                <FontIcon Glyph="{x:Bind Glyph, Mode=OneWay}"
                                           FontSize="14"
-                                          Foreground="{x:Bind PinColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
+                                          Foreground="{x:Bind AccentColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}"
                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
 
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                                <TextBlock Text="{x:Bind display_text}"
-                                           Style="{StaticResource AppBodyStrong}"
-                                           FontWeight="Normal"
-                                           TextTrimming="CharacterEllipsis" />
-                                <TextBlock Text="{x:Bind path}"
-                                           Style="{StaticResource AppCaption}"
-                                           TextTrimming="CharacterEllipsis"
-                                           Visibility="{x:Bind HasPath, Converter={StaticResource BoolToVisibleConverter}}" />
-                            </StackPanel>
+                            <TextBlock Grid.Column="1" Text="{x:Bind summary, Mode=OneWay}"
+                                       Style="{StaticResource AppBody}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
 
-                            <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime}"
-                                       Style="{StaticResource AppMono}" FontSize="11.5"
+                            <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}"
+                                       Style="{StaticResource AppCaption}"
                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                        VerticalAlignment="Center"
                                        MinWidth="64" TextAlignment="Right" />
-
-                            <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2"
-                                        VerticalAlignment="Center"
-                                        services:RevealEffects.RevealOnHover="True">
-                                <Button Style="{StaticResource AppIconButtonSmall}"
-                                        Click="BtnPinItem_Click"
-                                        ToolTipService.ToolTip="{x:Bind PinTooltip, Mode=OneWay}"
-                                        AutomationProperties.Name="Pin or unpin this event">
-                                    <FontIcon Glyph="&#xE718;" FontSize="13"
-                                              Foreground="{x:Bind PinColor, Converter={StaticResource StringToBrushConverter}, Mode=OneWay}" />
-                                </Button>
-                                <Button Style="{StaticResource AppIconButtonSmall}"
-                                        Click="BtnDeleteItem_Click"
-                                        ToolTipService.ToolTip="Remove from the log"
-                                        AutomationProperties.Name="Remove this event from the log">
-                                    <FontIcon Glyph="&#xE74D;" FontSize="13" />
-                                </Button>
-                            </StackPanel>
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>

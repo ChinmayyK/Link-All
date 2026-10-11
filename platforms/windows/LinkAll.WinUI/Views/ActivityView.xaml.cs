@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace LinkAll.WinUI.Views
@@ -13,7 +14,24 @@ namespace LinkAll.WinUI.Views
             this.Unloaded += (s, e) => {
                 try { LinkAllStore.Shared.PropertyChanged -= OnStorePropertyChanged; } catch (Exception ex) { App.HandleError(ex); }
             };
-            try { TimelineList.ItemsSource = LinkAllStore.Shared.History.ToList(); } catch (Exception ex) { App.HandleError(ex); }
+            ShowFeed();
+        }
+
+        // The daemon's activity log: transfers, clips and connections, each
+        // as its own sentence. Clipboard history lives on the Clipboard page.
+        private void ShowFeed()
+        {
+            try
+            {
+                IEnumerable<ActivityEntry> feed = ActivityEntry.WithoutRepeats(LinkAllStore.Shared.ActivityFeed?.ToList() ?? new List<ActivityEntry>());
+                var text = TxtSearch?.Text?.Trim();
+                if (!string.IsNullOrEmpty(text))
+                {
+                    feed = feed.Where(e => e.summary.Contains(text, StringComparison.OrdinalIgnoreCase));
+                }
+                TimelineList.ItemsSource = feed.ToList();
+            }
+            catch (Exception ex) { App.HandleError(ex); }
             UpdateEmptyState();
         }
 
@@ -52,93 +70,26 @@ namespace LinkAll.WinUI.Views
 
         private void OnStorePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
         {
-            if (e.PropertyName == nameof(LinkAllStore.Shared.History))
+            if (e.PropertyName == nameof(LinkAllStore.Shared.ActivityFeed))
             {
-                DispatcherQueue?.TryEnqueue(() => {
-                    try { TimelineList.ItemsSource = LinkAllStore.Shared.History.ToList(); } catch (Exception ex) { App.HandleError(ex); }
-                    UpdateEmptyState();
-                });
+                DispatcherQueue?.TryEnqueue(ShowFeed);
             }
         }
 
-        private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
-        {
-            try
-            {
-                var text = TxtSearch.Text?.ToLowerInvariant() ?? "";
-                if (string.IsNullOrWhiteSpace(text))
-                {
-                    TimelineList.ItemsSource = LinkAllStore.Shared.History.ToList();
-                }
-                else
-                {
-                    var snapshot = LinkAllStore.Shared.History.ToList();
-                    TimelineList.ItemsSource = snapshot.Where(h =>
-                        (h.display_text?.ToLowerInvariant().Contains(text) == true) ||
-                        (h.path?.ToLowerInvariant().Contains(text) == true)).ToList();
-                }
-                UpdateEmptyState();
-            }
-            catch (Exception ex) { App.HandleError(ex); }
-        }
+        private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e) => ShowFeed();
 
-        private void HistoryItem_Click(object sender, RoutedEventArgs e)
+        // A received file opens; everything else has nothing to open.
+        private void ActivityRow_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            if (sender is Button btn && btn.DataContext is HistoryItem item)
+            if (sender is FrameworkElement el && el.DataContext is ActivityEntry entry
+                && !string.IsNullOrEmpty(entry.dest_path) && System.IO.File.Exists(entry.dest_path))
             {
-                if (item.is_text && !string.IsNullOrEmpty(item.FullText))
+                try
                 {
-                    try {
-                        var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
-                        package.SetText(item.FullText);
-                        Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-                    } catch (Exception ex) { App.HandleError(ex); }
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(entry.dest_path) { UseShellExecute = true });
                 }
-                else if (LinkAll.WinUI.Services.ClipboardManager.IsCachedImage(item.path))
-                {
-                    // A clipboard image: copy it again, like text.
-                    var path = item.path;
-                    _ = App.Clipboard?.CopyImageAsync(path).ContinueWith(t => { if (t.Exception != null) App.HandleError(t.Exception); });
-                }
-                else if (!string.IsNullOrEmpty(item.path) && System.IO.File.Exists(item.path))
-                {
-                    try {
-                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(item.path) { UseShellExecute = true });
-                    } catch (Exception ex) { App.HandleError(ex); }
-                }
+                catch (Exception ex) { App.HandleError(ex); }
             }
-        }
-
-        private void BtnPinItem_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is Button btn && btn.DataContext is HistoryItem item)
-                {
-                    item.IsPinned = !item.IsPinned;
-                    var snapshot = LinkAllStore.Shared.History.ToList();
-                    TimelineList.ItemsSource = snapshot
-                        .OrderByDescending(h => h.IsPinned)
-                        .ThenByDescending(h => h.Time)
-                        .ToList();
-                }
-            }
-            catch (Exception ex) { App.HandleError(ex); }
-        }
-
-        private void BtnDeleteItem_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (sender is Button btn && btn.DataContext is HistoryItem item)
-                {
-                    LinkAllStore.Shared.History.Remove(item);
-                    App.Clipboard?.History.Remove(item);
-                    TimelineList.ItemsSource = LinkAllStore.Shared.History.ToList();
-                    UpdateEmptyState();
-                }
-            }
-            catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }

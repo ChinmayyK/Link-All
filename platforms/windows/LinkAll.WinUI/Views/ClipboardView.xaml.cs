@@ -33,8 +33,8 @@ namespace LinkAll.WinUI.Views
             try
             {
                 var query = SearchBox?.Text?.Trim() ?? "";
-                var snapshot = mgr.ActivityFeed
-                    .Where(i => i.kind is "clipboard_text" or "clipboard_image" or "remote_clipboard_available" or "clipboard_applied" or "file_transfer_complete")
+                var snapshot = ActivityEntry.WithoutRepeats(mgr.ActivityFeed
+                    .Where(i => i.kind is "clipboard_text" or "clipboard_image" or "remote_clipboard_available" or "file_transfer_complete"))
                     .ToList();
                 var items = snapshot.AsEnumerable();
 

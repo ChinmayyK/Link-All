@@ -214,7 +214,7 @@
                     </StackPanel>
                 </StackPanel>
                 <TextBlock Grid.Column="2" Text="{x:Bind RelativeTime, Mode=OneWay}"
-                           Style="{StaticResource AppMono}" FontSize="11.5"
+                           Style="{StaticResource AppCaption}"
                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                            VerticalAlignment="Center" />
                 <Button Grid.Column="3" Style="{StaticResource AppIconButtonSmall}"
@@ -259,7 +259,7 @@
                                 Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}"
                                 services:PulseEffects.EnablePulse="{x:Bind mgr.IsSearching, Mode=OneWay}" />
                         <TextBlock Text="{x:Bind mgr.HeaderStatusText, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" />
-                        <TextBlock Text="{x:Bind mgr.IdentityMetaText, Mode=OneWay}" Style="{StaticResource AppMono}"
+                        <TextBlock Text="{x:Bind mgr.IdentityMetaText, Mode=OneWay}" Style="{StaticResource AppSecondary}"
                                    VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                    Visibility="{x:Bind mgr.IdentityMetaText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
@@ -475,7 +475,7 @@
                                                 </TextBlock>
                                                 <ProgressBar Value="{x:Bind PercentFloat, Mode=OneWay}" Maximum="100" Height="3" CornerRadius="1.5" />
                                             </StackPanel>
-                                            <TextBlock Grid.Column="2" Text="{x:Bind PercentText, Mode=OneWay}" Style="{StaticResource AppMono}"
+                                            <TextBlock Grid.Column="2" Text="{x:Bind PercentText, Mode=OneWay}" Style="{StaticResource AppCaption}"
                                                        VerticalAlignment="Center" />
                                             <Button Grid.Column="3" Style="{StaticResource AppIconButton}"
                                                     ToolTipService.ToolTip="Cancel"

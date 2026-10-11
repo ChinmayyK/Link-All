@@ -1490,9 +1490,12 @@ mod tests {
             peer.pairing_outcome, None,
             "a new request clears the old outcome"
         );
-        assert_eq!(
-            peer.pairing_expires_in(),
-            Some(crate::pairing::PAIRING_TIMEOUT.as_secs())
+        // The clock may tick over a second between starting and reading it.
+        let timeout = crate::pairing::PAIRING_TIMEOUT.as_secs();
+        let left = peer.pairing_expires_in().unwrap();
+        assert!(
+            (timeout - 1..=timeout).contains(&left),
+            "expected about {timeout}s left, got {left}s"
         );
 
         manager

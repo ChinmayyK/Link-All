@@ -131,6 +131,35 @@ pub struct ActivityEntry {
     pub relay_path: Vec<String>,
 }
 
+/// "640 MB", "12.9 KB": sizes for people, matching the apps' own labels.
+fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    let mut value = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    // One decimal below 100, dropped when it is zero: "12.9 KB", "46 MB".
+    let shown = if value >= 100.0 {
+        format!("{value:.0}")
+    } else {
+        format!("{value:.1}").trim_end_matches(".0").to_string()
+    };
+    format!("{shown} {}", UNITS[unit])
+}
+
+fn capitalize(word: &str) -> String {
+    let mut chars = word.chars();
+    chars
+        .next()
+        .map(|first| first.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
 /// Maximum chars stored in `text_preview`.  Enough for BigText notification
 /// expansion on Android (400 chars) and the monospaced preview block on Mac.
 const PREVIEW_CHARS: usize = 400;
@@ -236,11 +265,7 @@ impl ActivityFeed {
         relay_path: Vec<String>,
     ) -> u64 {
         let preview = safe_truncate(text.trim(), PREVIEW_CHARS);
-        let summary = format!(
-            "[{}] copied: {}",
-            device_name,
-            safe_truncate(text.trim(), 40)
-        );
+        let summary = format!("{} copied: {}", device_name, safe_truncate(text.trim(), 40));
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
             id,
@@ -267,10 +292,10 @@ impl ActivityFeed {
         relay_path: Vec<String>,
     ) -> u64 {
         let summary = format!(
-            "[{}] copied image ({}, {} KB)",
+            "{} copied an image ({}, {})",
             device_name,
             mime,
-            bytes / 1024
+            human_size(bytes)
         );
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
@@ -302,7 +327,7 @@ impl ActivityFeed {
                 e.applied_locally = true;
             }
         }
-        let summary = format!("Applied clipboard from [{}]", device_name);
+        let summary = format!("Applied clipboard from {}", device_name);
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
             id,
@@ -325,7 +350,7 @@ impl ActivityFeed {
         content_hash: String,
     ) -> u64 {
         let preview = safe_truncate(text.trim(), PREVIEW_CHARS);
-        let summary = format!("[{}] copied text", device_name);
+        let summary = format!("Copied on {}", device_name);
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
             id,
@@ -354,9 +379,9 @@ impl ActivityFeed {
             return 0;
         }
         let summary = if is_sender {
-            format!("[{}] sending file: {}", device_name, file_name)
+            format!("Sending {} to {}", file_name, device_name)
         } else {
-            format!("[{}] receiving file: {}", device_name, file_name)
+            format!("Receiving {} from {}", file_name, device_name)
         };
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
@@ -398,17 +423,17 @@ impl ActivityFeed {
             {
                 e.summary = if is_outbound {
                     format!(
-                        "[{}] sent file: {} ({} KB)",
-                        device_name,
+                        "Sent {} to {} · {}",
                         file_name,
-                        file_bytes / 1024
+                        device_name,
+                        human_size(file_bytes)
                     )
                 } else {
                     format!(
-                        "[{}] received file: {} ({} KB)",
-                        device_name,
+                        "Received {} from {} · {}",
                         file_name,
-                        file_bytes / 1024
+                        device_name,
+                        human_size(file_bytes)
                     )
                 };
                 e.dest_path = dest_path.clone();
@@ -416,17 +441,17 @@ impl ActivityFeed {
         }
         let summary = if is_outbound {
             format!(
-                "[{}] sent file: {} ({} KB)",
-                device_name,
+                "Sent {} to {} · {}",
                 file_name,
-                file_bytes / 1024
+                device_name,
+                human_size(file_bytes)
             )
         } else {
             format!(
-                "[{}] file ready: {} ({} KB)",
-                device_name,
+                "Received {} from {} · {}",
                 file_name,
-                file_bytes / 1024
+                device_name,
+                human_size(file_bytes)
             )
         };
         let id = self.alloc_id();
@@ -466,10 +491,7 @@ impl ActivityFeed {
             }
         }
         let name_part = file_name.as_deref().unwrap_or("unknown file");
-        let summary = format!(
-            "[{}] transfer failed: {} — {}",
-            device_name, name_part, reason
-        );
+        let summary = format!("{} with {} failed: {}", name_part, device_name, reason);
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
             id,
@@ -502,8 +524,12 @@ impl ActivityFeed {
             "received"
         };
         let summary = format!(
-            "[{}] {} folder: {} ({})",
-            device_name, verb, folder_name, files
+            "{} folder {} {} {} ({})",
+            capitalize(verb),
+            folder_name,
+            if dest_dir.is_none() { "to" } else { "from" },
+            device_name,
+            files
         );
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
@@ -522,7 +548,7 @@ impl ActivityFeed {
 
     /// Record a peer connecting.
     pub fn record_peer_connected(&mut self, device_id: Uuid, device_name: String) -> u64 {
-        let summary = format!("[{}] connected", device_name);
+        let summary = format!("{} connected", device_name);
         let id = self.alloc_id();
         let entry = ActivityEntry::new(
             id,
@@ -543,8 +569,8 @@ impl ActivityFeed {
         reason: Option<String>,
     ) -> u64 {
         let summary = match &reason {
-            Some(r) => format!("[{}] disconnected: {}", device_name, r),
-            None => format!("[{}] disconnected", device_name),
+            Some(r) => format!("{} disconnected: {}", device_name, r),
+            None => format!("{} disconnected", device_name),
         };
         let id = self.alloc_id();
         let entry = ActivityEntry::new(
@@ -560,7 +586,7 @@ impl ActivityFeed {
 
     /// Record sync pause.
     pub fn record_sync_paused(&mut self, device_id: Uuid, device_name: String) -> u64 {
-        let summary = format!("[{}] sync paused", device_name);
+        let summary = format!("Sync paused with {}", device_name);
         let id = self.alloc_id();
         let entry = ActivityEntry::new(
             id,
@@ -575,7 +601,7 @@ impl ActivityFeed {
 
     /// Record sync resume.
     pub fn record_sync_resumed(&mut self, device_id: Uuid, device_name: String) -> u64 {
-        let summary = format!("[{}] sync resumed", device_name);
+        let summary = format!("Sync resumed with {}", device_name);
         let id = self.alloc_id();
         let entry = ActivityEntry::new(
             id,
@@ -597,7 +623,7 @@ impl ActivityFeed {
         title: String,
         text: String,
     ) -> u64 {
-        let summary = format!("[{}] {}: {}", device_name, title, text);
+        let summary = format!("{} from {}: {}", title, device_name, text);
         let id = self.alloc_id();
         let mut entry = ActivityEntry::new(
             id,
@@ -732,6 +758,47 @@ impl Default for ActivityFeed {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn file_summaries_read_as_sentences_with_readable_sizes() {
+        let mut feed = ActivityFeed::new(50);
+        let mac = Uuid::new_v4();
+        feed.record_file_transfer_complete(
+            mac,
+            "MacBook Pro".into(),
+            "film.mov".into(),
+            671_088_640,
+            "t1".into(),
+            None,
+        );
+        feed.record_file_transfer_complete(
+            mac,
+            "MacBook Pro".into(),
+            "notes.pdf".into(),
+            13_249,
+            "t2".into(),
+            Some("/tmp/notes.pdf".into()),
+        );
+        let all = feed.all();
+        let summaries: Vec<&str> = all.iter().map(|e| e.summary.as_str()).collect();
+        assert!(
+            summaries.contains(&"Sent film.mov to MacBook Pro · 640 MB"),
+            "{summaries:?}"
+        );
+        assert!(
+            summaries.contains(&"Received notes.pdf from MacBook Pro · 12.9 KB"),
+            "{summaries:?}"
+        );
+        assert!(summaries.iter().all(|s| !s.contains('[')));
+    }
+
+    #[test]
+    fn human_size_picks_a_unit() {
+        assert_eq!(human_size(900), "900 B");
+        assert_eq!(human_size(48_234_496), "46 MB");
+        assert_eq!(human_size(13_210), "12.9 KB");
+        assert_eq!(human_size(188_743_680), "180 MB");
+    }
 
     #[test]
     fn feed_records_and_queries() {

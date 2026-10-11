@@ -45,6 +45,11 @@
                                TextTrimming="CharacterEllipsis" />
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="{x:Bind TypeLabel, Mode=OneWay}" Style="{StaticResource AppCaption}" FontWeight="SemiBold" />
+                        <StackPanel Orientation="Horizontal" Spacing="6"
+                                    Visibility="{x:Bind HasSize, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
+                            <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
+                            <TextBlock Text="{x:Bind FormattedSize, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                        </StackPanel>
                         <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />
                         <TextBlock Text="{x:Bind Source, Mode=OneWay}" Style="{StaticResource AppCaption}" />
                         <TextBlock Text="&#183;" Style="{StaticResource AppCaption}" />

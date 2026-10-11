@@ -87,7 +87,33 @@ namespace LinkAll.WinUI
         public string Title => !string.IsNullOrWhiteSpace(file_name)
             ? file_name!
             : (!string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary);
-        public string Preview => !string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary;
+        public string Preview => !string.IsNullOrWhiteSpace(text_preview) ? text_preview!
+            : !string.IsNullOrWhiteSpace(file_name) ? file_name! : summary;
+
+        /// <summary>
+        /// The feed as a list of things, not events: drops "applied" echoes of
+        /// an item already listed, a transfer's "started" row once it has finished,
+        /// and keeps only the newest copy of a clip
+        /// sent more than once. The feed is newest first.
+        /// </summary>
+        public static IEnumerable<ActivityEntry> WithoutRepeats(IEnumerable<ActivityEntry> feed)
+        {
+            var all = feed.ToList();
+            var finished = all
+                .Where(e => e.kind is "file_transfer_complete" or "file_transfer_failed" && !string.IsNullOrEmpty(e.transfer_id))
+                .Select(e => e.transfer_id!)
+                .ToHashSet();
+            var seenClips = new HashSet<string>();
+            foreach (var e in all)
+            {
+                if (e.kind == "clipboard_applied") continue;
+                if (e.kind == "file_transfer_started" && !string.IsNullOrEmpty(e.transfer_id) && finished.Contains(e.transfer_id)) continue;
+                var isClip = e.kind is "clipboard_text" or "clipboard_image" or "remote_clipboard_available";
+                var key = !string.IsNullOrEmpty(e.content_hash) ? e.content_hash : e.text_preview;
+                if (isClip && !string.IsNullOrEmpty(key) && !seenClips.Add(key)) continue;
+                yield return e;
+            }
+        }
         [JsonIgnore]
         public string Source => string.IsNullOrWhiteSpace(device_name) ? "Link All" : device_name;
         public string TypeLabel => kind switch
@@ -146,8 +172,9 @@ namespace LinkAll.WinUI
             _ => ActivityKindToGlyphConverter.ToGlyph(kind)
         };
         public string FormattedSize => file_bytes.HasValue ? LinkAllFormatting.FormatBytes(file_bytes.Value) : "";
+        public bool HasSize => file_bytes.HasValue;
         public string RelayPathDisplay => relay_path.Count == 0 ? "" : string.Join(" -> ", relay_path);
-        public string RelativeTime => timestamp_ms == 0 ? "Just now" : LinkAllFormatting.RelativeTimeFromUnixMs(timestamp_ms);
+        public string RelativeTime => timestamp_ms == 0 ? "just now" : LinkAllFormatting.RelativeTimeFromUnixMs(timestamp_ms);
         public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
 
         // Operation line for the Recent activity row. "Sent"/"Received" is
@@ -215,6 +242,7 @@ namespace LinkAll.WinUI
             OnPropertyChanged(nameof(HasPreview));
             OnPropertyChanged(nameof(HasDestination));
             OnPropertyChanged(nameof(FormattedSize));
+            OnPropertyChanged(nameof(HasSize));
             OnPropertyChanged(nameof(RelayPathDisplay));
             OnPropertyChanged(nameof(OperationText));
             OnPropertyChanged(nameof(StatusLabel));
@@ -240,7 +268,7 @@ namespace LinkAll.WinUI
         public string from_device { get => device_name; set => device_name = value; }
         public ulong timestamp { get => timestamp_ms; set => timestamp_ms = value; }
         public string Preview => !string.IsNullOrWhiteSpace(text_preview) ? text_preview! : summary;
-        public string RelativeTime => timestamp_ms == 0 ? "Just now" : LinkAllFormatting.RelativeTimeFromUnixMs(timestamp_ms);
+        public string RelativeTime => timestamp_ms == 0 ? "just now" : LinkAllFormatting.RelativeTimeFromUnixMs(timestamp_ms);
         public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
     }
 
@@ -333,7 +361,8 @@ namespace LinkAll.WinUI
             var p when p.Contains("linux") => "Server",
             _ => "Smartphone"
         };
-        public string LastSeenText => last_seen.HasValue ? $"Seen {LinkAllFormatting.RelativeTimeFromUnixSeconds(last_seen.Value)}" : "";
+        // Only for a device that isn't connected: while it is, "Seen" goes stale.
+        public string LastSeenText => !IsConnected && last_seen.HasValue ? $"Seen {LinkAllFormatting.RelativeTimeFromUnixSeconds(last_seen.Value)}" : "";
         public string IpAddressText => ips.Count > 0 ? string.Join(", ", ips) : "";
         // One address is enough to identify the link; prefer IPv4 over the
         // long IPv6 and link-local forms.
@@ -510,6 +539,7 @@ namespace LinkAll.WinUI
 
         private void NotifyPeerStateProperties()
         {
+            OnPropertyChanged(nameof(LastSeenText));
             OnPropertyChanged(nameof(StatusIcon));
             OnPropertyChanged(nameof(ConnectionText));
             OnPropertyChanged(nameof(ConnectionColor));
@@ -1267,11 +1297,8 @@ namespace LinkAll.WinUI
                 var lead = connected.FirstOrDefault();
                 if (lead == null) return "";
                 var synced = connected.Max(p => p.last_sync);
-                return string.Join("  ·  ", new[]
-                {
-                    string.IsNullOrEmpty(lead.PrimaryIpText) ? null : lead.PrimaryIpText,
-                    synced.HasValue ? $"synced {LinkAllFormatting.RelativeTimeFromUnixSeconds(synced.Value)}" : null,
-                }.Where(part => part != null));
+                // Not lead's address: under "Visible as Windows PC" it read as this PC's.
+                return synced.HasValue ? $"synced {LinkAllFormatting.RelativeTimeFromUnixSeconds(synced.Value)}" : "";
             }
         }
 
@@ -2036,8 +2063,8 @@ namespace LinkAll.WinUI
                 .Select(e => e.transfer_id!)
                 .ToHashSet();
 
-            var desired = ActivityFeed
-                .Where(e => !(e.kind == "file_transfer_started" && !string.IsNullOrEmpty(e.transfer_id) && finishedTransferIds.Contains(e.transfer_id)))
+            var desired = ActivityEntry.WithoutRepeats(ActivityFeed
+                .Where(e => !(e.kind == "file_transfer_started" && !string.IsNullOrEmpty(e.transfer_id) && finishedTransferIds.Contains(e.transfer_id))))
                 .Take(RecentActivityLimit)
                 .ToList();
 
@@ -2172,7 +2199,7 @@ namespace LinkAll.WinUI
                 var date = DateTimeOffset.FromUnixTimeMilliseconds((long)timestampMs);
                 return RelativeTimeFrom(date);
             }
-            catch { return "Just now"; }
+            catch { return "just now"; }
         }
 
         internal static string RelativeTimeFromUnixSeconds(ulong timestampSeconds)
@@ -2188,7 +2215,7 @@ namespace LinkAll.WinUI
         internal static string RelativeTimeFrom(DateTimeOffset date)
         {
             var delta = DateTimeOffset.Now - date;
-            if (delta.TotalSeconds < 60) return "Just now";
+            if (delta.TotalSeconds < 60) return "just now";
             if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes}m ago";
             if (delta.TotalHours < 24) return $"{(int)delta.TotalHours}h ago";
             if (delta.TotalDays < 7) return $"{(int)delta.TotalDays}d ago";

@@ -166,10 +166,10 @@ impl HistoryMetadata {
     /// Uses friendly device name, NOT internal ID.
     pub fn summary(&self) -> String {
         match self.kind.as_str() {
-            "text" => format!("[{}] copied text", self.source_device),
-            "image" => format!("[{}] copied image", self.source_device),
-            "file" => format!("[{}] received file", self.source_device),
-            _ => format!("[{}] clipboard item", self.source_device),
+            "text" => format!("Copied on {}", self.source_device),
+            "image" => format!("Image copied on {}", self.source_device),
+            "file" => format!("File from {}", self.source_device),
+            _ => format!("Clipboard item from {}", self.source_device),
         }
     }
 }
