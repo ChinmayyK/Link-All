@@ -69,6 +69,17 @@
                                 </StackPanel>
                             </Button>
 
+                            <!-- Someone who found Link All in the Microsoft Store may not
+                                 have it on their phone or Mac yet. -->
+                            <HyperlinkButton Margin="-12,10,0,0" Padding="12,6"
+                                             NavigateUri="https://linkall.chinmaykudalkar.com/download"
+                                             AutomationProperties.Name="Get Link All for Android, Mac or Linux">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE896;" FontSize="13" />
+                                    <TextBlock Text="Get Link All for your phone, Mac or Linux" />
+                                </StackPanel>
+                            </HyperlinkButton>
+
                             <TextBlock Text="On your network"
                                        Style="{StaticResource AppSectionTitle}"
                                        Margin="0,32,0,12" />

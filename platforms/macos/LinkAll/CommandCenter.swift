@@ -984,7 +984,7 @@ struct RadarEmptyStateView: View {
             .frame(height: 360)
             
             VStack(spacing: 8) {
-                Text("Scanning Mesh Network...")
+                Text("Looking for devices")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(CRTheme.ink)
                 
@@ -993,6 +993,13 @@ struct RadarEmptyStateView: View {
                     .foregroundStyle(CRTheme.inkSoft)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 280)
+
+                // Someone new may not have Link All on their phone or PC yet.
+                Link(destination: URL(string: "https://linkall.chinmaykudalkar.com/download")!) {
+                    Label("Get Link All for your phone or PC", systemImage: "arrow.down.circle")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .padding(.top, 6)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

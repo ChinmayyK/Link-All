@@ -130,7 +130,7 @@ private fun FindStep(
         Text("Link this phone to your computer", style = DdType.display, color = c.text)
         Spacer(Modifier.height(10.dp))
         Text(
-            "One clipboard and instant file sharing between your devices, over your own network. No account, no cloud.",
+            "One clipboard, files and folders, and your calls and notifications on your computer, over your own network. No account, no cloud.",
             style = DdType.body,
             color = c.textMuted
         )
@@ -165,6 +165,13 @@ private fun FindStep(
                     )
                 }
             }
+        }
+        // Someone who found the app in a store may not have it on their computer yet.
+        val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
+        Spacer(Modifier.height(16.dp))
+        PillButton(c, "Get Link All for your computer", filled = false, compact = true, icon = Icons.Outlined.Download,
+            modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            uriHandler.openUri("https://linkall.chinmaykudalkar.com/download")
         }
         Spacer(Modifier.height(24.dp))
         PillButton(c, "Skip for now", filled = false, modifier = Modifier.fillMaxWidth(), onClick = onSkip)
