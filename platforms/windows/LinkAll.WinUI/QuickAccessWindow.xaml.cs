@@ -35,13 +35,13 @@ namespace LinkAll.WinUI
 
             // Resize the window. AppWindow.Resize takes physical pixels while
             // the XAML content is measured in DIPs - scale by the monitor's
-            // DPI so this is 420x620 DIPs on every display, not just 100%
+            // DPI so this is 460x620 DIPs on every display, not just 100%
             // scaled ones (see the matching note in DashboardWindow.xaml.cs).
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
             var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
             LinkAll.WinUI.Services.WindowIconHelper.Apply(appWindow);
-            LinkAll.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 420, 620);
+            LinkAll.WinUI.Services.WindowIconHelper.ResizeDips(appWindow, hwnd, 460, 620);
 
             TimelineList.ItemsSource = LinkAllStore.Shared.History;
             if (DeviceTargetsList != null) DeviceTargetsList.ItemsSource = LinkAllStore.WithoutStaleDuplicates(LinkAllStore.Shared.Peers).ToList();
@@ -122,11 +122,16 @@ namespace LinkAll.WinUI
             catch (Exception ex) { App.HandleError(ex); }
         }
 
+        // Menu items carry their row in Tag: a flyout sits outside the
+        // visual tree, so it doesn't reliably inherit the row's DataContext.
+        private static HistoryItem? RowItem(object sender) =>
+            sender is FrameworkElement el ? (el.Tag as HistoryItem ?? el.DataContext as HistoryItem) : null;
+
         private void BtnPinItem_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                if (((FrameworkElement)sender).DataContext is HistoryItem item)
+                if (RowItem(sender) is HistoryItem item)
                 {
                     item.IsPinned = !item.IsPinned;
                     var snapshot = LinkAllStore.Shared.History.ToList();
@@ -143,7 +148,7 @@ namespace LinkAll.WinUI
         {
             try
             {
-                if (((FrameworkElement)sender).DataContext is HistoryItem item)
+                if (RowItem(sender) is HistoryItem item)
                 {
                     LinkAllStore.Shared.History.Remove(item);
                     App.Clipboard?.History.Remove(item);
@@ -154,12 +159,10 @@ namespace LinkAll.WinUI
         }
 
         // Bound to Tapped on the whole row rather than Click on a row-sized
-        // Button: the row now hosts its own pin/delete buttons, and nesting
-        // buttons inside a button made those two unreachable in some hit-test
-        // orders.
+        // Button, so the row's right-click menu and hover state keep working.
         private void HistoryItem_Click(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
         {
-            if (((FrameworkElement)sender).DataContext is HistoryItem item)
+            if (RowItem(sender) is HistoryItem item)
             {
                 if (item.is_text && !string.IsNullOrEmpty(item.FullText))
                 {
