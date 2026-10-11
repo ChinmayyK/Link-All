@@ -523,6 +523,26 @@ impl SensitiveTextFilter {
             return false;
         }
 
+        // A web link is high-entropy by nature, so judge only the parts that
+        // can carry a secret: a password in the address, or a parameter value.
+        if let Some(rest) = trimmed
+            .strip_prefix("https://")
+            .or_else(|| trimmed.strip_prefix("http://"))
+        {
+            if rest.contains(char::is_whitespace) {
+                return false;
+            }
+            let host_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+            if rest[..host_end].contains('@') {
+                return true;
+            }
+            return rest[host_end..]
+                .split(['?', '&', '#'])
+                .skip(1)
+                .filter_map(|pair| pair.split_once('=').map(|(_, value)| value))
+                .any(Self::looks_like_secret);
+        }
+
         let single_line = !trimmed.contains('\n');
         let has_space = trimmed.contains(char::is_whitespace);
         if !single_line || has_space {
@@ -650,6 +670,35 @@ mod tests {
         ClipboardContent::File {
             name: name.into(),
             data: vec![],
+        }
+    }
+
+    #[test]
+    fn sensitive_filter_lets_plain_links_through() {
+        let f = SensitiveTextFilter {
+            enabled: true,
+            ..SensitiveTextFilter::default()
+        };
+        for link in [
+            "https://linkall.chinmaykudalkar.com",
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s",
+            "https://github.com/ChinmayyK/Link-All/pull/34/files#diff-3f9a",
+        ] {
+            assert_eq!(f.check(&text(link)), Verdict::Allow, "{link}");
+        }
+    }
+
+    #[test]
+    fn sensitive_filter_blocks_links_carrying_secrets() {
+        let f = SensitiveTextFilter {
+            enabled: true,
+            ..SensitiveTextFilter::default()
+        };
+        for link in [
+            "https://admin:hunter2pass@example.com/panel",
+            "https://example.com/reset?k=Zx9Qm2Lp7Rt4Vb8Nc1Hd6Fg3",
+        ] {
+            assert!(!f.check(&text(link)).is_allow(), "{link}");
         }
     }
 
