@@ -72,7 +72,7 @@ airdrop for windows
 cross device
 
 ## What's new in this version
-Deskdrop is now Link All. Browse files on your other computers, a clearer activity log, caller names on incoming calls, and many fixes.
+First release on the Microsoft Store.
 
 ## Category
 Productivity (subcategory: none). Utilities & tools also fits.
