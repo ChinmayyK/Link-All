@@ -165,6 +165,7 @@ namespace LinkAll.WinUI
             _ => ActivityKindToGlyphConverter.ToGlyph(kind)
         };
         public string FormattedSize => file_bytes.HasValue ? LinkAllFormatting.FormatBytes(file_bytes.Value) : "";
+        public bool HasSize => file_bytes.HasValue;
         public string RelayPathDisplay => relay_path.Count == 0 ? "" : string.Join(" -> ", relay_path);
         public string RelativeTime => timestamp_ms == 0 ? "just now" : LinkAllFormatting.RelativeTimeFromUnixMs(timestamp_ms);
         public void RefreshRelativeTime() => OnPropertyChanged(nameof(RelativeTime));
@@ -234,6 +235,7 @@ namespace LinkAll.WinUI
             OnPropertyChanged(nameof(HasPreview));
             OnPropertyChanged(nameof(HasDestination));
             OnPropertyChanged(nameof(FormattedSize));
+            OnPropertyChanged(nameof(HasSize));
             OnPropertyChanged(nameof(RelayPathDisplay));
             OnPropertyChanged(nameof(OperationText));
             OnPropertyChanged(nameof(StatusLabel));
