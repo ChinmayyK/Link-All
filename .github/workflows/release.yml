@@ -266,8 +266,8 @@ jobs:
 
       - name: Generate Checksums
         run: |
-          # The MSIX is for Partner Center, not the release, so it isn't listed.
-          find release-artifacts -type f ! -name '*.msix' -exec sha256sum {} + | sed 's|release-artifacts/.*/||' > sha256sums.txt
+          # The MSIX and the Play bundle are for the stores, not the release, so they aren't listed.
+          find release-artifacts -type f ! -name '*.msix' ! -name '*.aab' -exec sha256sum {} + | sed 's|release-artifacts/.*/||' > sha256sums.txt
 
       # The notes are this version's CHANGELOG section under a downloads
       # table, so every release says what changed without hand edits. The
