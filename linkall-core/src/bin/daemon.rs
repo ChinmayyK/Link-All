@@ -478,13 +478,22 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             dest_path,
             ..
         } => {
-            let dest_str = dest_path.to_string_lossy().to_string();
+            // A file this device sent has no destination here; the activity
+            // feed tells the two apart the same way.
+            let message = if dest_path.as_os_str().is_empty() {
+                format!("Sent {file_name} to {from_name}")
+            } else {
+                format!(
+                    "Received {file_name} from {from_name} → {}",
+                    dest_path.to_string_lossy()
+                )
+            };
             push_feedback(
                 &state,
                 FeedbackEvent {
                     timestamp: now_secs(),
                     kind: "file_transfer_complete".into(),
-                    message: format!("Received {file_name} from {from_name} → {dest_str}"),
+                    message,
                     device_id: None,
                     device_name: Some(from_name),
                     clipboard_id: None,
