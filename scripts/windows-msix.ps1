@@ -57,6 +57,15 @@ $msix = Get-ChildItem $pkgDir -Recurse -Filter *.msix |
   Select-Object -First 1
 if (-not $msix) { throw "no .msix was produced under $pkgDir" }
 
+# The tray helper is a separate exe; the app has no tray icon without it.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$zip = [System.IO.Compression.ZipFile]::OpenRead($msix.FullName)
+try {
+  foreach ($need in 'LinkAll.exe', 'linkall_core.dll', 'tray/LinkAll.Tray.exe') {
+    if (-not ($zip.Entries | Where-Object { $_.FullName -eq $need })) { throw "the MSIX is missing $need" }
+  }
+} finally { $zip.Dispose() }
+
 $out = Join-Path $root "$OutDir\LinkAll-windows-x64.msix"
 Copy-Item $msix.FullName $out -Force
 Write-Host "MSIX for Partner Center: $out"
