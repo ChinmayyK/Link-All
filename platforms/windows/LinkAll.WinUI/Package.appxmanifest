@@ -1,24 +1,28 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 
+<!--
+  The Microsoft Store (MSIX) build. Identity and PublisherDisplayName come
+  from Partner Center (Product management > Product identity) and must match
+  it exactly. Properties/DisplayName is the Store listing name; the Start menu
+  shows VisualElements/DisplayName. Both must be names reserved for the app.
+  Version is set by scripts/bump-version.sh.
+-->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
-  xmlns:mp="http://schemas.microsoft.com/appx/2014/phone/manifest"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
-  xmlns:systemai="http://schemas.microsoft.com/appx/manifest/systemai/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
   xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
-  IgnorableNamespaces="uap rescap systemai desktop6">
+  IgnorableNamespaces="uap rescap desktop desktop6">
 
   <Identity
-    Name="476CC0A7-1560-4FB5-8218-1661E1E6B021"
-    Publisher="CN=AppPublisher"
-    Version="1.0.0.0" />
-
-  <mp:PhoneIdentity PhoneProductId="476CC0A7-1560-4FB5-8218-1661E1E6B021" PhonePublisherId="00000000-0000-0000-0000-000000000000"/>
+    Name="ChinmayKudalkar.LinkAll"
+    Publisher="CN=0F47A9E1-2B5F-4DF7-98AC-BA72D6C4A793"
+    Version="2.0.0.0" />
 
   <Properties>
-    <DisplayName>Link All</DisplayName>
-    <PublisherDisplayName>AppPublisher</PublisherDisplayName>
+    <DisplayName>Link All – Phone &amp; Computer</DisplayName>
+    <PublisherDisplayName>Chinmay Kudalkar</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <!-- Keep the device identity, trust store and settings in the real
          %LOCALAPPDATA%\linkall, the folder the MSI install uses. With write
@@ -30,8 +34,7 @@
   </Properties>
 
   <Dependencies>
-    <TargetDeviceFamily Name="Windows.Universal" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26226.0" />
-    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26226.0" />
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
   </Dependencies>
 
   <Resources>
@@ -44,19 +47,27 @@
       EntryPoint="$targetentrypoint$">
       <uap:VisualElements
         DisplayName="Link All"
-        Description="Files, clipboard, calls and notifications between your devices"
+        Description="Share files, folders and one clipboard between your phone and computer. No cloud, no account."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png">
         <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" />
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
+      <Extensions>
+        <!-- "Start with Windows" in Settings turns this on (StartupRegistration.cs).
+             It starts the app with no arguments; App treats that as a tray-only launch. -->
+        <desktop:Extension Category="windows.startupTask">
+          <desktop:StartupTask TaskId="LinkAllStartup" Enabled="false" DisplayName="Link All" />
+        </desktop:Extension>
+      </Extensions>
     </Application>
   </Applications>
 
   <Capabilities>
+    <Capability Name="internetClientServer" />
+    <Capability Name="privateNetworkClientServer" />
     <rescap:Capability Name="runFullTrust" />
     <rescap:Capability Name="unvirtualizedResources" />
-    <systemai:Capability Name="systemAIModels"/>
   </Capabilities>
 </Package>

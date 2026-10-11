@@ -15,7 +15,8 @@ namespace LinkAll.WinUI.Services
         public static void Run()
         {
             MoveSettingsFolder();
-            MoveSignInEntry();
+            // The Store build starts at sign-in through its StartupTask, not the Run key.
+            if (!StartupRegistration.IsPackaged) MoveSignInEntry();
             RemoveOldShellRegistrations();
         }
 
