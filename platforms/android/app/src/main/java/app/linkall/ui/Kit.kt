@@ -489,8 +489,12 @@ private fun PairQrSheet(c: DdColors, onDismiss: () -> Unit) {
     val bitmap by produceState<android.graphics.Bitmap?>(null, uri) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
             runCatching {
+                // The tile around the code is the quiet zone, so the bitmap needs only a thin margin.
                 val matrix = com.google.zxing.qrcode.QRCodeWriter()
-                    .encode(uri, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512)
+                    .encode(
+                        uri, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512,
+                        mapOf(com.google.zxing.EncodeHintType.MARGIN to 1)
+                    )
                 val pixels = IntArray(matrix.width * matrix.height) { i ->
                     if (matrix.get(i % matrix.width, i / matrix.width)) android.graphics.Color.BLACK
                     else android.graphics.Color.WHITE
@@ -504,15 +508,25 @@ private fun PairQrSheet(c: DdColors, onDismiss: () -> Unit) {
         subtitle = "Link All on your computer → Add device → Scan",
         onDismiss = onDismiss
     ) { close ->
+        // The code itself stays dark on white, which every scanner reads; in
+        // dark mode it sits as a small tile on the sheet's own panel.
         Box(
             Modifier
                 .fillMaxWidth()
                 .clip(PanelShape)
-                .background(Color.White)
-                .padding(20.dp),
+                .background(c.surfaceSunk)
+                .padding(vertical = 24.dp),
             contentAlignment = Alignment.Center
         ) {
-            Box(Modifier.fillMaxWidth(0.8f).aspectRatio(1f), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .fillMaxWidth(0.66f)
+                    .aspectRatio(1f)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.White)
+                    .padding(14.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 bitmap?.let {
                     androidx.compose.foundation.Image(
                         it.asImageBitmap(),
