@@ -144,8 +144,13 @@ class LinkAllService : Service() {
         const val ACTION_TRUST_PEER_FROM_QR = "app.linkall.TRUST_PEER_FROM_QR"
         const val ACTION_REJECT_PEER = "app.linkall.REJECT_PEER"
         const val ACTION_HANDLE_CALL_STATE = "app.linkall.HANDLE_CALL_STATE"
+        /** The phone app's call notification named the caller (EXTRA_CALLER_NAME). */
+        const val ACTION_CALLER_FROM_NOTIFICATION = "app.linkall.CALLER_FROM_NOTIFICATION"
+        const val EXTRA_CALLER_NAME = "caller_name"
         /** How often a live call's state is repeated to peers; matches CALL_REFRESH in the core. */
         private const val CALL_REFRESH_MS = 10_000L
+        /** How long a nameless ring waits for the number or the phone app's call notification. */
+        private const val CALL_NAME_WAIT_MS = 1_200L
         const val ACTION_FORGET_PEER        = "app.linkall.FORGET_PEER"
         const val ACTION_SEND_PAIRING_REQUEST = "app.linkall.SEND_PAIRING_REQUEST"
         const val ACTION_RESPOND_TO_PAIRING = "app.linkall.RESPOND_TO_PAIRING"
@@ -642,6 +647,7 @@ class LinkAllService : Service() {
             ACTION_TRUST_PEER_FROM_QR -> handleTrustPeerFromQr(intent)
             ACTION_REJECT_PEER -> handleRejectPeer(intent)
             ACTION_HANDLE_CALL_STATE -> handleCallStateIntent(intent)
+            ACTION_CALLER_FROM_NOTIFICATION -> onCallerFromNotification(intent.getStringExtra(EXTRA_CALLER_NAME).orEmpty())
             ACTION_FORGET_PEER        -> {
                 val deviceId = intent?.getStringExtra(EXTRA_TARGET_DEVICE_ID) ?: return START_STICKY
                 val h = engineHandle
@@ -3060,6 +3066,10 @@ class LinkAllService : Service() {
     /** Last call state seen: "idle", "ringing", "offhook", or "outgoing" for a call this phone placed. */
     private var lastCallState = "idle"
     private var lastCallNumber = ""
+    /** The caller as the phone app's call notification names them. The Play
+     *  build has no call log or contacts access, so this is its only source;
+     *  the full build uses it when the contact lookup finds nothing. */
+    private var notificationCallerName = ""
     private var callStateCallback: android.telephony.TelephonyCallback? = null
 
     /**
@@ -3119,9 +3129,34 @@ class LinkAllService : Service() {
         // once, and again only if the receiver brings the number.
         if (stateStr == previous && (number.isEmpty() || number == lastCallNumber)) return
         if (number.isNotEmpty()) lastCallNumber = number
-        if (stateStr == "idle") lastCallNumber = ""
+        if (stateStr == "idle") {
+            lastCallNumber = ""
+            notificationCallerName = ""
+        }
         val known = number.ifEmpty { lastCallNumber }
-        val contact = resolveContactName(known)
+        val contact = callerName(known)
+        // Android says "ringing" before it hands over the number or the phone
+        // app posts its call notification. Hold a nameless ring briefly so
+        // the computer shows the caller from the start, not "unknown" first.
+        callHoldHandler.removeCallbacks(sendHeldRing)
+        if (stateStr == "ringing" && known.isEmpty() && contact.isEmpty() && !ringSent) {
+            callHoldHandler.postDelayed(sendHeldRing, CALL_NAME_WAIT_MS)
+            return
+        }
+        publishCallState(stateStr, known, contact)
+    }
+
+    /** Whether peers have been told about the current ring. */
+    private var ringSent = false
+    private val callHoldHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val sendHeldRing = Runnable {
+        if (lastCallState == "ringing" && !ringSent) {
+            publishCallState("ringing", lastCallNumber, callerName(lastCallNumber))
+        }
+    }
+
+    private fun publishCallState(stateStr: String, known: String, contact: String) {
+        ringSent = stateStr == "ringing" || (stateStr == "offhook" && ringSent)
         Log.i(TAG, "Call state: $stateStr hasNumber=${known.isNotEmpty()} hasContact=${contact.isNotEmpty()}")
         val h = engineHandle
         if (h != 0L) {
@@ -3155,7 +3190,7 @@ class LinkAllService : Service() {
                 resyncIdleCallState(delayMs = 0)
                 return
             }
-            if (h != 0L) withEngine { live -> LinkAllJni.pushCallState(live, lastCallState, lastCallNumber, resolveContactName(lastCallNumber)) }
+            if (h != 0L) withEngine { live -> LinkAllJni.pushCallState(live, lastCallState, lastCallNumber, callerName(lastCallNumber)) }
             callRefreshHandler.postDelayed(this, CALL_REFRESH_MS)
         }
     }
@@ -3177,6 +3212,7 @@ class LinkAllService : Service() {
             stopCallRefresh()
             lastCallState = "idle"
             lastCallNumber = ""
+            notificationCallerName = ""
             notificationManager.cancel(NOTIF_ID_CALL)
             val h = engineHandle
             if (h != 0L) withEngine { live -> LinkAllJni.pushCallState(live, "idle", "", "") }
@@ -3249,6 +3285,32 @@ class LinkAllService : Service() {
         checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
 
+    private fun callerName(number: String): String =
+        resolveContactName(number).ifEmpty { notificationCallerName }
+
+    /**
+     * The phone app's call notification often arrives after the ringing
+     * state, so a call already sent without a name is sent again with it.
+     * Only incoming calls count: an outgoing call is never forwarded.
+     */
+    private fun onCallerFromNotification(name: String) {
+        if (name.isBlank() || name == notificationCallerName) return
+        notificationCallerName = name
+        if (lastCallState != "ringing" && lastCallState != "offhook") return
+        if (resolveContactName(lastCallNumber).isNotEmpty()) return
+        if (lastCallState == "ringing" && !ringSent) {
+            // The ring was being held for a name: send it now, with this one.
+            callHoldHandler.removeCallbacks(sendHeldRing)
+            publishCallState("ringing", lastCallNumber, name)
+            return
+        }
+        Log.i(TAG, "Call state: caller named by the call notification")
+        if (engineHandle != 0L) {
+            withEngine { live -> LinkAllJni.pushCallState(live, lastCallState, lastCallNumber, name) }
+        }
+        if (lastCallState == "ringing") showIncomingCallNotification(lastCallNumber, name)
+    }
+
     private fun resolveContactName(number: String): String {
         if (number.isBlank()) return ""
         if (checkSelfPermission(android.Manifest.permission.READ_CONTACTS) !=
@@ -3273,7 +3335,7 @@ class LinkAllService : Service() {
         val callerLabel = when {
             contactName.isNotBlank() -> contactName
             number.isNotBlank()      -> number
-            else                     -> "Unknown caller"
+            else                     -> "Incoming call"
         }
 
         // Tapping the notification opens the app

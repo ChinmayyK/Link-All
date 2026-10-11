@@ -278,9 +278,13 @@ struct IncomingCallState: Equatable {
     let phoneNumber: String
     let contactName: String
 
-    /// Human-friendly display: contact name if available, otherwise phone number.
+    /// Human-friendly display: contact name if available, otherwise phone
+    /// number. A phone that can see neither (the Google Play build, before its
+    /// phone app names the caller) says which phone is ringing instead.
     var displayName: String {
-        contactName.isEmpty ? (phoneNumber.isEmpty ? "Unknown Caller" : phoneNumber) : contactName
+        if !contactName.isEmpty { return contactName }
+        if !phoneNumber.isEmpty { return phoneNumber }
+        return deviceName.isEmpty ? "Your phone" : deviceName
     }
 
     var isRinging: Bool { state.lowercased() == "ringing" }

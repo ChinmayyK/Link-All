@@ -112,8 +112,11 @@ namespace LinkAll.WinUI
                 ContactName = string.IsNullOrEmpty(call.ContactName) ? _call.ContactName : call.ContactName,
             };
 
-            var caller = FirstNonEmpty(_call.ContactName, _call.Number, "Unknown caller");
             var phone = FirstNonEmpty(_call.DeviceName, "your phone");
+            // A phone that can see neither name nor number (the Google Play
+            // build, before its phone app names the caller) shows which phone
+            // is ringing instead of an "unknown caller".
+            var caller = FirstNonEmpty(_call.ContactName, _call.Number, FirstNonEmpty(_call.DeviceName, "Your phone"));
             TxtCallerName.Text = caller;
             var initials = Initials(_call.ContactName);
             TxtInitials.Text = initials ?? PhoneGlyph;
@@ -121,7 +124,9 @@ namespace LinkAll.WinUI
 
             var ringing = _call.State == "ringing";
             TxtDetail.Text = ringing
-                ? (string.IsNullOrEmpty(_call.ContactName) || string.IsNullOrEmpty(_call.Number)
+                ? (string.IsNullOrEmpty(_call.ContactName) && string.IsNullOrEmpty(_call.Number)
+                    ? "Incoming call"
+                    : string.IsNullOrEmpty(_call.ContactName) || string.IsNullOrEmpty(_call.Number)
                     ? $"Incoming call on {phone}"
                     : $"{_call.Number} · {phone}")
                 : $"On call · {phone}";
