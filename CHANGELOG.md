@@ -10,7 +10,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [2.0.0] - 2026-10-11
 
-Deskdrop is now Link All. This is the first published release since 1.3.3, so it also carries everything listed under 1.4.0.
+Deskdrop is now Link All: continuity for every device you own, whatever it runs. Your Windows PC, Mac, Android phone and Linux machine share one clipboard, pass files and folders, show the phone's notifications and calls on the computer, and browse each other's files, straight over your own network with no cloud and no account.
+
+This is the first published release since 1.3.3, so it also carries everything listed under 1.4.0.
 
 ### Added
 - **Android:** Browse, search and preview files on your Mac or Windows PC, and fetch any of them to the phone. Pick a device from Home › Get › Browse files or from a device's sheet.
@@ -18,6 +20,7 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **Android:** Home opens with a map of this phone and the devices it is linked to, solid for connected and dashed for offline. With more than four devices it becomes a row of chips.
 - **Android:** Connected computers appear in the share sheet. The Link All notification can be swiped away, and you can pick a light or dark theme.
 - **CLI:** `pause`, `resume` and `send-folder` commands.
+- **Windows:** A Microsoft Store (MSIX) package. In it, "Start with Windows" uses the package's startup task, and pairings stay in the same data folder as the MSI install.
 - **macOS:** The disk image opens with the usual install layout: drag Link All onto the Applications shortcut, or open it straight from the disk image to have it install itself.
 
 ### Changed
@@ -32,6 +35,10 @@ Deskdrop is now Link All. This is the first published release since 1.3.3, so it
 - **macOS:** The drop target on the screen edge. Drop files on the Link All menu bar icon instead.
 
 ### Fixed
+- **Android (Google Play build):** Incoming calls show the caller's name, read from the phone app's call notification, instead of "Unknown Caller". A ring waits up to a second for the name so the computer shows it from the start. Computers say which phone is ringing when no name is available.
+- **macOS:** The transfer pill no longer blocks clicks below it or takes focus from the app in use.
+- **Android:** "Show my pairing code" follows dark mode.
+- **macOS:** The event log says "Sent" for files this Mac sent, not "Received".
 - **All platforms:** Copied links sync again when "Block sensitive text" is on. Its token check treated most links as secrets; now only a password in the address or a token-like parameter blocks one.
 - **All platforms:** A phone with its screen off no longer drops off the computer after 30 seconds of quiet.
 - **Security:** Pairing by QR code checks the computer's key; the Mac stops trusting devices while its QR code is open; unpaired devices can no longer send calls, warnings, sync-state or speed-test messages; a transfer can only be controlled by its own peer; Windows IPC pipes are owner-only.
