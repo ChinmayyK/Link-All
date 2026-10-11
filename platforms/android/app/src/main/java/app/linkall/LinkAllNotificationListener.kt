@@ -61,6 +61,18 @@ class LinkAllNotificationListener : NotificationListenerService() {
         val notif = sbn.notification ?: return
         val pkg = sbn.packageName ?: ""
         
+        // The phone app's call notification names the caller. Pass that on for
+        // the call shown on the computer; the notification itself is not
+        // mirrored (it is ongoing, and the call is sent on its own).
+        if (notif.category == Notification.CATEGORY_CALL && pkg != packageName) {
+            callerName(notif)?.let { name ->
+                startService(Intent(this, LinkAllService::class.java).apply {
+                    action = LinkAllService.ACTION_CALLER_FROM_NOTIFICATION
+                    putExtra(LinkAllService.EXTRA_CALLER_NAME, name)
+                })
+            }
+        }
+
         // Skip our own notifications or ongoing/system ones that might be noisy
         if (pkg == packageName || pkg == "android" || pkg == "com.android.systemui") return
         if ((notif.flags and Notification.FLAG_ONGOING_EVENT) != 0) return
@@ -93,6 +105,19 @@ class LinkAllNotificationListener : NotificationListenerService() {
             putExtra(LinkAllService.EXTRA_NOTIFICATION_TEXT, text)
         }
         startService(intent)
+    }
+
+    /** The caller on a call notification: CallStyle's person, else its title. */
+    private fun callerName(notif: Notification): String? {
+        val extras = notif.extras ?: return null
+        val person = if (android.os.Build.VERSION.SDK_INT >= 33) {
+            extras.getParcelable(Notification.EXTRA_CALL_PERSON, android.app.Person::class.java)
+        } else if (android.os.Build.VERSION.SDK_INT >= 31) {
+            @Suppress("DEPRECATION") extras.getParcelable<android.app.Person>(Notification.EXTRA_CALL_PERSON)
+        } else null
+        val name = person?.name?.toString()?.trim().orEmpty()
+            .ifEmpty { extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty() }
+        return name.ifEmpty { null }
     }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
