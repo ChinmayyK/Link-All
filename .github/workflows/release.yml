@@ -101,6 +101,17 @@ jobs:
           Compress-Archive -Path publish\windows\* -DestinationPath LinkAll-windows-x64.zip
           pwsh scripts\windows-size.ps1 publish\windows LinkAll-windows-x64.msi
 
+      # For Partner Center, not the GitHub release: the Store signs it.
+      - name: Build Store package (MSIX)
+        run: pwsh scripts\windows-msix.ps1 -SkipRust
+
+      - name: Upload Store package
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkall-windows-msix
+          path: dist/msix/LinkAll-windows-x64.msix
+          if-no-files-found: error
+
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
@@ -255,7 +266,8 @@ jobs:
 
       - name: Generate Checksums
         run: |
-          find release-artifacts -type f -exec sha256sum {} + | sed 's|release-artifacts/.*/||' > sha256sums.txt
+          # The MSIX is for Partner Center, not the release, so it isn't listed.
+          find release-artifacts -type f ! -name '*.msix' -exec sha256sum {} + | sed 's|release-artifacts/.*/||' > sha256sums.txt
 
       # The notes are this version's CHANGELOG section under a downloads
       # table, so every release says what changed without hand edits. The

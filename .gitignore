@@ -95,3 +95,6 @@ build/
 
 # cargo-ndk copies dependency cdylibs next to the core; only liblinkall_core.so ships
 platforms/android/app/src/main/jniLibs/**/libandroid_native_keyring_store-*.so
+
+# Windows MSIX builds (scripts/windows-msix.ps1)
+/dist/

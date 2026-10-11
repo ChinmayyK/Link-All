@@ -199,6 +199,18 @@ jobs:
           dotnet build platforms\windows\LinkAll.WinUI\LinkAll.WinUI.csproj `
             -c Release
 
+      # The Microsoft Store build: checks the MSIX still packages. Unsigned;
+      # the Store signs it.
+      - name: Build Store package (MSIX)
+        run: pwsh scripts\windows-msix.ps1 -SkipRust
+
+      - name: Upload Store package
+        uses: actions/upload-artifact@v4
+        with:
+          name: linkall-windows-msix
+          path: dist/msix/LinkAll-windows-x64.msix
+          if-no-files-found: error
+
   # ── Security audit ────────────────────────────────────────────────────────
   audit:
     name: Security Audit
