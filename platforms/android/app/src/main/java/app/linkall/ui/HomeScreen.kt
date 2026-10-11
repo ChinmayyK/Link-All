@@ -127,6 +127,8 @@ fun HomeTab(
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
     var showSendSheet by remember { mutableStateOf(false) }
+    var showBrowsePicker by remember { mutableStateOf(false) }
+    val browseFiles = LocalBrowseFiles.current
 
 
     Column(
@@ -180,6 +182,20 @@ fun HomeTab(
                     clip?.let { "Send copied text · ${it.length} characters" } ?: "Send what you last copied",
                     enabled = enabled,
                     onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
+                )
+            }
+
+            SectionHeader(c, "Get", if (enabled) null else "Connect a device first")
+            Panel(c) {
+                ActionRow(
+                    c, Icons.Outlined.FolderOpen, "Browse files",
+                    when (connected.size) {
+                        0 -> "Open files on your other devices"
+                        1 -> "Open files on ${connected.first().name}"
+                        else -> "Open files on any of ${connected.size} devices"
+                    },
+                    enabled = enabled,
+                    onClick = { if (connected.size == 1) browseFiles(connected.first()) else showBrowsePicker = true }
                 )
             }
         }
@@ -246,6 +262,10 @@ fun HomeTab(
 
         // Clears the floating dock.
         Spacer(Modifier.height(140.dp))
+    }
+
+    if (showBrowsePicker) {
+        BrowseDevicePicker(c, connected, onPick = browseFiles, onDismiss = { showBrowsePicker = false })
     }
 
     if (showSendSheet) {
@@ -584,6 +604,7 @@ internal fun DeviceRow(
 ) {
     val haptic = LocalHapticFeedback.current
     var menuOpen by remember { mutableStateOf(false) }
+    val browseFiles = LocalBrowseFiles.current
     val (status, statusColor) = when {
         speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
         peer.pairingRequested && !peer.trusted -> "Wants to pair" to c.accent
@@ -648,6 +669,7 @@ internal fun DeviceRow(
                         add(SheetAction(Icons.Outlined.Check, "Accept pairing") { onRespond(true) })
                         add(SheetAction(Icons.Outlined.Close, "Decline") { onRespond(false) })
                     } else if (peer.isConnected) {
+                        add(SheetAction(Icons.Outlined.FolderOpen, "Browse files", "Get files from ${peer.name}") { browseFiles(peer) })
                         add(SheetAction(Icons.Outlined.UploadFile, "Send files", "Photos, videos, documents, anything", onClick = onSendFiles))
                         add(SheetAction(Icons.Outlined.DriveFolderUpload, "Send a folder", "Everything in it, subfolders included", onClick = onSendFolder))
                         add(SheetAction(Icons.Outlined.Speed, "Test speed", "How fast this link is right now", onClick = onSpeedTest))

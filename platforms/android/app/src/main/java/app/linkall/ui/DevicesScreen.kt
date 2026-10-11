@@ -168,6 +168,7 @@ private fun PeerRow(
 ) {
     val haptic = LocalHapticFeedback.current
     var menuOpen by remember { mutableStateOf(false) }
+    val browseFiles = LocalBrowseFiles.current
     // Only our own request: an unpaired peer that merely holds a session
     // open is not waiting on anyone and keeps its Pair button.
     val waiting = peer.outgoingPairingWaiting && !peer.trusted
@@ -229,6 +230,7 @@ private fun PeerRow(
                 subtitle = status,
                 actions = buildList {
                     if (peer.isConnected) {
+                        add(SheetAction(Icons.Outlined.FolderOpen, "Browse files", "Get files from ${peer.name}") { browseFiles(peer) })
                         add(SheetAction(Icons.Outlined.UploadFile, "Send files", "Photos, videos, documents, anything", onClick = onSendFiles))
                         add(SheetAction(Icons.Outlined.DriveFolderUpload, "Send a folder", "Everything in it, subfolders included", onClick = onSendFolder))
                         add(SheetAction(Icons.Outlined.Speed, "Test speed", "How fast this link is right now", onClick = onSpeedTest))
