@@ -218,10 +218,11 @@
   -->
   <Target Name="TrimMsixPayload" AfterTargets="GetPackagingOutputs" Condition="'$(WindowsPackageType)' == 'MSIX'">
     <ItemGroup>
+      <!-- Qualified metadata: some payload items (the platform entry) have no TargetPath. -->
       <_MsixUnused Include="@(PackagingOutputs)"
-                   Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' or '%(Filename)%(Extension)' == 'DirectML.dll' or '%(Filename)%(Extension)' == 'Microsoft.ML.OnnxRuntime.dll' or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.Windows.AI.'))" />
+                   Condition="'%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'onnxruntime.dll' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.dll' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'Microsoft.ML.OnnxRuntime.dll' or $([System.String]::Copy('%(PackagingOutputs.Filename)').StartsWith('Microsoft.Windows.AI.'))" />
       <_MsixUnused Include="@(PackagingOutputs)"
-                   Condition="'%(Extension)' == '.mui' and !$([System.String]::Copy('%(TargetPath)').ToLowerInvariant().StartsWith('en-us'))" />
+                   Condition="'%(PackagingOutputs.Extension)' == '.mui' and !$([System.String]::Copy('%(PackagingOutputs.TargetPath)').ToLowerInvariant().StartsWith('en-us'))" />
       <PackagingOutputs Remove="@(_MsixUnused)" />
     </ItemGroup>
   </Target>
