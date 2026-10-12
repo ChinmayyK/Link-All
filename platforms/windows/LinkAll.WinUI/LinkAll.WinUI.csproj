@@ -211,6 +211,22 @@
   </Target>
 
   <!--
+    The Store (MSIX) package lists its files itself, so the deletions above
+    don't reach it: drop the same unused Windows AI runtime from its payload,
+    and WinUI's string tables for every language but English, as the
+    publish folder already does (PruneWinUiLocales).
+  -->
+  <Target Name="TrimMsixPayload" AfterTargets="GetPackagingOutputs" Condition="'$(WindowsPackageType)' == 'MSIX'">
+    <ItemGroup>
+      <_MsixUnused Include="@(PackagingOutputs)"
+                   Condition="'%(Filename)%(Extension)' == 'onnxruntime.dll' or '%(Filename)%(Extension)' == 'DirectML.dll' or '%(Filename)%(Extension)' == 'Microsoft.ML.OnnxRuntime.dll' or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.Windows.AI.'))" />
+      <_MsixUnused Include="@(PackagingOutputs)"
+                   Condition="'%(Extension)' == '.mui' and !$([System.String]::Copy('%(TargetPath)').ToLowerInvariant().StartsWith('en-us'))" />
+      <PackagingOutputs Remove="@(_MsixUnused)" />
+    </ItemGroup>
+  </Target>
+
+  <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
     Explorer "Package and Publish" context menu entry to be enabled for this project even if
     the Windows App SDK Nuget package has not yet been restored.
