@@ -31,6 +31,9 @@ namespace LinkAll.WinUI.Views
         // newer navigation has since started, so its result is discarded
         // instead of clobbering the UI with a stale directory listing.
         private int _loadGeneration = 0;
+        // Why the last listing failed (the device refused, didn't answer, ...), shown in place of
+        // "Nothing here yet". Null when the listing loaded.
+        private string? _loadError;
         private static readonly System.Collections.Generic.Dictionary<string, JsonDocument> _cache = new();
         private static readonly System.Collections.Generic.Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _thumbnailCache = new();
         // Insertion order for _thumbnailCache, so the oldest previews are
@@ -125,6 +128,7 @@ namespace LinkAll.WinUI.Views
             UpdatePathSegments();
             UpdateActiveLibrary();
 
+            _loadError = null;
             var peer = mgr.SelectedPeer;
             if (peer == null || string.IsNullOrEmpty(peer.device_id))
             {
@@ -151,10 +155,24 @@ namespace LinkAll.WinUI.Views
                 else
                 {
                     doc = await DaemonClient.RemoteFilesQueryAsync(peer.device_id, summaryOnly: false, category: category, source: source);
-                    if (doc != null)
+                    // Only a listing is worth keeping; a refusal or timeout must be asked again next time.
+                    if (doc != null && ErrorOf(doc) == null)
                     {
                         _cache[cacheKey] = doc;
                     }
+                }
+
+                var error = doc == null ? "The device didn't answer. Check it's awake and on the same network." : ErrorOf(doc);
+                if (error != null)
+                {
+                    App.MainDispatcherQueue?.TryEnqueue(() =>
+                    {
+                        if (myGeneration != _loadGeneration) return;
+                        _loadError = error;
+                        RemoteFiles.Clear();
+                        UpdateEmptyStates();
+                    });
+                    return;
                 }
 
                 if (doc != null && doc.RootElement.ValueKind != JsonValueKind.Null)
@@ -184,10 +202,34 @@ namespace LinkAll.WinUI.Views
                     });
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
-                // Handle network or serialization errors gracefully
+                App.MainDispatcherQueue?.TryEnqueue(() =>
+                {
+                    if (myGeneration != _loadGeneration) return;
+                    _loadError = "Couldn't load files from this device: " + ex.Message;
+                    RemoteFiles.Clear();
+                    UpdateEmptyStates();
+                });
             }
+        }
+
+        // The daemon's reason when the query failed, in words for the user, or null for a listing.
+        // The peer's own refusals ("isn't available in the Google Play version", "File browsing is
+        // off on this computer") are already written for people and are shown as they are.
+        private static string? ErrorOf(JsonDocument doc)
+        {
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object
+                || !root.TryGetProperty("status", out var status)
+                || status.GetString() != "error")
+                return null;
+            var message = root.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "";
+            if (message.Contains("timed out", StringComparison.OrdinalIgnoreCase))
+                return "The device didn't answer. Check it's awake and on the same network.";
+            if (message.Contains("not connected", StringComparison.OrdinalIgnoreCase))
+                return "This device isn't connected right now.";
+            return string.IsNullOrWhiteSpace(message) ? "Couldn't load files from this device." : message;
         }
 
         // Mirrors the sidebar's own labels (RemoteExplorerView.xaml) for the
@@ -273,6 +315,7 @@ namespace LinkAll.WinUI.Views
 
                 NoDeviceState.Visibility = hasPeer ? Visibility.Collapsed : Visibility.Visible;
                 EmptyFolderState.Visibility = (hasPeer && !hasFiles) ? Visibility.Visible : Visibility.Collapsed;
+                EmptyFolderText.Text = _loadError ?? "Nothing here yet";
                 FileGrid.Visibility = (hasFiles && _gridMode) ? Visibility.Visible : Visibility.Collapsed;
                 FilePanel.Visibility = (hasFiles && !_gridMode) ? Visibility.Visible : Visibility.Collapsed;
             }

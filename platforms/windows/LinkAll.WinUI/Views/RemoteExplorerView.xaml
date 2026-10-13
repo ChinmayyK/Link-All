@@ -290,8 +290,11 @@
                             <FontIcon Glyph="&#xE8B7;" FontSize="22"
                                       Foreground="{ThemeResource TextFillColorTertiaryBrush}"
                                       HorizontalAlignment="Center" />
-                            <TextBlock Text="Nothing here yet"
-                                       Style="{StaticResource AppSecondary}" HorizontalAlignment="Center" />
+                            <!-- Set from UpdateEmptyStates(): "Nothing here yet", or why the device refused. -->
+                            <TextBlock x:Name="EmptyFolderText"
+                                       Text="Nothing here yet"
+                                       Style="{StaticResource AppSecondary}" HorizontalAlignment="Center"
+                                       TextAlignment="Center" TextWrapping="Wrap" MaxWidth="420" />
                         </StackPanel>
                     </Border>
 
