@@ -4,6 +4,8 @@
 
   <p><strong>A local-first, zero-cloud desktop and mobile continuity engine for resumable file transfers, clipboard synchronization, and hardware interaction across mixed operating systems.</strong></p>
 
+  <p><a href="#test-the-google-play-version">Help test the Android app on Google Play</a></p>
+
   <div>
     <img src="https://img.shields.io/badge/Platform-macOS-lightgrey?style=for-the-badge&logo=apple" alt="macOS" />
     <img src="https://img.shields.io/badge/Platform-Android-brightgreen?style=for-the-badge&logo=android" alt="Android" />
@@ -131,7 +133,17 @@ Get the latest build for each platform from [GitHub Releases](https://github.com
 
 **First launch on macOS:** Link All isn't notarized by Apple yet, so macOS asks once. Open Link All, click **Done** when macOS says it can't verify it, then go to **System Settings › Privacy & Security** and click **Open Anyway** next to Link All. On Windows, if SmartScreen warns about an unrecognised app, choose **More info › Run anyway**.
 
-The Android app is also coming to Google Play. That build leaves out the features Play reserves for default SMS, dialer and file-manager apps: SMS code forwarding, answering calls, and letting a computer browse the phone's files. Everything else, including browsing your computers from the phone, works the same.
+### Test the Google Play version
+
+Link All for Android is in a closed test on Google Play, and it needs testers before it can be published for everyone. To join:
+
+1. Join the [Link All testers group](https://groups.google.com/g/linkall-testers) with your Google account.
+2. With the same account, open the [testing page](https://play.google.com/apps/testing/app.linkall) and tap **Become a tester**.
+3. Install [Link All from Google Play](https://play.google.com/store/apps/details?id=app.linkall).
+
+Please keep it installed for a couple of weeks and use it with your computer now and then. Report anything that goes wrong in [Issues](https://github.com/ChinmayyK/Link-All/issues).
+
+The Play build leaves out the features Play reserves for default SMS, dialer and file-manager apps: SMS code forwarding, answering calls, and letting a computer browse the phone's files. Everything else, including browsing your computers from the phone, works the same.
 
 ---
 
