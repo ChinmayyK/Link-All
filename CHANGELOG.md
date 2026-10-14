@@ -8,6 +8,9 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Android (Google Play build):** Settings › Shared folders. Pick folders with the system folder picker and your computers can browse, preview, download, rename and delete files in them.
+
 ## [2.0.0] - 2026-10-11
 
 Link All is continuity for every device you own, whatever it runs. Your Windows PC, Mac, Android phone and Linux machine share one clipboard, pass files and folders, show the phone's notifications and calls on the computer, and browse each other's files, straight over your own network with no cloud and no account.
