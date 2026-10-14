@@ -1853,7 +1853,7 @@ class LinkAllService : Service() {
                         withEngine { live -> LinkAllJni.sendRemoteFilesResponse(
                             live, requestId, targetDeviceId, null, null, 0,
                             if (BuildConfig.FULL_PERMISSIONS) "Permission Denied: Please grant storage permission on your Android device to browse files."
-                            else "Browsing phone files isn't available in the Google Play version of Link All. Share files from the phone instead."
+                            else "This phone isn't sharing any folders yet. On the phone, open Link All, go to Settings › Shared folders and add the folders your computers can see."
                         ) }
                         return@executeInBackgroundWithWakeLock
                     }
@@ -1927,6 +1927,17 @@ class LinkAllService : Service() {
                         } catch (e: Exception) {
                             Log.e(TAG, "Failed to show permission notification", e)
                         }
+                        return@executeInBackgroundWithWakeLock
+                    }
+                    if (!BuildConfig.FULL_PERMISSIONS) {
+                        val opened = SharedFolders.open(applicationContext, fileId)
+                        if (opened == null) {
+                            Log.w(TAG, "Shared file $fileId is gone or no longer shared")
+                            return@executeInBackgroundWithWakeLock
+                        }
+                        val (pfd, displayName, mimeType) = opened
+                        // Rust owns the descriptor from here and closes it.
+                        withEngine { live -> LinkAllJni.sendFileFd(live, pfd.detachFd(), displayName, mimeType, targetDeviceId) }
                         return@executeInBackgroundWithWakeLock
                     }
                     try {
@@ -4513,6 +4524,8 @@ class LinkAllService : Service() {
     }
 
     private fun hasFilePermissions(): Boolean {
+        // The Play build serves only folders the user shared with the system folder picker.
+        if (!BuildConfig.FULL_PERMISSIONS) return SharedFolders.list(this).isNotEmpty()
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             if (android.os.Environment.isExternalStorageManager()) {
                 return true

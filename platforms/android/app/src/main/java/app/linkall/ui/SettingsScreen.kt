@@ -1,9 +1,14 @@
 package app.linkall.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -147,6 +152,11 @@ fun SettingsTab(
             }
         }
 
+        // The Play build can't read all files, so computers browse only the folders picked here.
+        if (!app.linkall.BuildConfig.FULL_PERMISSIONS) {
+            item { SharedFoldersSection(c) }
+        }
+
         item {
             Column {
                 SectionHeader(c, "Appearance", null)
@@ -216,6 +226,47 @@ fun SettingsTab(
                     Text(deviceId, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+        }
+    }
+}
+
+/** The folders this phone's computers may browse, added with the system folder picker. */
+@Composable
+private fun SharedFoldersSection(c: DdColors) {
+    val context = LocalContext.current
+    var folders by remember { mutableStateOf(app.linkall.SharedFolders.list(context)) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) {
+            app.linkall.SharedFolders.add(context, uri)
+            folders = app.linkall.SharedFolders.list(context)
+        }
+    }
+    Column {
+        SectionHeader(c, "Shared folders", null)
+        Panel(c) {
+            folders.forEach { f ->
+                ListRow(
+                    c, Icons.Outlined.Folder, f.label,
+                    trailing = {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = "Stop sharing ${f.label}",
+                            tint = c.textMuted,
+                            modifier = Modifier.size(20.dp).clickable {
+                                app.linkall.SharedFolders.remove(context, f.uri)
+                                folders = app.linkall.SharedFolders.list(context)
+                            }
+                        )
+                    }
+                )
+                Hairline(c)
+            }
+            ListRow(
+                c, Icons.Outlined.CreateNewFolder, "Add a folder",
+                if (folders.isEmpty()) "Your computers can browse only the folders you add, like Camera or Documents"
+                else "Your computers can browse these folders",
+                onClick = { pick.launch(null) }
+            )
         }
     }
 }

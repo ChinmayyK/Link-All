@@ -129,6 +129,10 @@ object RemoteFileManager {
         includeSummary: Boolean,
         includeList: Boolean
     ): Triple<String?, String?, Int> {
+        // The Play build has no broad storage access: it serves only the folders the user shared.
+        if (!BuildConfig.FULL_PERMISSIONS) {
+            return SharedFolders.query(context, categoryFilter, sourceFilter, searchQuery, offset, limit, includeSummary, includeList)
+        }
         var summaryJson: String? = null
         if (includeSummary) {
             var images = 0
@@ -159,8 +163,8 @@ object RemoteFileManager {
                         val name = if (nameIdx >= 0) cursor.getString(nameIdx) ?: "" else ""
                         val dataPath = if (dataIdx >= 0) cursor.getString(dataIdx) ?: "" else ""
 
-                        val cat = getCategory(mime, name)
-                        val src = getSource(dataPath)
+                        val cat = categoryOf(mime, name)
+                        val src = sourceOf(dataPath)
 
                         when (cat) {
                             "Images" -> images++
@@ -311,8 +315,8 @@ object RemoteFileManager {
 
             if (dataPath.isNotEmpty() && !java.io.File(dataPath).exists()) continue
 
-            val cat = getCategory(mime, name)
-            val src = getSource(dataPath)
+            val cat = categoryOf(mime, name)
+            val src = sourceOf(dataPath)
             val contentUri = ContentUris.withAppendedId(uri, id).toString()
 
             matchingList.add(
@@ -332,51 +336,55 @@ object RemoteFileManager {
     }
 
     fun getThumbnail(context: Context, fileId: Long, sizePx: Int): ByteArray? {
+        if (!BuildConfig.FULL_PERMISSIONS) return SharedFolders.thumbnail(context, fileId, sizePx)
         val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), fileId)
-        var bitmap: Bitmap? = null
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             try {
-                bitmap = context.contentResolver.loadThumbnail(uri, Size(sizePx, sizePx), null)
+                return toJpeg(context.contentResolver.loadThumbnail(uri, Size(sizePx, sizePx), null))
             } catch (e: Exception) {
                 Log.w(TAG, "loadThumbnail Q+ failed for uri $uri: ${e.message}")
             }
         }
+        return decodeThumbnail(context, uri, sizePx)
+    }
 
-        if (bitmap == null) {
-            try {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    val options = BitmapFactory.Options().apply {
-                        inJustDecodeBounds = true
-                    }
-                    BitmapFactory.decodeStream(stream, null, options)
-                    options.inSampleSize = calculateInSampleSize(options, sizePx, sizePx)
-                    options.inJustDecodeBounds = false
-                    context.contentResolver.openInputStream(uri)?.use { stream2 ->
-                        val rawBitmap = BitmapFactory.decodeStream(stream2, null, options)
-                        if (rawBitmap != null) {
-                            // Fit the longest side to sizePx, keeping aspect -
-                            // a plain sizePx x sizePx scale squashed every
-                            // non-square photo in the desktop preview grid.
-                            val scale = sizePx.toFloat() / maxOf(rawBitmap.width, rawBitmap.height)
-                            val w = (rawBitmap.width * scale).toInt().coerceAtLeast(1)
-                            val h = (rawBitmap.height * scale).toInt().coerceAtLeast(1)
-                            bitmap = Bitmap.createScaledBitmap(rawBitmap, w, h, true)
-                            if (bitmap != rawBitmap) rawBitmap.recycle()
-                        }
+    /** Decodes [uri] itself, scaled so its longest side is [sizePx], as JPEG bytes. */
+    internal fun decodeThumbnail(context: Context, uri: Uri, sizePx: Int): ByteArray? {
+        var bitmap: Bitmap? = null
+        try {
+            context.contentResolver.openInputStream(uri)?.use { stream ->
+                val options = BitmapFactory.Options().apply {
+                    inJustDecodeBounds = true
+                }
+                BitmapFactory.decodeStream(stream, null, options)
+                options.inSampleSize = calculateInSampleSize(options, sizePx, sizePx)
+                options.inJustDecodeBounds = false
+                context.contentResolver.openInputStream(uri)?.use { stream2 ->
+                    val rawBitmap = BitmapFactory.decodeStream(stream2, null, options)
+                    if (rawBitmap != null) {
+                        // Fit the longest side to sizePx, keeping aspect -
+                        // a plain sizePx x sizePx scale squashed every
+                        // non-square photo in the desktop preview grid.
+                        val scale = sizePx.toFloat() / maxOf(rawBitmap.width, rawBitmap.height)
+                        val w = (rawBitmap.width * scale).toInt().coerceAtLeast(1)
+                        val h = (rawBitmap.height * scale).toInt().coerceAtLeast(1)
+                        bitmap = Bitmap.createScaledBitmap(rawBitmap, w, h, true)
+                        if (bitmap != rawBitmap) rawBitmap.recycle()
                     }
                 }
-            } catch (e: Exception) {
-                Log.w(TAG, "BitmapFactory fallback failed for uri $uri: ${e.message}")
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "BitmapFactory fallback failed for uri $uri: ${e.message}")
         }
+        return bitmap?.let { toJpeg(it) }
+    }
 
-        return bitmap?.let { bmp ->
-            val bos = ByteArrayOutputStream()
-            bmp.compress(Bitmap.CompressFormat.JPEG, 80, bos)
-            bmp.recycle()
-            bos.toByteArray()
-        }
+    internal fun toJpeg(bmp: Bitmap): ByteArray {
+        val bos = ByteArrayOutputStream()
+        bmp.compress(Bitmap.CompressFormat.JPEG, 80, bos)
+        bmp.recycle()
+        return bos.toByteArray()
     }
 
     fun resolveFilePathAndMeta(context: Context, fileId: Long): Triple<String, String, String>? {
@@ -412,7 +420,7 @@ object RemoteFileManager {
         return null
     }
 
-    private fun getCategory(mime: String, name: String): String {
+    internal fun categoryOf(mime: String, name: String): String {
         if (mime.startsWith("image/", ignoreCase = true)) return "Images"
         if (mime.startsWith("video/", ignoreCase = true)) return "Videos"
         if (mime.startsWith("audio/", ignoreCase = true)) return "Audio"
@@ -440,7 +448,7 @@ object RemoteFileManager {
         }
     }
 
-    private fun getSource(dataPath: String): String {
+    internal fun sourceOf(dataPath: String): String {
         if (dataPath.contains("whatsapp", ignoreCase = true)) return "WhatsApp"
         if (dataPath.contains("download", ignoreCase = true)) return "Downloads"
         if (dataPath.contains("dcim", ignoreCase = true) || dataPath.contains("camera", ignoreCase = true)) return "Camera"
@@ -481,6 +489,7 @@ object RemoteFileManager {
     }
 
     fun executeAction(context: Context, fileId: Long, action: String, newName: String?) {
+        if (!BuildConfig.FULL_PERMISSIONS) return SharedFolders.executeAction(context, fileId, action, newName)
         val uri = ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), fileId)
         val resolver = context.contentResolver
         when (action) {
