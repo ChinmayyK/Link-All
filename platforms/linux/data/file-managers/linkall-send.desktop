@@ -1,0 +1,12 @@
+# Dolphin (KDE) service menu: right-click › Send with Link All.
+# Install to ~/.local/share/kio/servicemenus/ (chmod +x).
+[Desktop Entry]
+Type=Service
+MimeType=all/all;
+Actions=sendWithLinkAll;
+X-KDE-Priority=TopLevel
+
+[Desktop Action sendWithLinkAll]
+Name=Send with Link All
+Icon=app.linkall.LinkAll
+Exec=linkall %F

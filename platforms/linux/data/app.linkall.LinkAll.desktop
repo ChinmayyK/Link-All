@@ -1,0 +1,26 @@
+[Desktop Entry]
+Type=Application
+Name=Link All
+GenericName=Phone and Computer Sync
+Comment=One clipboard, files and notifications across your phone and computers
+Exec=linkall %U
+Icon=app.linkall.LinkAll
+Terminal=false
+Categories=Network;FileTransfer;Utility;
+Keywords=clipboard;sync;phone;android;transfer;share;send;files;continuity;
+StartupNotify=true
+StartupWMClass=app.linkall.LinkAll
+SingleMainWindow=true
+Actions=send-files;pair-phone;search;
+
+[Desktop Action send-files]
+Name=Send Files…
+Exec=linkall --send-files
+
+[Desktop Action pair-phone]
+Name=Pair a Phone
+Exec=linkall --pair
+
+[Desktop Action search]
+Name=Search Link All
+Exec=linkall --search

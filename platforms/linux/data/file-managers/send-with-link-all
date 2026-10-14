@@ -1,0 +1,6 @@
+#!/bin/sh
+# Nautilus (GNOME Files) script: right-click › Scripts › Send with Link All.
+# Install to ~/.local/share/nautilus/scripts/Send with Link All
+IFS='
+'
+exec linkall $NAUTILUS_SCRIPT_SELECTED_FILE_PATHS
