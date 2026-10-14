@@ -2458,8 +2458,10 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventSearchQuery(
     }
     use crate::engine::EngineEvent::*;
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    // Also carries a rename's new name, which the Kotlin side reads through this accessor.
     let q = match ev {
         RemoteFilesQueryReceived { search_query, .. } => search_query.as_deref(),
+        RemoteFileActionRequestReceived { new_name, .. } => new_name.as_deref(),
         _ => None,
     };
     q.and_then(|s| env.new_string(s).ok())

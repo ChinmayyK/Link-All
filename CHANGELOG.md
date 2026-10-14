@@ -9,11 +9,13 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Android (Google Play build):** Settings › Shared folders. Pick folders with the system folder picker and your computers can browse, preview, download, rename and delete files in them.
 - **Linux:** A full Link All app, built with GTK 4 and libadwaita in Link All's own colours, light and dark. It has the same pages as the Mac and Windows apps: Devices (pair by code or QR, battery and storage, per-device actions), Clipboard history with search, pin and "Paste Here", Transfers with pause, resume, cancel and accept or decline, Browse Files with previews, download, rename and delete, Activity, and Settings. Search everything with Ctrl+K.
 - **Linux:** A tray icon, desktop notifications for phone notifications, calls, received files and pairing requests, "Send with Link All" in Files, Dolphin and Nemo, start at login, and sending new screenshots automatically.
 - **Linux:** `.deb` packages and a tarball with a no-root installer, for x86_64 and ARM64, plus a systemd user service for the background service.
 
 ### Fixed
+- **Android:** Renaming a phone file from a computer now works; the new name was never passed on.
 - **Windows:** Browsing a device that refuses (such as the Google Play build) or doesn't answer now says why, instead of showing an empty folder that stayed empty after the cause was fixed.
 - **Linux:** On systems without an XDG user-dirs config, received files go to ~/Downloads instead of the home folder, and paired devices can browse ~/Documents, ~/Pictures and the rest.
 
