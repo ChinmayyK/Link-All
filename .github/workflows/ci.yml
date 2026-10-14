@@ -58,7 +58,9 @@ jobs:
             pkg-config \
             libssl-dev \
             avahi-daemon \
-            libavahi-client-dev
+            libavahi-client-dev \
+            libgtk-4-dev \
+            libadwaita-1-dev
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -87,7 +89,7 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev avahi-daemon
+          sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev avahi-daemon libgtk-4-dev libadwaita-1-dev
           sudo systemctl start avahi-daemon || true
       - name: Run integration tests
         run: cargo test --workspace --tests
@@ -101,7 +103,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Rust Cache
         uses: swatinem/rust-cache@v2
-      - run: sudo apt-get update -q && sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev
+      - run: sudo apt-get update -q && sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev libgtk-4-dev libadwaita-1-dev
       # Type-check bench targets only. `cargo bench --no-run` additionally links
       # every workspace binary under the bench profile, which cannot succeed while
       # [profile.release] sets panic = "abort": bench targets are forced to unwind

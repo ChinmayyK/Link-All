@@ -1,357 +1,277 @@
-//! Link All Linux — headless daemon + optional GTK4 tray.
-//! Without --features gtk, runs as a pure headless daemon.
-//!
-//! Key guarantees vs the original:
-//!  • No echo loop — suppress counter prevents re-pushing received clipboard.
-//!  • IPC socket started so linkall-cli works on Linux.
-//!  • TOFU prompts give actionable CLI instructions.
-//!  • notify-send is rate-limited (max 1 per 2 s).
-//!  • Clipboard poll backs off to 500 ms when idle.
-//!  • Hash-based dedup — no full-text clone in memory for every tick.
-//!  • Image clipboard applied via arboard (PNG).
-
-#[cfg(target_os = "linux")]
-use linkall_core::{
-    engine::{Engine, EngineConfig, EngineEvent},
-    protocol::ClipboardContent,
-};
-#[cfg(target_os = "linux")]
-use std::{
-    hash::{Hash, Hasher},
-    sync::{
-        atomic::{AtomicU32, Ordering},
-        Arc,
-    },
-    time::{Duration, Instant},
-};
-#[cfg(target_os = "linux")]
-use tokio::sync::mpsc;
-
-// ── Suppress counter ──────────────────────────────────────────────────────────
-//
-// Incremented before we write to the clipboard ourselves.
-// The watcher checks and decrements it, skipping the push for that tick.
-#[cfg(target_os = "linux")]
-static SUPPRESS_COUNT: AtomicU32 = AtomicU32::new(0);
-
-#[cfg(target_os = "linux")]
-fn suppress_next() {
-    SUPPRESS_COUNT.fetch_add(1, Ordering::SeqCst);
-}
-
-/// Returns true and decrements the counter if suppression is active.
-#[cfg(target_os = "linux")]
-fn should_suppress() -> bool {
-    SUPPRESS_COUNT
-        .try_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
-            if v > 0 {
-                Some(v - 1)
-            } else {
-                None
-            }
-        })
-        .is_ok()
-}
-
-// ── Entry point ───────────────────────────────────────────────────────────────
+//! Link All for Linux: the window, the tray icon and the desktop agent. The
+//! syncing itself happens in `linkall-daemon`, the same background service the
+//! command line uses; this app talks to it over its local socket.
 
 #[cfg(not(target_os = "linux"))]
 fn main() {
-    println!("linkall-linux is only supported on Linux");
+    eprintln!("This is the Link All app for Linux.");
 }
 
 #[cfg(target_os = "linux")]
-fn main() {
-    unsafe {
-        libc::umask(0o077);
-    }
+mod agent;
+#[cfg(target_os = "linux")]
+mod autostart;
+#[cfg(target_os = "linux")]
+mod daemon;
+#[cfg(target_os = "linux")]
+mod hub;
+#[cfg(target_os = "linux")]
+mod ipc;
+#[cfg(target_os = "linux")]
+mod prefs;
+#[cfg(target_os = "linux")]
+mod theme;
+#[cfg(target_os = "linux")]
+mod tray;
+#[cfg(target_os = "linux")]
+mod ui;
+
+#[cfg(target_os = "linux")]
+pub const APP_ID: &str = "app.linkall.LinkAll";
+
+#[cfg(target_os = "linux")]
+fn main() -> gtk::glib::ExitCode {
+    use adw::prelude::*;
+    use gtk::{gio, glib};
+    use serde_json::json;
+    use std::cell::Cell;
+    use std::rc::Rc;
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_env("LINKALL_LOG")
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
+                .unwrap_or_else(|_| "info".into()),
         )
         .init();
 
-    let rt = Arc::new(tokio::runtime::Runtime::new().expect("Tokio runtime"));
-    let (event_tx, event_rx) = mpsc::channel(256);
-    let config = EngineConfig::default();
+    // `--background` (used at login) starts hidden in the tray.
+    let mut args: Vec<String> = std::env::args().collect();
+    let background = args.iter().any(|a| a == "--background");
+    // Launcher actions: run one action in the app (starting it if needed).
+    let action = [
+        ("--send-files", "send-files"),
+        ("--pair", "pair-phone"),
+        ("--search", "palette"),
+    ]
+    .into_iter()
+    .find(|(flag, _)| args.iter().any(|a| a == flag))
+    .map(|(_, action)| action);
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!("Usage: linkall [--background | --send-files | --pair | --search] [FILE…]\n\nFiles given are sent to one of your devices.");
+        return glib::ExitCode::SUCCESS;
+    }
+    args.retain(|a| {
+        !matches!(
+            a.as_str(),
+            "--background" | "--send-files" | "--pair" | "--search"
+        )
+    });
 
-    let engine = Arc::new(
-        rt.block_on(Engine::start(config, event_tx))
-            .expect("Link All engine failed to start"),
-    );
+    // Start the background service early, off the GTK thread.
+    std::thread::spawn(|| {
+        if !daemon::ensure_running() {
+            tracing::warn!("Link All's background service isn't running");
+        }
+    });
 
-    tracing::info!(
-        "Link All Linux started. IPC socket: {:?}",
-        linkall_core::ipc::socket_path()
-    );
+    let app = adw::Application::builder()
+        .application_id(APP_ID)
+        .flags(gio::ApplicationFlags::HANDLES_OPEN)
+        .build();
+    let hub = hub::Hub::default();
+    let skip_present = Rc::new(Cell::new(background));
 
-    // ── IPC server ────────────────────────────────────────────────────────────
-    // Starts the Unix socket so `linkall-cli` can communicate with us.
-    // The IPC server deserializes commands, calls engine methods, and returns JSON.
     {
-        let engine_ipc = engine.clone();
-        rt.block_on(async move {
-            // The IPC server takes a callback that maps IpcRequest → IpcResponse.
-            // We reuse the same handler used by the standalone daemon binary.
-            let result = linkall_core::ipc::server::spawn_with_engine(engine_ipc).await;
-            match result {
-                Ok(()) => tracing::info!(
-                    "IPC server listening at {:?}",
-                    linkall_core::ipc::socket_path()
-                ),
-                Err(err) => tracing::warn!("IPC server failed to start: {err:#}"),
+        let hub = hub.clone();
+        app.connect_startup(move |app| {
+            // Keep running in the tray after the window closes.
+            std::mem::forget(app.hold());
+            theme::install();
+            gtk::Window::set_default_icon_name(APP_ID);
+
+            let clipboard = agent::start_clipboard();
+            agent::start(app, &hub, clipboard.clone());
+            ui::build(app, &hub, &clipboard);
+            install_actions(app, &hub);
+            let palette = gio::SimpleAction::new("palette", None);
+            {
+                let (hub, clipboard) = (hub.clone(), clipboard.clone());
+                palette.connect_activate(move |_, _| ui::palette::open(&hub, &clipboard));
+            }
+            app.add_action(&palette);
+            app.set_accels_for_action("app.palette", &["<Control>k", "<Control>f"]);
+
+            let (commands, tray) = tray::start();
+            let last = std::cell::RefCell::new(String::new());
+            hub.on_status(move |hub| {
+                let devices: Vec<(String, String)> = hub
+                    .connected()
+                    .iter()
+                    .map(|p| {
+                        (
+                            p["id"].as_str().unwrap_or_default().to_string(),
+                            p["friendly_name"].as_str().unwrap_or("Device").to_string(),
+                        )
+                    })
+                    .collect();
+                let paused = hub.setting("sync_enabled") == false;
+                let key = format!("{paused}{devices:?}");
+                if *last.borrow() != key {
+                    *last.borrow_mut() = key;
+                    tray.set_state(paused, devices);
+                }
+            });
+            let (app, hub2) = (app.clone(), hub.clone());
+            glib::spawn_future_local(async move {
+                while let Ok(command) = commands.recv().await {
+                    match command {
+                        tray::Command::Show => app.activate(),
+                        tray::Command::SendFiles => {
+                            app.activate();
+                            ui::send::pick_files(&hub2, None);
+                        }
+                        tray::Command::SendFilesTo(id) => {
+                            app.activate();
+                            ui::send::pick_files(&hub2, Some(id));
+                        }
+                        tray::Command::SendClipboard => ui::devices::send_clipboard(&hub2, None),
+                        tray::Command::Palette => {
+                            app.activate();
+                            app.activate_action("palette", None);
+                        }
+                        tray::Command::ToggleSync => {
+                            let on = hub2.setting("sync_enabled") == false;
+                            ui::act(
+                                json!({ "cmd": "set_sync_enabled", "enabled": on }),
+                                Some(if on { "Sync resumed" } else { "Sync paused" }),
+                                &hub2,
+                            );
+                        }
+                        tray::Command::Quit => app.quit(),
+                    }
+                }
+            });
+            hub.start();
+        });
+    }
+    {
+        let skip = skip_present.clone();
+        app.connect_activate(move |_| {
+            if skip.replace(false) {
+                return;
+            }
+            if let Some(w) = ui::window() {
+                w.present();
             }
         });
     }
-
-    // ── Clipboard watcher ─────────────────────────────────────────────────────
     {
-        let engine_clip = engine.clone();
-        let rt_clip = rt.clone();
-        std::thread::Builder::new()
-            .name("clipboard-watcher".into())
-            .spawn(move || {
-                let mut cb = match arboard::Clipboard::new() {
-                    Ok(c) => c,
-                    Err(e) => {
-                        tracing::error!("clipboard init: {e}");
-                        return;
-                    }
-                };
-
-                let mut last_hash: u64 = 0;
-                let mut idle_streak: u32 = 0;
-
-                loop {
-                    // Back off to 500 ms after 10 consecutive idle ticks.
-                    let interval = if idle_streak < 10 {
-                        Duration::from_millis(100)
-                    } else {
-                        Duration::from_millis(500)
-                    };
-                    std::thread::sleep(interval);
-
-                    if should_suppress() {
-                        idle_streak = idle_streak.saturating_add(1);
-                        continue;
-                    }
-
-                    match cb.get_text() {
-                        Ok(text) if !text.is_empty() => {
-                            let hash = {
-                                let mut h = std::collections::hash_map::DefaultHasher::new();
-                                text.hash(&mut h);
-                                h.finish()
-                            };
-                            if hash != last_hash {
-                                last_hash = hash;
-                                idle_streak = 0;
-                                rt_clip.block_on(
-                                    engine_clip.push_clipboard(ClipboardContent::Text(text)),
-                                );
-                            } else {
-                                idle_streak = idle_streak.saturating_add(1);
-                            }
-                        }
-                        _ => idle_streak = idle_streak.saturating_add(1),
-                    }
-                }
-            })
-            .expect("clipboard watcher thread");
+        let hub = hub.clone();
+        app.connect_open(move |app, files, _| {
+            skip_present.set(false);
+            app.activate();
+            let paths = files.iter().filter_map(|f| f.path()).collect();
+            ui::send::send_paths(&hub, paths, None);
+        });
     }
-
-    // ── Event drain ───────────────────────────────────────────────────────────
-    let engine_ev = engine.clone();
-    rt.block_on(async move {
-        let mut rx = event_rx;
-        let mut last = Instant::now() - Duration::from_secs(10);
-        let mut sigterm = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
-            .expect("failed to register SIGTERM handler");
-
-        loop {
-            tokio::select! {
-                Some(event) = rx.recv() => {
-                    handle_event(event, &engine_ev, &mut last).await;
-                }
-                _ = tokio::signal::ctrl_c() => {
-                    tracing::info!("Shutting down on SIGINT.");
-                    break;
-                }
-                _ = sigterm.recv() => {
-                    tracing::info!("Shutting down on SIGTERM.");
-                    break;
-                }
+    if let Some(action) = action {
+        // In the running app if there is one; otherwise this becomes the app.
+        if app.register(None::<&gio::Cancellable>).is_ok() {
+            if app.is_remote() {
+                app.activate_action(action, None);
+                return glib::ExitCode::SUCCESS;
             }
+            let app2 = app.clone();
+            glib::idle_add_local_once(move || {
+                app2.activate();
+                app2.activate_action(action, None);
+            });
         }
+    }
+    app.run_with_args(&args)
+}
 
-        tracing::info!("Cleaning up resources...");
-        let _ = std::fs::remove_file(linkall_core::ipc::socket_path());
+#[cfg(target_os = "linux")]
+fn install_actions(app: &adw::Application, hub: &hub::Hub) {
+    use adw::prelude::*;
+    use gtk::gio;
+
+    let show = gio::SimpleAction::new("show", None);
+    {
+        let app = app.clone();
+        show.connect_activate(move |_, _| app.activate());
+    }
+    app.add_action(&show);
+
+    let send = gio::SimpleAction::new("send-files", None);
+    {
+        let hub = hub.clone();
+        send.connect_activate(move |_, _| ui::send::pick_files(&hub, None));
+    }
+    app.add_action(&send);
+
+    let pair = gio::SimpleAction::new("pair-phone", None);
+    {
+        let hub = hub.clone();
+        pair.connect_activate(move |_, _| ui::pairing::show_qr(&hub));
+    }
+    app.add_action(&pair);
+
+    let by_address = gio::SimpleAction::new("add-by-address", None);
+    {
+        let hub = hub.clone();
+        by_address.connect_activate(move |_, _| ui::add_by_address(&hub));
+    }
+    app.add_action(&by_address);
+
+    let rescan = gio::SimpleAction::new("rescan", None);
+    {
+        let hub = hub.clone();
+        rescan.connect_activate(move |_, _| {
+            ui::act(
+                serde_json::json!({ "cmd": "rescan_peers" }),
+                Some("Looking for devices…"),
+                &hub,
+            )
+        });
+    }
+    app.add_action(&rescan);
+
+    let resume = gio::SimpleAction::new("resume-sync", None);
+    {
+        let hub = hub.clone();
+        resume.connect_activate(move |_, _| {
+            ui::act(
+                serde_json::json!({ "cmd": "set_sync_enabled", "enabled": true }),
+                Some("Sync resumed"),
+                &hub,
+            )
+        });
+    }
+    app.add_action(&resume);
+
+    let about = gio::SimpleAction::new("about", None);
+    about.connect_activate(|_, _| {
+        let dialog = adw::AboutDialog::builder()
+            .application_name("Link All")
+            .application_icon(APP_ID)
+            .version(env!("CARGO_PKG_VERSION"))
+            .developer_name("Chinmay Kudalkar")
+            .website("https://linkall.chinmaykudalkar.com")
+            .issue_url("https://github.com/ChinmayyK/Link-All/issues")
+            .license_type(gtk::License::Agpl30Only)
+            .comments("Continuity for every device you own: one clipboard, files and notifications, straight over your own network.")
+            .build();
+        dialog.present(ui::window().as_ref());
     });
-}
+    app.add_action(&about);
 
-// ── Event handler ─────────────────────────────────────────────────────────────
-
-#[cfg(target_os = "linux")]
-async fn handle_event(event: EngineEvent, _engine: &Arc<Engine>, last_notify: &mut Instant) {
-    match event {
-        EngineEvent::ClipboardReceived {
-            from_name,
-            content,
-            auto_applied,
-            ..
-        } => {
-            tracing::info!("{} from '{}'", content.kind_str(), from_name);
-            if auto_applied {
-                suppress_next();
-                match apply_clipboard_content(&content) {
-                    Ok(()) => rate_limited_notify(
-                        last_notify,
-                        "Link All",
-                        &format!("Clipboard from {from_name}"),
-                    ),
-                    Err(e) => {
-                        tracing::warn!("Failed to apply clipboard: {e}");
-                        SUPPRESS_COUNT
-                            .try_update(Ordering::SeqCst, Ordering::SeqCst, |v| {
-                                Some(v.saturating_sub(1))
-                            })
-                            .ok();
-                    }
-                }
-            } else {
-                tracing::info!("  (not auto-applied — timeline-first mode)");
-                rate_limited_notify(
-                    last_notify,
-                    &format!("Clipboard from {from_name}"),
-                    &content.preview_string(),
-                );
-            }
-        }
-
-        EngineEvent::ClipboardSynced { peer_name, .. } => {
-            tracing::debug!("synced to {}", peer_name);
-        }
-
-        EngineEvent::ClipboardSyncFailed {
-            peer_name, reason, ..
-        } => {
-            tracing::warn!("sync to '{}' failed: {}", peer_name, reason);
-        }
-
-        EngineEvent::PeerConnected { device_name, .. } => {
-            tracing::info!("connected to {}", device_name);
-            rate_limited_notify(
-                last_notify,
-                "Link All",
-                &format!("Connected to {device_name}"),
-            );
-        }
-
-        EngineEvent::PeerDisconnected { device_name, .. } => {
-            tracing::info!("{} disconnected", device_name.as_deref().unwrap_or("peer"));
-        }
-
-        // New device wants to pair.
-        // Headless: log prominently + notify; user responds via linkall-cli.
-        EngineEvent::PairingRequested {
-            device_id,
-            device_name,
-            pin,
-        } => {
-            let fp = pin
-                .lines()
-                .map(|l| format!("   {l}"))
-                .collect::<Vec<_>>()
-                .join("\n");
-
-            // `pair accept` answers the request, so the other device stops
-            // waiting; the old hint named a command that doesn't exist.
-            tracing::warn!(
-                "🔐 Pairing request from '{}' ({})\n   Code:\n{fp}\n\n\
-                 Accept only if the other device shows the same code:\n\
-                 To accept:  linkall-cli pair accept {}\n\
-                 To decline: linkall-cli pair decline {}",
-                device_name,
-                device_id,
-                device_id,
-                device_id,
-            );
-
-            rate_limited_notify(
-                last_notify,
-                &format!("{device_name} wants to pair · code {pin}"),
-                &format!("Run: linkall-cli pair accept {device_id}"),
-            );
-        }
-
-        EngineEvent::Warning(w) => tracing::warn!("{}", w),
-
-        _ => {}
+    let quit = gio::SimpleAction::new("quit", None);
+    {
+        let app = app.clone();
+        quit.connect_activate(move |_, _| app.quit());
     }
-}
-
-// ── Clipboard application ─────────────────────────────────────────────────────
-//
-// Called only from handle_event when auto_applied=true — meaning the engine
-// already recorded the item as applied but delegated the actual OS write to us.
-// (On desktop Linux the engine can't touch the clipboard directly since it runs
-// as a library; the binary is responsible for calling arboard.)
-
-#[cfg(target_os = "linux")]
-pub fn apply_clipboard_content(content: &ClipboardContent) -> anyhow::Result<()> {
-    match content {
-        ClipboardContent::Text(text) => {
-            let mut cb = arboard::Clipboard::new()?;
-            cb.set_text(text)?;
-            Ok(())
-        }
-
-        ClipboardContent::Image { data, mime } => {
-            if !mime.starts_with("image/") {
-                anyhow::bail!("unsupported image mime type: {mime}");
-            }
-            let img = image::load_from_memory(data)?;
-            let rgba = img.into_rgba8();
-            let (w, h) = rgba.dimensions();
-            let mut cb = arboard::Clipboard::new()?;
-            cb.set_image(arboard::ImageData {
-                width: w as usize,
-                height: h as usize,
-                bytes: std::borrow::Cow::Owned(rgba.into_raw()),
-            })?;
-            Ok(())
-        }
-
-        ClipboardContent::File { .. } => {
-            // Files are saved to disk by the engine — nothing to do here.
-            Ok(())
-        }
-    }
-}
-
-// ── Notification helpers ──────────────────────────────────────────────────────
-
-/// At most one notification every 2 seconds.
-#[cfg(target_os = "linux")]
-fn rate_limited_notify(last: &mut Instant, summary: &str, body: &str) {
-    if last.elapsed() < Duration::from_secs(2) {
-        return;
-    }
-    *last = Instant::now();
-    notify(summary, body);
-}
-
-#[cfg(target_os = "linux")]
-fn notify(summary: &str, body: &str) {
-    let _ = std::process::Command::new("notify-send")
-        .args([
-            "--app-name=Link All",
-            "--icon=linkall",
-            "--urgency=normal",
-            "--expire-time=3000",
-            summary,
-            body,
-        ])
-        .spawn();
+    app.add_action(&quit);
+    app.set_accels_for_action("app.quit", &["<Control>q"]);
+    app.set_accels_for_action("window.close", &["<Control>w"]);
 }

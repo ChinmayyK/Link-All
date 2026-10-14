@@ -2,23 +2,30 @@
 name = "linkall-linux"
 version.workspace = true
 edition = "2021"
-description = "Link All Linux GTK4 / Wayland / X11 client"
+license.workspace = true
+description = "Link All for Linux: the GTK 4 app, tray icon and desktop agent"
 
 [[bin]]
-name = "linkall-gtk"
+name = "linkall"
 path = "src/main.rs"
 
-[dependencies]
+# Everything here is Linux-only: on other platforms the binary is a stub, so
+# `cargo build --workspace` on macOS and Windows doesn't need GTK installed.
+[target.'cfg(target_os = "linux")'.dependencies]
 linkall-core = { path = "../../linkall-core" }
-tokio = { version = "1", features = ["full"] }
+gtk = { package = "gtk4", version = "0.9", features = ["v4_12"] }
+adw = { package = "libadwaita", version = "0.7", features = ["v1_5"] }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "time", "sync"] }
+serde_json = "1"
+anyhow = "1"
+arboard = { version = "3", default-features = false, features = ["image-data", "wayland-data-control"] }
+image = { version = "0.25", default-features = false, features = ["png"] }
+base64 = "0.22"
+qrcode = { version = "0.14", default-features = false }
+mime_guess = "2"
+dirs = "5"
+ksni = "0.2"
+async-channel = "2"
+libc = "0.2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-arboard = { version = "3", features = ["image-data"] }
-image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
-anyhow = "1"
-dirs = "5"
-libc = "0.2"
-
-# GTK4 tray (optional — uncomment for full system-tray experience)
-# gtk4 = "0.7"
-# libappindicator = { package = "libappindicator", version = "0.8", features = ["gtk"] }

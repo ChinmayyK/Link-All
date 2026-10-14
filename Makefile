@@ -138,22 +138,10 @@ _android-native:
 		build --lib --release -p linkall-core
 
 linux:
-	@echo -e "$(CYAN)Building Linux binaries...$(RESET)"
-	$(CARGO) build --release \
-		--bin linkall-daemon \
-		--bin linkall-cli \
-		--bin linkall-gtk
-	@echo -e "$(GREEN)✓ Linux build complete.$(RESET)"
-	@echo "  Daemon: target/release/linkall-daemon"
-	@echo "  CLI:    target/release/linkall-cli"
-	@echo "  GTK:    target/release/linkall-gtk"
-	@echo ""
-	@echo "  Install:"
-	@echo "    sudo cp target/release/linkall-daemon /usr/local/bin/"
-	@echo "    sudo cp target/release/linkall-cli    /usr/local/bin/"
-	@echo "    sudo cp target/release/linkall-gtk    /usr/local/bin/"
-	@echo "    cp platforms/linux/linkall.service ~/.config/systemd/user/"
-	@echo "    systemctl --user enable --now linkall"
+	@echo -e "$(CYAN)Building Linux app, daemon and CLI...$(RESET)"
+	$(CARGO) build --release -p linkall-linux -p linkall-core -p linkall-cli \
+		--bin linkall --bin linkall-daemon --bin linkall-cli
+	@echo -e "$(GREEN)✓ Linux build complete. Install with: platforms/linux/install.sh$(RESET)"
 
 all: build macos linux android windows
 	@echo -e "$(GREEN)✓ All platforms built.$(RESET)"
@@ -188,8 +176,8 @@ install: build
 		$(DESTDIR)$(PREFIX)/bin/linkall-daemon
 	install -Dm755 target/release/linkall-cli \
 		$(DESTDIR)$(PREFIX)/bin/linkall-cli
-	install -Dm755 target/release/linkall-gtk \
-		$(DESTDIR)$(PREFIX)/bin/linkall-gtk
+	[ ! -x target/release/linkall ] || install -Dm755 target/release/linkall \
+		$(DESTDIR)$(PREFIX)/bin/linkall
 	@echo -e "$(GREEN)✓ Installed to $(DESTDIR)$(PREFIX)/bin/$(RESET)"
 
 PREFIX ?= /usr/local
