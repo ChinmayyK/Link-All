@@ -41,7 +41,7 @@ jobs:
       - name: Install system deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config libssl-dev avahi-daemon libavahi-client-dev
+          sudo apt-get install -y libdbus-1-dev libudev-dev pkg-config libssl-dev avahi-daemon libavahi-client-dev libgtk-4-dev libadwaita-1-dev
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Clippy
@@ -211,11 +211,20 @@ jobs:
           name: linkall-macos
           path: platforms/macos/build/LinkAll.dmg
 
-  # ── Linux x86_64 binary + deb ─────────────────────────────────────────────
+  # ── Linux: GTK 4 app, daemon and CLI, as .deb and tarball ──────────────
+  # Built on Ubuntu 24.04 (GTK 4.14, libadwaita 1.5), so the packages run on
+  # it and newer: Debian 13, Fedora 40+, Arch.
   release-linux:
     needs: verify
-    name: Linux Release
-    runs-on: ubuntu-latest
+    name: Linux Release (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -223,30 +232,21 @@ jobs:
       - name: Install deps
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y libdbus-1-dev libudev-dev libssl-dev pkg-config
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libdbus-1-dev libudev-dev libssl-dev pkg-config
 
-      - name: Build daemon + CLI + GTK
-        run: |
-          cargo build --release --bin linkall-daemon -p linkall-core
-          cargo build --release --bin linkall-cli -p linkall-cli
-          cargo build --release --bin linkall-gtk -p linkall-linux
+      - name: Build app, daemon and CLI
+        run: cargo build --release -p linkall-linux -p linkall-core -p linkall-cli --bin linkall --bin linkall-daemon --bin linkall-cli
 
-      - name: Package .tar.gz
-        run: |
-          mkdir -p dist/linkall/usr/local/bin
-          cp target/release/linkall-daemon dist/linkall/usr/local/bin/
-          cp target/release/linkall-cli    dist/linkall/usr/local/bin/
-          cp target/release/linkall-gtk    dist/linkall/usr/local/bin/
-          cp platforms/linux/linkall.service dist/linkall/
-          cp platforms/linux/linkall.desktop dist/linkall/
-          cp README.md LICENSE dist/linkall/
-          tar czf LinkAll-linux-x86_64.tar.gz -C dist linkall
+      - name: Package
+        run: bash platforms/linux/package.sh ${{ matrix.arch }}
 
-      - name: Upload Linux artifact
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linkall-linux
-          path: LinkAll-linux-x86_64.tar.gz
+          name: linkall-linux-${{ matrix.arch }}
+          path: |
+            LinkAll-linux-${{ matrix.arch }}.tar.gz
+            linkall_*.deb
 
   # ── Create GitHub Release ─────────────────────────────────────────────────
   create-release:
@@ -293,7 +293,8 @@ jobs:
             echo "| macOS 13+ (Apple Silicon) | \`LinkAll.dmg\` |"
             echo "| Windows 10/11 x64 | \`LinkAll-windows-x64.msi\` (installer) or \`LinkAll-windows-x64.zip\` (portable) |"
             echo "| Android 8.0+ | \`LinkAll-android.apk\` |"
-            echo "| Linux x86_64 | \`LinkAll-linux-x86_64.tar.gz\` |"
+            echo "| Linux x86_64 (Ubuntu 24.04+, Debian 13, Fedora 40+) | \`linkall_*_amd64.deb\` or \`LinkAll-linux-x86_64.tar.gz\` (run \`./install.sh\`) |"
+            echo "| Linux ARM64 | \`linkall_*_arm64.deb\` or \`LinkAll-linux-aarch64.tar.gz\` |"
             echo
             echo "Checksums are in \`sha256sums.txt\`."
             echo
@@ -312,6 +313,7 @@ jobs:
             release-artifacts/**/*.zip
             release-artifacts/**/*.apk
             release-artifacts/**/*.tar.gz
+            release-artifacts/**/*.deb
             release-artifacts/**/*.dmg
             sha256sums.txt
           draft: false

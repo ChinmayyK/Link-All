@@ -1,0 +1,9 @@
+# Nemo (Cinnamon) action: right-click › Send with Link All.
+# Install to ~/.local/share/nemo/actions/
+[Nemo Action]
+Name=Send with Link All
+Comment=Send the selected items to one of your devices
+Exec=linkall %F
+Icon-Name=app.linkall.LinkAll
+Selection=notnone
+Extensions=any;

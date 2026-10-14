@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>app.linkall.LinkAll</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-only</project_license>
+  <name>Link All</name>
+  <summary>One clipboard, files and notifications across your devices</summary>
+  <developer id="com.chinmaykudalkar">
+    <name>Chinmay Kudalkar</name>
+  </developer>
+  <description>
+    <p>Link All brings continuity to every operating system. Your Linux computer works hand in hand with your Android phone, your Windows PC and your Mac, straight over your own network, encrypted end to end. No cloud, no account.</p>
+    <ul>
+      <li>Copy on one device and paste on another, with a searchable clipboard history</li>
+      <li>Send files and whole folders, with live progress and resume</li>
+      <li>See your phone's notifications and incoming calls on your computer</li>
+      <li>Browse, preview and download files from your other devices</li>
+      <li>Pair once by matching a code, or by scanning a QR code</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">app.linkall.LinkAll.desktop</launchable>
+  <url type="homepage">https://linkall.chinmaykudalkar.com</url>
+  <url type="bugtracker">https://github.com/ChinmayyK/Link-All/issues</url>
+  <url type="vcs-browser">https://github.com/ChinmayyK/Link-All</url>
+  <content_rating type="oars-1.1"/>
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <branding>
+    <color type="primary" scheme_preference="light">#cfe0ff</color>
+    <color type="primary" scheme_preference="dark">#0b1b3d</color>
+  </branding>
+  <releases>
+    <release version="2.0.1" date="2026-10-14">
+      <description>
+        <p>A new Link All app for Linux: devices, clipboard history, transfers, file browsing, activity and settings, with a tray icon and desktop notifications.</p>
+      </description>
+    </release>
+  </releases>
+</component>

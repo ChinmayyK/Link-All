@@ -1,0 +1,80 @@
+/* Link All on Linux: libadwaita, dressed in the same palette as the Android,
+   Mac and Windows apps. Colours that change between light and dark come from
+   theme.rs as @define-color lines prepended to this sheet. */
+
+/* ── Type ───────────────────────────────────────────────────────────────── */
+.hero-prefix { font-size: 15px; color: @la_muted; margin-bottom: 4px; }
+.hero-name { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; }
+.section-title { font-size: 15px; font-weight: 700; margin-top: 6px; }
+.eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; color: @la_muted; }
+.muted { color: @la_muted; }
+.mono { font-family: monospace; font-size: 12px; }
+
+/* ── Status ─────────────────────────────────────────────────────────────── */
+.status-dot { min-width: 8px; min-height: 8px; border-radius: 99px; background: @la_muted; }
+.status-dot.live { background: @la_live; box-shadow: 0 0 0 3px alpha(@la_live, 0.18); }
+.status-dot.warn { background: @la_warn; }
+.live-text { color: @la_live; font-weight: 600; }
+
+/* ── Icon wells: a rounded tile behind an icon, tinted per meaning ──────── */
+.well { min-width: 40px; min-height: 40px; border-radius: 11px; background: @la_sunk; color: @la_muted; }
+.well.small { min-width: 34px; min-height: 34px; border-radius: 9px; }
+.well.small > image { min-width: 34px; min-height: 34px; }
+.well.blue { background: alpha(@la_blue, 0.14); color: @la_blue; }
+.well.red { background: alpha(@la_red, 0.14); color: @la_red; }
+.well.violet { background: alpha(@la_violet, 0.15); color: @la_violet; }
+.well.green { background: alpha(@la_live, 0.14); color: @la_live; }
+.well.amber { background: alpha(@la_warn, 0.15); color: @la_warn; }
+.well.teal { background: alpha(@la_teal, 0.14); color: @la_teal; }
+
+/* ── Action tiles ───────────────────────────────────────────────────────── */
+button.tile { padding: 12px 14px; border-radius: 14px; background: @la_surface; box-shadow: 0 0 0 1px @la_line; }
+button.tile:hover { background: mix(@la_surface, @la_blue, 0.05); box-shadow: 0 0 0 1px alpha(@la_blue, 0.35); }
+button.tile:active { background: mix(@la_surface, @la_blue, 0.09); }
+.tile-title { font-weight: 700; font-size: 15px; }
+.tile-sub { color: @la_muted; font-size: 13px; }
+
+/* ── Cards and lists ────────────────────────────────────────────────────── */
+.boxed-list, .card.la { background: @la_surface; box-shadow: 0 0 0 1px @la_line; border-radius: 14px; }
+.boxed-list > row { min-height: 60px; }
+.boxed-list > row.dim { min-height: 52px; }
+.hero-card { padding: 18px 20px; border-radius: 16px; background: linear-gradient(135deg, alpha(@la_blue, 0.16), alpha(@la_violet, 0.08)); box-shadow: 0 0 0 1px alpha(@la_blue, 0.22); }
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+.la-sidebar .navigation-sidebar > row { border-radius: 9px; margin: 1px 8px; padding: 7px 10px; min-height: 0; }
+.la-sidebar .navigation-sidebar > row:selected { background: @accent_bg_color; color: white; font-weight: 600; }
+.la-sidebar .navigation-sidebar > row:selected image { color: white; }
+.la-sidebar .sidebar-heading { margin: 18px 20px 6px 20px; }
+.brand-title { font-weight: 800; font-size: 16px; letter-spacing: -0.2px; }
+.this-device { margin: 10px; padding: 10px 12px; border-radius: 12px; background: @la_sunk; }
+
+/* ── Meters ─────────────────────────────────────────────────────────────── */
+.meter { min-height: 8px; border-radius: 99px; background: @la_sunk; }
+.meter > .fill { border-radius: 99px; min-height: 8px; }
+.fill.battery { background: @la_live; }
+.fill.battery.low { background: @la_warn; }
+.fill.images { background: #f59e3b; }
+.fill.videos { background: #c45cf2; }
+.fill.apps { background: @la_teal; }
+.fill.other { background: alpha(@la_muted, 0.55); }
+.legend-dot { min-width: 7px; min-height: 7px; border-radius: 99px; }
+.legend-dot.images { background: #f59e3b; }
+.legend-dot.videos { background: #c45cf2; }
+.legend-dot.apps { background: @la_teal; }
+.legend-dot.other { background: alpha(@la_muted, 0.55); }
+
+/* ── File grid ──────────────────────────────────────────────────────────── */
+.file-tile { border-radius: 12px; padding: 6px; }
+.file-tile:hover { background: alpha(@la_blue, 0.08); }
+.thumb { border-radius: 10px; background: @la_sunk; }
+.chip { padding: 2px 12px; min-height: 30px; border-radius: 99px; background: @la_sunk; font-weight: 600; }
+.file-name { font-weight: 500; }
+button.file-tile, .file-grid button.flat { border-radius: 12px; }
+.chip:checked { background: @la_blue; color: white; }
+
+/* ── PIN ────────────────────────────────────────────────────────────────── */
+.pin { font-size: 40px; font-weight: 800; letter-spacing: 4px; font-feature-settings: "tnum"; color: @la_blue; }
+
+/* ── Drop zone ──────────────────────────────────────────────────────────── */
+.drop-zone { border-radius: 16px; border: 2px dashed alpha(@la_blue, 0.35); background: alpha(@la_blue, 0.04); padding: 26px; }
+.drop-zone.hovering { border-color: @la_blue; background: alpha(@la_blue, 0.12); }

@@ -28,6 +28,12 @@
       <td align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-home.png" /><img src="assets/screenshots/light/android-home.png" width="180" alt="Link All on Android: home, with this phone linked to three devices" /></picture> &nbsp; <picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/android-devices.png" /><img src="assets/screenshots/light/android-devices.png" width="180" alt="Link All on Android: devices" /></picture></td>
     </tr>
     <tr>
+      <td align="center" colspan="2"><b>Linux</b></td>
+    </tr>
+    <tr>
+      <td align="center" colspan="2"><picture><source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/dark/linux-devices.png" /><img src="assets/screenshots/light/linux-devices.png" width="640" alt="Link All on Linux: this computer, send actions, paired devices and recent transfers" /></picture></td>
+    </tr>
+    <tr>
       <td align="center"><b>macOS menu bar</b></td>
       <td align="center"><b>Transfers on macOS</b></td>
     </tr>
@@ -98,7 +104,7 @@ Link All combines a unified high-performance Rust core with platform-native inte
 | :--- | :--- | :--- | :--- |
 | **macOS** | Swift & SwiftUI | Direct C-FFI / Unix Sockets | 🟢 **Production Ready** (Menu bar integration, native notifications) |
 | **Android** | Kotlin & Jetpack Compose | JNI Bridge | 🟢 **Production Ready** (Background service runtime, native share-sheet target, QR/PIN pairing) |
-| **Linux** | GTK3 & D-Bus | Unix Sockets / D-Bus | 🟢 **Production Ready** (XDG notification integration, `systemd` user service runtime) |
+| **Linux** | Rust, GTK 4 & libadwaita | Unix Sockets | 🟢 **Production Ready** (tray icon, desktop notifications, "Send with Link All" in Files, Dolphin and Nemo, `systemd` user service, `.deb` and tarball) |
 | **Windows** | WinUI 3 / .NET 10 | In-process C-FFI / Named Pipes | 🟢 **Production Ready** (Native AOT, tray helper, per-user MSI and portable zip) |
 
 ---
@@ -129,7 +135,7 @@ Get the latest build for each platform from [GitHub Releases](https://github.com
 | macOS 13+ (Apple Silicon) | `LinkAll.dmg` |
 | Windows 10/11 x64 | `LinkAll-windows-x64.msi` (installer) or `LinkAll-windows-x64.zip` (portable) |
 | Android 8.0+ | `LinkAll-android.apk` |
-| Linux x86_64 | `LinkAll-linux-x86_64.tar.gz` |
+| Linux x86_64 / ARM64 (Ubuntu 24.04+, Debian 13, Fedora 40+, Arch) | `linkall_<version>_amd64.deb` / `_arm64.deb`, or `LinkAll-linux-<arch>.tar.gz` (unpack and run `./install.sh`, no root needed) |
 
 **First launch on macOS:** Link All isn't notarized by Apple yet, so macOS asks once. Open Link All, click **Done** when macOS says it can't verify it, then go to **System Settings › Privacy & Security** and click **Open Anyway** next to Link All. On Windows, if SmartScreen warns about an unrecognised app, choose **More info › Run anyway**.
 
@@ -186,9 +192,14 @@ adb install -r platforms/android/app/build/outputs/apk/full/debug/app-full-debug
 adb shell monkey -p app.linkall.debug -c android.intent.category.LAUNCHER 1
 ```
 
-#### Linux Desktop (`linkall-linux`)
+#### Linux Desktop (`linkall-linux`, GTK 4)
 ```bash
-# Launch GTK native client directly via Cargo
+# Needs GTK 4.12+ and libadwaita 1.5+:
+#   Ubuntu/Debian: sudo apt install libgtk-4-dev libadwaita-1-dev
+#   Fedora:        sudo dnf install gtk4-devel libadwaita-devel
+# Build and install the app, background service and CLI into your home folder
+platforms/linux/install.sh
+# Or just run the app from source (it starts the background service itself)
 cargo run -p linkall-linux
 ```
 

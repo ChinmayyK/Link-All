@@ -1668,8 +1668,12 @@ pub fn default_save_dir() -> PathBuf {
     }
     #[cfg(not(target_os = "android"))]
     {
-        dirs::download_dir()
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")))
+        // Linux without an xdg-user-dirs config names no Downloads folder; use the usual one.
+        dirs::download_dir().unwrap_or_else(|| {
+            dirs::home_dir()
+                .map(|home| home.join("Downloads"))
+                .unwrap_or_else(|| PathBuf::from("."))
+        })
     }
 }
 

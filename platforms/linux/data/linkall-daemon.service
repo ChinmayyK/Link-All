@@ -1,0 +1,36 @@
+# Link All's background service, as a systemd user unit. The app starts it
+# itself when it isn't running; installing this unit keeps it running from
+# login, before the app opens.
+#
+#   systemctl --user enable --now linkall-daemon
+#   journalctl --user -u linkall-daemon -f
+
+[Unit]
+Description=Link All background service
+Documentation=https://github.com/ChinmayyK/Link-All
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/linkall-daemon
+Restart=on-failure
+RestartSec=3s
+Environment=LINKALL_LOG=info
+# It saves received files to Downloads and, when allowed, lets paired
+# devices read Documents, Pictures, Videos and Music, so the home folder
+# stays reachable; the rest of the system is read-only to it.
+ProtectSystem=strict
+ReadWritePaths=%h
+PrivateTmp=true
+NoNewPrivileges=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictSUIDSGID=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryHigh=192M
+
+[Install]
+WantedBy=default.target
