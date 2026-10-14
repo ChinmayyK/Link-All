@@ -292,15 +292,23 @@ fn determine_source(
 
 /// Walks the user's standard folders, refreshes the id→path index and
 /// returns every file found (unfiltered) plus summary counts.
+/// A user folder, or `~/<fallback>` when the system doesn't name it (Linux
+/// without an xdg-user-dirs config, as on minimal installs).
+fn user_dir(named: Option<PathBuf>, fallback: &str) -> Option<PathBuf> {
+    named
+        .or_else(|| dirs::home_dir().map(|home| home.join(fallback)))
+        .filter(|dir| dir.is_dir())
+}
+
 fn scan_all() -> (RemoteFilesSummary, Vec<RemoteFileEntry>) {
-    let downloads_dir = dirs::download_dir();
-    let pictures_dir = dirs::picture_dir();
+    let downloads_dir = user_dir(dirs::download_dir(), "Downloads");
+    let pictures_dir = user_dir(dirs::picture_dir(), "Pictures");
     let roots: Vec<PathBuf> = [
         downloads_dir.clone(),
-        dirs::document_dir(),
+        user_dir(dirs::document_dir(), "Documents"),
         pictures_dir.clone(),
-        dirs::video_dir(),
-        dirs::audio_dir(),
+        user_dir(dirs::video_dir(), "Videos"),
+        user_dir(dirs::audio_dir(), "Music"),
     ]
     .into_iter()
     .flatten()
