@@ -490,6 +490,16 @@ class LinkAllService : Service() {
         ActivityFeedManager.attach(this)
         serviceStartTime = System.currentTimeMillis()
         createNotificationChannels()
+        // Android allows only a few seconds between startForegroundService()
+        // and startForeground(), and the rest of onCreate plus a busy main
+        // thread at boot or app update could take longer: the app then crashed
+        // with ForegroundServiceDidNotStartInTimeException and stayed dead, so
+        // every device dropped. Go foreground before anything else.
+        try {
+            startForegroundCompat(buildForegroundNotification())
+        } catch (e: Exception) {
+            Log.e(TAG, "startForeground in onCreate failed", e)
+        }
         registerPairingReceiver()
         registerCallStateCallback()
         
