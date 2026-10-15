@@ -67,6 +67,58 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_initContext(
     }));
 }
 
+/// Sends the engine's log to Android's logcat (tag `linkall_core`), so a
+/// phone's side of a dropped link or failed transfer can be read with
+/// `adb logcat`. Without it the engine was silent on Android.
+mod logcat {
+    use std::ffi::{c_char, CString};
+    use std::io::Write;
+
+    #[link(name = "log")]
+    extern "C" {
+        fn __android_log_write(prio: i32, tag: *const c_char, text: *const c_char) -> i32;
+    }
+
+    const INFO: i32 = 4;
+
+    /// One log line, written to logcat when tracing finishes it.
+    pub struct Line(Vec<u8>);
+
+    impl Write for Line {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Drop for Line {
+        fn drop(&mut self) {
+            let text = String::from_utf8_lossy(&self.0);
+            let text = text.trim_end();
+            if text.is_empty() {
+                return;
+            }
+            if let (Ok(tag), Ok(msg)) = (CString::new("linkall_core"), CString::new(text.replace('\0', ""))) {
+                unsafe {
+                    __android_log_write(INFO, tag.as_ptr(), msg.as_ptr());
+                }
+            }
+        }
+    }
+
+    pub fn init() {
+        let _ = tracing_subscriber::fmt()
+            .with_writer(|| Line(Vec::new()))
+            .with_ansi(false)
+            .without_time()
+            .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
+            .try_init();
+    }
+}
+
 #[no_mangle]
 pub extern "system" fn Java_app_linkall_LinkAllJni_start(
     mut env: JNIEnv,
@@ -76,6 +128,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_start(
     data_dir: JString,
     file_save_dir: JString,
 ) -> jlong {
+    logcat::init();
     let name: String = env
         .get_string(&device_name)
         .map(|s| s.into())
