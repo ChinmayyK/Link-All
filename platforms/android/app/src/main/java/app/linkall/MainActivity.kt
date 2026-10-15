@@ -660,21 +660,24 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * The engine can't see Android's battery limits. When paired devices
-     * can't be found and the phone may be pausing Link All, say that first:
-     * it's the likelier cause.
+     * The engine can't see Android's battery limits. Without the exemption
+     * many phones (OnePlus, Xiaomi, Samsung...) cut Link All's network a minute
+     * or two after the screen goes off, so every paired device drops until the
+     * phone is unlocked. Say so as soon as there is a device to stay linked
+     * to, before the user notices the drops, and first when devices are
+     * already missing since it's the likelier cause.
      */
     private fun withBatteryCheck(engineIssues: List<HealthIssue>, allPeers: List<PeerSnapshot>): List<HealthIssue> {
         val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
-        val notFound = engineIssues.indexOfFirst { it.kind == "devices_not_found" }
-        if (notFound < 0 || pm.isIgnoringBatteryOptimizations(packageName)) return engineIssues
+        if (allPeers.none { it.trusted } || pm.isIgnoringBatteryOptimizations(packageName)) return engineIssues
         val battery = HealthIssue(
             "battery_restricted",
-            "Android may be pausing Link All",
-            "To save battery your phone can stop Link All in the background, and your devices can't reach it. Let it run in the background.",
+            "Devices disconnect when the screen is off",
+            "Your phone pauses Link All in the background to save battery. Let it run without battery limits to stay linked.",
             null
         )
-        return engineIssues.toMutableList().apply { add(notFound, battery) }
+        val notFound = engineIssues.indexOfFirst { it.kind == "devices_not_found" }
+        return engineIssues.toMutableList().apply { add(if (notFound < 0) 0 else notFound, battery) }
     }
 
     private fun onHealthAction(issue: HealthIssue) {
@@ -916,10 +919,13 @@ class MainActivity : ComponentActivity() {
                 if (BuildConfig.FULL_PERMISSIONS) Intent(
                     android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
                     android.net.Uri.parse("package:$packageName"))
-                else Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)
+                // Play can't ask directly. Link All's own app page is where every
+                // phone keeps this switch (OnePlus and Oppo hide the generic list).
+                else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    android.net.Uri.parse("package:$packageName"))
             )
             if (!BuildConfig.FULL_PERMISSIONS) {
-                Toast.makeText(this, "Find Link All and choose \"Don't optimize\"", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Open Battery and choose \"Allow background activity\" or \"Unrestricted\"", Toast.LENGTH_LONG).show()
             }
         }.onFailure {
             runCatching {
