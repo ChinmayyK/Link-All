@@ -101,7 +101,10 @@ mod logcat {
             if text.is_empty() {
                 return;
             }
-            if let (Ok(tag), Ok(msg)) = (CString::new("linkall_core"), CString::new(text.replace('\0', ""))) {
+            if let (Ok(tag), Ok(msg)) = (
+                CString::new("linkall_core"),
+                CString::new(text.replace('\0', "")),
+            ) {
                 unsafe {
                     __android_log_write(INFO, tag.as_ptr(), msg.as_ptr());
                 }
