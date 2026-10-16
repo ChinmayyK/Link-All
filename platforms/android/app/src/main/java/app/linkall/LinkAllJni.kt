@@ -248,6 +248,7 @@ object LinkAllJni {
      * The engine uses this to relax heartbeat timeouts to zero-drain the battery.
      */
     @JvmStatic external fun notifySleepState(handle: Long, isAsleep: Boolean): Int
+    @JvmStatic external fun setBackgroundRestricted(handle: Long, restricted: Boolean): Int
 
     // ── Remote Explorer (Phase 2) ─────────────────────────────────────────────
     @JvmStatic external fun eventRequestId(event: Long): String?

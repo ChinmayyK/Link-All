@@ -92,6 +92,7 @@ struct CommandSidebarView: View {
         if connectingIds.contains(device.id) || device.connectionState == .connecting {
             return "Connecting…"
         }
+        if device.pausedByPhone { return "Paused by the phone · open Link All on it" }
         return device.lastError == nil ? "Tap to connect" : "Can't reach · tap to retry"
     }
 
@@ -209,7 +210,9 @@ struct CommandSidebarView: View {
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .help(device.lastError.map { "Last error: \($0)" } ?? "Paired, not connected")
+                        .help(device.pausedByPhone
+                              ? "The phone's battery settings pause Link All in the background. On the phone, open Link All and tap Allow on the battery notice."
+                              : device.lastError.map { "Last error: \($0)" } ?? "Paired, not connected")
                     }
                 }
             }

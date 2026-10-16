@@ -305,6 +305,11 @@ namespace LinkAll.WinUI
         public ulong? last_seen { get => _last_seen; set { if (SetProperty(ref _last_seen, value)) OnPropertyChanged(nameof(LastSeenText)); } }
         // Unix seconds of the last clipboard sync with this device.
         public ulong? last_sync { get; set; }
+        private bool? _background_restricted;
+        // The phone said its battery settings may pause Link All in the
+        // background, which drops it whenever its screen is off.
+        [System.Text.Json.Serialization.JsonPropertyName("background_restricted")]
+        public bool? background_restricted { get => _background_restricted; set { if (SetProperty(ref _background_restricted, value)) NotifyPeerStateProperties(); } }
         private string? _last_error;
         public string? last_error { get => _last_error; set { if (SetProperty(ref _last_error, value)) OnPropertyChanged(nameof(HasError)); } }
         private List<string> _ips = new();
@@ -331,6 +336,7 @@ namespace LinkAll.WinUI
                 if (status == "connected") return "Connected";
                 if (status == "connecting") return "Reconnecting";
                 if (explicit_disconnect) return "Disconnected";
+                if (IsPausedByPhone) return "Paused by the phone";
                 return is_trusted && remembered && auto_connect ? "Ready to reconnect" : "Offline";
             }
         }
@@ -385,6 +391,8 @@ namespace LinkAll.WinUI
         // showing "Couldn't reach" from its last failed attempt forever.
         // Once we're actually connected, any stale error is moot.
         public bool HasError => !IsConnected && !string.IsNullOrWhiteSpace(last_error);
+        // Offline because the phone's battery settings, not the network, stop it.
+        public bool IsPausedByPhone => !IsConnected && !explicit_disconnect && background_restricted == true;
         // A live session with a peer that hasn't accepted us yet (or no
         // longer trusts us) carries nothing, so it doesn't count as
         // connected - otherwise it's offered as a send target that fails.
@@ -558,6 +566,7 @@ namespace LinkAll.WinUI
             OnPropertyChanged(nameof(ShowTransferIndicator));
             OnPropertyChanged(nameof(HasError));
             OnPropertyChanged(nameof(ErrorText));
+            OnPropertyChanged(nameof(IsPausedByPhone));
         }
 
         public void NotifyAll()
@@ -1782,6 +1791,7 @@ namespace LinkAll.WinUI
                             match.last_seen = incoming.last_seen;
                             match.last_sync = incoming.last_sync;
                             match.last_error = incoming.last_error;
+                            match.background_restricted = incoming.background_restricted;
                             match.ips = incoming.ips;
                             match.fingerprint_display = incoming.fingerprint_display;
                             match.first_seen = incoming.first_seen;

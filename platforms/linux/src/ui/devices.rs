@@ -374,8 +374,19 @@ pub fn send_clipboard(hub: &Hub, target: Option<String>) {
     });
 }
 
+/// Offline because the phone's battery settings pause Link All in the
+/// background (it said so when it last connected), not because of the network.
+fn paused_by_phone(p: &Value) -> bool {
+    p["status"] != "connected"
+        && p["explicit_disconnect"] != true
+        && p["background_restricted"] == true
+}
+
 fn describe(p: &Value, status: &Value) -> String {
     let id = p["id"].as_str().unwrap_or_default();
+    if paused_by_phone(p) {
+        return "Paused by the phone · open Link All on it".into();
+    }
     if p["status"] != "connected" {
         return match p["last_seen"].as_u64() {
             Some(t) if t > 0 => format!("Not connected · seen {}", ago(t)),
@@ -671,6 +682,21 @@ pub fn open_device(hub: &Hub, id: &str) {
     head_text.append(&state);
     head.append(&head_text);
     column.append(&head);
+
+    if paused_by_phone(&p) {
+        let note = gtk::Box::new(gtk::Orientation::Vertical, 4);
+        note.append(&label(
+            "Your phone is pausing Link All",
+            &["heading", "warning"],
+        ));
+        let detail = label(
+            "It stops Link All in the background to save battery, so it drops off when the screen is off. On the phone, open Link All and tap Allow on the battery notice.",
+            &["dim-label"],
+        );
+        detail.set_wrap(true);
+        note.append(&detail);
+        column.append(&note);
+    }
 
     if let Some(b) = battery(&status, &id) {
         let level = b["level"].as_u64().unwrap_or(0);

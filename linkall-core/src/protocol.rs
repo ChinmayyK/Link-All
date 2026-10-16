@@ -195,6 +195,10 @@ pub struct DeviceMetadata {
     /// the initiator's outgoing port, which can't be dialled back.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub listen_port: Option<u16>,
+    /// A phone whose OS may pause the app in the background (battery
+    /// limits) says so, so computers can explain why it drops off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub background_restricted: Option<bool>,
 }
 
 // ── File transfer metadata ────────────────────────────────────────────────────

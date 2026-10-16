@@ -154,6 +154,11 @@ pub struct PeerRecord {
     /// connected without one: builds before the version exchange.
     #[serde(default)]
     pub app_version: Option<String>,
+    /// The peer said its OS may pause it in the background (a phone with
+    /// battery limits on), so its drops while asleep are expected. None when
+    /// it didn't say: a computer, or an older build.
+    #[serde(default)]
+    pub background_restricted: Option<bool>,
 
     // ── Multi-layer discovery state ──────────────────────────────────────────
     /// When this peer was last seen via any discovery layer (separate from
@@ -218,6 +223,7 @@ impl Default for PeerRecord {
             pairing_outcome: None,
             pairing_declined_at: None,
             app_version: None,
+            background_restricted: None,
             last_discovery_at: None,
             discovery_sources: Vec::new(),
             addr_history: Vec::new(),
@@ -975,16 +981,23 @@ impl PeerManager {
 
     /// Records what the peer said about itself in its handshake. An empty
     /// platform (older peers) keeps whatever was known before.
-    pub fn set_handshake_info(&self, device_id: Uuid, version: String, platform: String) {
+    pub fn set_handshake_info(
+        &self,
+        device_id: Uuid,
+        version: String,
+        platform: String,
+        background_restricted: Option<bool>,
+    ) {
         let changed = match self.store.get_mut(&device_id) {
             Some(mut entry) => {
                 entry.app_version = Some(version);
+                let mut changed = entry.background_restricted != background_restricted;
+                entry.background_restricted = background_restricted;
                 if !platform.is_empty() && entry.platform.as_deref() != Some(platform.as_str()) {
                     entry.platform = Some(platform);
-                    true
-                } else {
-                    false
+                    changed = true;
                 }
+                changed
             }
             None => false,
         };
@@ -1462,7 +1475,7 @@ mod tests {
                     DiscoverySource::Mdns,
                 )
                 .unwrap();
-            manager.set_handshake_info(id, version.into(), String::new());
+            manager.set_handshake_info(id, version.into(), String::new(), None);
             manager.set_outgoing_pairing_waiting(id, true).unwrap();
             manager
                 .end_pairing(id, Some(PairingOutcome::Declined))

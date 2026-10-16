@@ -69,6 +69,8 @@ class MainActivity : ComponentActivity() {
     private val healthIssues = mutableStateOf<List<HealthIssue>>(emptyList())
     private val themeMode = mutableStateOf("system")
     private val hasCompletedOnboarding = mutableStateOf(false)
+    private val showBackgroundGuide = mutableStateOf(false)
+    private val backgroundAllowed = mutableStateOf(true)
     private val toastMessage = mutableStateOf("")
     private val toastAction = mutableStateOf<Pair<String, () -> Unit>?>(null)
 
@@ -185,6 +187,9 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("request_permissions", false) == true) {
             requestRuntimePermissions()
         }
+        if (intent?.getBooleanExtra(BackgroundAccess.EXTRA_SHOW_GUIDE, false) == true) {
+            showBackgroundGuide.value = true
+        }
 
         if (hasCompletedOnboarding.value) {
             requestBatteryOptimizationExemption()
@@ -226,6 +231,15 @@ class MainActivity : ComponentActivity() {
                             showSnack("Connected to $address")
                         },
                         onPairingLink = { link -> handlePairingInput(link) },
+                    )
+                }
+                if (showBackgroundGuide.value) {
+                    app.linkall.ui.BackgroundAccessDialog(
+                        isDark = isDark,
+                        allowed = backgroundAllowed.value,
+                        steps = remember { BackgroundAccess.steps() },
+                        onOpenSettings = { BackgroundAccess.open(this@MainActivity) },
+                        onDismiss = { showBackgroundGuide.value = false },
                     )
                 }
 
@@ -560,7 +574,7 @@ class MainActivity : ComponentActivity() {
                     onOpenDiagnostics = {
                         startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java))
                     },
-                    onBatterySettingsClicked = { openBatterySettings() },
+                    onBatterySettingsClicked = { showBackgroundGuide.value = true },
                     onStorageSettingsClicked = { openStorageSettings() },
                     onNotificationSettingsClicked = { openNotificationSettings() },
                     onReplayOnboarding = {
@@ -653,6 +667,15 @@ class MainActivity : ComponentActivity() {
         
         val allPeers = prefs.peerSnapshots()
         peers.value = allPeers
+        backgroundAllowed.value = BackgroundAccess.isAllowed(this)
+        // Right after the first pairing is when dropping off would start to
+        // matter, so the guide opens by itself then, once.
+        if (!backgroundAllowed.value && hasCompletedOnboarding.value && allPeers.any { it.trusted } &&
+            !prefs.getBoolean(BackgroundAccess.PREF_GUIDE_SHOWN, false)
+        ) {
+            prefs.edit().putBoolean(BackgroundAccess.PREF_GUIDE_SHOWN, true).apply()
+            showBackgroundGuide.value = true
+        }
 
         val isConnected = allPeers.any { it.isConnected }
         healthIssues.value = withBatteryCheck(prefs.healthIssues(), allPeers)
@@ -668,8 +691,7 @@ class MainActivity : ComponentActivity() {
      * already missing since it's the likelier cause.
      */
     private fun withBatteryCheck(engineIssues: List<HealthIssue>, allPeers: List<PeerSnapshot>): List<HealthIssue> {
-        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
-        if (allPeers.none { it.trusted } || pm.isIgnoringBatteryOptimizations(packageName)) return engineIssues
+        if (allPeers.none { it.trusted } || backgroundAllowed.value) return engineIssues
         val battery = HealthIssue(
             "battery_restricted",
             "Devices disconnect when the screen is off",
@@ -692,7 +714,7 @@ class MainActivity : ComponentActivity() {
                 stopService(Intent(this, LinkAllService::class.java))
                 launchService()
             }
-            "battery_restricted" -> openBatterySettings()
+            "battery_restricted" -> showBackgroundGuide.value = true
         }
     }
 
@@ -821,6 +843,9 @@ class MainActivity : ComponentActivity() {
         if (intent?.getBooleanExtra("request_permissions", false) == true) {
             requestRuntimePermissions()
         }
+        if (intent?.getBooleanExtra(BackgroundAccess.EXTRA_SHOW_GUIDE, false) == true) {
+            showBackgroundGuide.value = true
+        }
     }
 
     override fun onRequestPermissionsResult(
@@ -910,32 +935,6 @@ class MainActivity : ComponentActivity() {
         }
         if (needed.isNotEmpty()) {
             requestPermissions(needed.toTypedArray(), 1004)
-        }
-    }
-
-    private fun openBatterySettings() {
-        runCatching {
-            startActivity(
-                if (BuildConfig.FULL_PERMISSIONS) Intent(
-                    android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-                    android.net.Uri.parse("package:$packageName"))
-                // Play can't ask directly. Link All's own app page is where every
-                // phone keeps this switch (OnePlus and Oppo hide the generic list).
-                else Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    android.net.Uri.parse("package:$packageName"))
-            )
-            if (!BuildConfig.FULL_PERMISSIONS) {
-                Toast.makeText(this, "Open Battery and choose \"Allow background activity\" or \"Unrestricted\"", Toast.LENGTH_LONG).show()
-            }
-        }.onFailure {
-            runCatching {
-                startActivity(Intent(
-                    android.provider.Settings.ACTION_BATTERY_SAVER_SETTINGS))
-            }.onFailure {
-                Toast.makeText(this,
-                    "Open Settings -> Battery -> Link All -> disable optimisation",
-                    Toast.LENGTH_LONG).show()
-            }
         }
     }
 

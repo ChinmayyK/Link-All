@@ -537,6 +537,9 @@ pub(crate) struct EngineShared {
     /// Set while the host says this device is asleep (phone screen off).
     /// Heartbeats and reconnect attempts slow down so the radio can idle.
     pub(crate) local_sleeping: Arc<std::sync::atomic::AtomicBool>,
+    /// Whether this device's OS may pause the app in the background, as the
+    /// host reports it (phones only). Peers learn it in the handshake.
+    pub(crate) local_background_restricted: Arc<std::sync::Mutex<Option<bool>>>,
     /// Battery, storage, network and call state, ours and each peer's.
     pub(crate) device_status: DeviceStatus,
     /// Rate limit for pairing UI spam from untrusted peers.

@@ -110,6 +110,7 @@ class LinkAllService : Service() {
         private const val NOTIF_ID_FILE              = 1003
         private const val NOTIF_ID_FAILURE           = 1004
         private const val NOTIF_ID_CLIPBOARD_AVAILABLE = 1005
+        private const val NOTIF_ID_BACKGROUND_PAUSED = 1006
         private const val NOTIF_ID_FILE_BASE         = 2000  // + (tid.hashCode() and 0xFFF)
         private const val NOTIF_ID_CALL              = 3001  // incoming call banner
 
@@ -250,6 +251,11 @@ class LinkAllService : Service() {
     // Self-connection filter: first 8 chars of our UUID match the NSD service name suffix.
     // Set once the engine starts; used in makeResolveListener() to skip our own advertisement.
     private var myDeviceUuidPrefix: String? = null
+
+    // For telling the user when the phone paused Link All with the screen off.
+    @Volatile private var screenOffAtMs = 0L
+    @Volatile private var linkedAtScreenOff = false
+    @Volatile private var lastPeerDropAtMs = 0L
     private var myDeviceId: String? = null
     private var pendingManualConnectIp: String? = null
     private var pendingManualConnectPort: Int = DEFAULT_LINKALL_PORT
@@ -422,6 +428,10 @@ class LinkAllService : Service() {
             when (intent.action) {
                 Intent.ACTION_SCREEN_ON -> {
                     Log.i(TAG, "Device woke up (Screen ON) — forcing reconnect/discovery")
+                    reportBackgroundAccess()
+                    // A frozen app only sees its connections were closed once
+                    // the phone lets it run again, so look a moment later.
+                    handler.postDelayed(::maybeNotifyPausedInBackground, 5_000)
                     handler.post {
                         val h = engineHandle
                         if (h != 0L) {
@@ -440,6 +450,8 @@ class LinkAllService : Service() {
                 }
                 Intent.ACTION_SCREEN_OFF -> {
                     Log.i(TAG, "Screen OFF: Notifying Rust engine to relax heartbeats")
+                    screenOffAtMs = System.currentTimeMillis()
+                    linkedAtScreenOff = hasConnectedPeers()
                     val h = engineHandle
                     if (h != 0L) {
                         backgroundExecutor.execute { withEngine { live -> LinkAllJni.notifySleepState(live, true) } }
@@ -622,7 +634,53 @@ class LinkAllService : Service() {
             if (intent?.action == null) acquireContinuousLocks()
             startBatteryMonitor()
         }
+        reportBackgroundAccess()
         return true
+    }
+
+    /**
+     * Tells the engine whether Android may pause Link All in the background,
+     * so computers can say why this phone drops off while its screen is off.
+     */
+    private fun reportBackgroundAccess() {
+        val restricted = !BackgroundAccess.isAllowed(this)
+        withEngine { live -> LinkAllJni.setBackgroundRestricted(live, restricted) }
+    }
+
+    /**
+     * Devices were linked when the screen went off and dropped while it was
+     * off, and Android may pause Link All in the background: that pause is the
+     * likely cause, and the user can't see it. Say so, at most once a day,
+     * with a tap to the guide.
+     */
+    private fun maybeNotifyPausedInBackground() {
+        if (!linkedAtScreenOff || lastPeerDropAtMs < screenOffAtMs) return
+        if (BackgroundAccess.isAllowed(this)) return
+        val prefs = prefs()
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong(BackgroundAccess.PREF_PAUSED_NOTICE_AT, 0L) < 24 * 60 * 60 * 1000L) return
+        prefs.edit().putLong(BackgroundAccess.PREF_PAUSED_NOTICE_AT, now).apply()
+        val open = PendingIntent.getActivity(
+            this, NOTIF_ID_BACKGROUND_PAUSED,
+            Intent(this, MainActivity::class.java)
+                .putExtra(BackgroundAccess.EXTRA_SHOW_GUIDE, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val text = "Devices disconnected while the screen was off. Tap to keep Link All running."
+        runCatching {
+            notificationManager.notify(
+                NOTIF_ID_BACKGROUND_PAUSED,
+                NotificationCompat.Builder(this, CHAN_ALERTS)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Your phone paused Link All")
+                    .setContentText(text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setAutoCancel(true)
+                    .setContentIntent(open)
+                    .build()
+            )
+        }.onFailure { Log.w(TAG, "Couldn't show the background notice", it) }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -1837,6 +1895,7 @@ class LinkAllService : Service() {
                     LinkAllJni.eventDeviceName(ev)
                 )
                 Log.i(TAG, "Peer disconnected: $name (id=$deviceId)")
+                lastPeerDropAtMs = System.currentTimeMillis()
                 if (deviceId != null) {
                     connectedPeerIds.remove(deviceId)
                     // No SPEED_TEST_COMPLETE will come for a dropped peer;

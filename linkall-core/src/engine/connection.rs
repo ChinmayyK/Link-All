@@ -130,6 +130,10 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         shared.config.device_id,
         shared.config.device_name.clone(),
         shared.identity_key.clone(),
+        network::Announce {
+            listen_port: None,
+            background_restricted: local_background_restricted(&shared),
+        },
         |peer_id, peer_identity| async move {
             let store = shared_clone.trust.lock().await;
             if store.is_trusted(peer_id) {
@@ -199,6 +203,7 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         hs.peer_device_id,
         hs.peer_app_version,
         hs.peer_platform,
+        hs.peer_background_restricted,
     );
 
     register_session(
@@ -421,7 +426,10 @@ pub(super) async fn connect_once(
         name_to_send,
         shared.identity_key.clone(),
         is_manual_reconnect,
-        (listen_port != 0).then_some(listen_port),
+        network::Announce {
+            listen_port: (listen_port != 0).then_some(listen_port),
+            background_restricted: local_background_restricted(&shared),
+        },
     )
     .await?;
 
@@ -469,6 +477,7 @@ pub(super) async fn connect_once(
         hs.peer_device_id,
         hs.peer_app_version,
         hs.peer_platform,
+        hs.peer_background_restricted,
     );
 
     register_session(
@@ -590,4 +599,11 @@ pub(super) fn pairing_request_message(shared: &EngineShared, target_device: Uuid
             .get(target_device)
             .and_then(|p| p.pairing_pin.clone()),
     }
+}
+
+fn local_background_restricted(shared: &EngineShared) -> Option<bool> {
+    *shared
+        .local_background_restricted
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
 }

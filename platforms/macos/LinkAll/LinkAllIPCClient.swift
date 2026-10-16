@@ -29,6 +29,8 @@ struct IpcPeerRecord: Codable {
     let explicit_disconnect: Bool?
     /// How the last pairing request ended: "accepted", "declined", "cancelled", "expired", "update_needed".
     let pairing_outcome: String?
+    /// The phone said its battery settings may pause Link All in the background.
+    let background_restricted: Bool?
 }
 
 struct IpcStatusResponse: Codable {

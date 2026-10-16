@@ -420,6 +420,8 @@ pub struct HandshakeResult {
     /// Where the peer accepts connections, as the initiator announced it.
     /// None on the initiator's side, and from peers that predate it.
     pub peer_listen_port: Option<u16>,
+    /// Whether the peer's OS may pause it in the background; None if unknown.
+    pub peer_background_restricted: Option<bool>,
 }
 
 /// The OS this build runs on, as peers show it.
@@ -433,17 +435,27 @@ pub const MY_PLATFORM: &str = if cfg!(target_os = "android") {
     "Linux"
 };
 
+/// What this device tells a peer about itself during the handshake.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Announce {
+    /// The initiator's listening port; the responder only sees its outgoing one.
+    pub listen_port: Option<u16>,
+    /// Whether the OS may pause this app in the background, when known.
+    pub background_restricted: Option<bool>,
+}
+
 fn my_metadata_json(
     device_name: &str,
     is_manual_reconnect: bool,
-    listen_port: Option<u16>,
+    announce: Announce,
 ) -> Option<String> {
     serde_json::to_string(&crate::protocol::DeviceMetadata {
         device_name: device_name.to_string(),
         app_version: crate::protocol::APP_VERSION.to_string(),
         platform: MY_PLATFORM.to_string(),
         is_manual_reconnect: Some(is_manual_reconnect),
-        listen_port,
+        listen_port: announce.listen_port,
+        background_restricted: announce.background_restricted,
         ..Default::default()
     })
     .ok()
@@ -466,7 +478,7 @@ pub async fn handshake_initiator(
     my_device_name: &str,
     my_identity_key: std::sync::Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
     is_manual_reconnect: bool,
-    my_listen_port: Option<u16>,
+    announce: Announce,
 ) -> Result<HandshakeResult> {
     let ephemeral = EphemeralKeypair::generate();
     let my_nonce = crate::crypto::random_nonce16();
@@ -504,7 +516,7 @@ pub async fn handshake_initiator(
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
-    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect, my_listen_port);
+    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect, announce);
 
     let mut hello = AppMessage::Hello {
         device_id: my_device_id,
@@ -584,6 +596,7 @@ pub async fn handshake_initiator(
         peer_app_version: ack_metadata.app_version,
         peer_platform: ack_metadata.platform,
         peer_listen_port: None,
+        peer_background_restricted: ack_metadata.background_restricted,
     })
 }
 
@@ -592,6 +605,7 @@ pub async fn handshake_responder<F, Fut>(
     my_device_id: Uuid,
     my_device_name: String,
     my_identity_key: std::sync::Arc<std::sync::RwLock<crate::identity::IdentityKey>>,
+    announce: Announce,
     check_trust: F,
 ) -> Result<HandshakeResult>
 where
@@ -674,7 +688,14 @@ where
         nonce_response,
         identity_proof,
         trusted: peer_is_trusted,
-        metadata_json: my_metadata_json(&my_device_name, false, None),
+        metadata_json: my_metadata_json(
+            &my_device_name,
+            false,
+            Announce {
+                listen_port: None,
+                ..announce
+            },
+        ),
     };
 
     send_encrypted(stream, &mut session, &mut ack)
@@ -692,6 +713,7 @@ where
         peer_app_version: peer_metadata.app_version,
         peer_platform: peer_metadata.platform,
         peer_listen_port: peer_metadata.listen_port.filter(|port| *port != 0),
+        peer_background_restricted: peer_metadata.background_restricted,
     })
 }
 
@@ -926,6 +948,10 @@ mod tests {
                 id_b,
                 "PeerB".to_string(),
                 key_b_clone,
+                Announce {
+                    listen_port: None,
+                    background_restricted: Some(true),
+                },
                 |_, _| async { true },
             )
             .await
@@ -933,16 +959,27 @@ mod tests {
         });
 
         let mut client = TcpStream::connect(addr).await.unwrap();
-        let initiator_result =
-            handshake_initiator(&mut client, id_a, "PeerA", key_a, false, Some(4242))
-                .await
-                .unwrap();
+        let initiator_result = handshake_initiator(
+            &mut client,
+            id_a,
+            "PeerA",
+            key_a,
+            false,
+            Announce {
+                listen_port: Some(4242),
+                background_restricted: None,
+            },
+        )
+        .await
+        .unwrap();
 
         let responder_result = server_handle.await.unwrap();
         assert_eq!(responder_result.peer_device_id, id_a);
         assert_eq!(initiator_result.peer_device_name, "PeerB");
         assert_eq!(responder_result.peer_device_name, "PeerA");
         assert_eq!(responder_result.peer_listen_port, Some(4242));
+        assert_eq!(responder_result.peer_background_restricted, None);
+        assert_eq!(initiator_result.peer_background_restricted, Some(true));
     }
 
     // ── Connect timeout (structural test — doesn't actually hit network) ──────

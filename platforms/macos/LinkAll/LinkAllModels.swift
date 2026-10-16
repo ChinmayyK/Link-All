@@ -33,6 +33,9 @@ struct PeerViewModel: Identifiable, Equatable {
     let explicitDisconnect: Bool
     /// How the last pairing request ended; nil while one is pending.
     var pairingOutcome: String? = nil
+    /// The phone said its battery settings may pause Link All in the
+    /// background, which drops it whenever its screen is off.
+    var backgroundRestricted: Bool = false
 
     // ── Timing ────────────────────────────────────────────────────────────────
     let lastSeen: Date?
@@ -52,6 +55,7 @@ struct PeerViewModel: Identifiable, Equatable {
         if connected && !remoteSyncEnabled { return "Connected · Paused remotely" }
         if connected { return "Connected · Syncing" }
         if explicitDisconnect { return "Disconnected" }
+        if backgroundRestricted { return "Paused by the phone" }
         if trusted && remembered && autoConnect { return "Ready to reconnect" }
         if !syncEnabled { return "Connected · Sync paused" }
         return "Offline"
