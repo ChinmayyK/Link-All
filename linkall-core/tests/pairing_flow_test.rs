@@ -4,23 +4,15 @@
 
 mod common;
 
-use common::{connect, start_pair, wait_for, Node};
+use common::{
+    connect, connected, eventually, peer, start_node, start_pair, trusts, twin_config, wait_for,
+};
 use linkall_core::engine::EngineEvent;
-use linkall_core::peer_manager::{PairingOutcome, PeerRecord};
+use linkall_core::peer_manager::PairingOutcome;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tokio::time::timeout;
 use uuid::Uuid;
-
-async fn peer(node: &Node, id: Uuid) -> PeerRecord {
-    node.engine
-        .status_snapshot()
-        .await
-        .peers
-        .into_iter()
-        .find(|p| p.id == id)
-        .expect("peer in snapshot")
-}
 
 /// Declining tells the requester and closes both sides, but is "not now":
 /// the declined device can still connect, and only a re-ask inside the
@@ -405,68 +397,6 @@ async fn pairing_a_reinstalled_device_replaces_its_old_entry() {
         .map(|r| r.device_id)
         .collect();
     assert_eq!(trusted, vec![b_id]);
-}
-
-fn twin_config(
-    tmp: &TempDir,
-    tag: &str,
-    id: Uuid,
-    name: &str,
-) -> linkall_core::engine::EngineConfig {
-    use std::net::{IpAddr, Ipv4Addr};
-    linkall_core::engine::EngineConfig {
-        device_id: id,
-        device_name: name.into(),
-        port: 0,
-        trust_store_path: tmp.path().join(format!("trust_{tag}.json")),
-        peer_store_path: tmp.path().join(format!("peers_{tag}.json")),
-        identity_path: tmp.path().join(format!("identity_{tag}.key")),
-        settings_path: tmp.path().join(format!("settings_{tag}.json")),
-        data_dir: tmp.path().join(format!("data_{tag}")),
-        file_save_dir: Some(tmp.path().join(format!("received_{tag}"))),
-        bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
-        enable_discovery: false,
-        ..linkall_core::engine::EngineConfig::default()
-    }
-}
-
-async fn start_node(cfg: linkall_core::engine::EngineConfig) -> Node {
-    let id = cfg.device_id;
-    let (tx, rx) = tokio::sync::mpsc::channel(256);
-    let engine = linkall_core::engine::Engine::start(cfg, tx)
-        .await
-        .expect("engine start");
-    Node {
-        engine,
-        events: rx,
-        id,
-    }
-}
-
-fn trusts(tmp: &TempDir, tag: &str, other_id: Uuid, other_name: &str, other_tag: &str) {
-    let key = linkall_core::identity::IdentityStore::new(
-        tmp.path().join(format!("identity_{other_tag}.key")),
-    )
-    .load_or_create()
-    .unwrap();
-    linkall_core::trust::TrustStore::load(tmp.path().join(format!("trust_{tag}.json")))
-        .unwrap()
-        .trust(other_id, other_name.into(), &key.public_bytes)
-        .unwrap();
-}
-
-async fn connected(node: &Node, id: Uuid) -> bool {
-    node.engine.status_snapshot().await.peers.iter().any(|p| {
-        p.id == id && p.status == linkall_core::peer_manager::PeerConnectionState::Connected
-    })
-}
-
-async fn eventually(what: &str, mut check: impl AsyncFnMut() -> bool) {
-    let deadline = Instant::now() + Duration::from_secs(8);
-    while !check().await {
-        assert!(Instant::now() < deadline, "timed out: {what}");
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 }
 
 /// Two devices share a name (two phones of one model). A has paired and

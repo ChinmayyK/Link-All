@@ -172,6 +172,13 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
     // whichever finished first": that choice differs per side, so each end
     // would keep a different TCP stream and close the other's live one.
     let endpoint = stream.peer_addr().context("reading remote address")?;
+    // The connection comes from the peer's outgoing port, which nothing
+    // listens on. Remember the port it announced (older builds always
+    // listen on the default one), or reconnecting to it dials a dead port.
+    let dial_addr = SocketAddr::new(
+        endpoint.ip().to_canonical(),
+        hs.peer_listen_port.unwrap_or(crate::protocol::DEFAULT_PORT),
+    );
     let trusted = observe_trust(
         &shared,
         hs.peer_device_id,
@@ -184,7 +191,7 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
     shared.peer_manager.upsert_peer(
         hs.peer_device_id,
         hs.peer_device_name.clone(),
-        endpoint,
+        dial_addr,
         trusted,
         DiscoverySource::Mdns,
     )?;
@@ -203,7 +210,6 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         hs.session,
         trusted,
         None, // the responder never learns the initiator's verdict
-        DiscoverySource::Mdns,
         Some(hs.pin.display()),
         false, // is_outbound
     )
@@ -406,12 +412,16 @@ pub(super) async fn connect_once(
     // Always send the real device name — name is not a security concern.
     let name_to_send = &shared.config.device_name;
 
+    // Tell the peer where we listen: it sees only our outgoing port, and it
+    // needs the listening one to reconnect to us.
+    let listen_port = shared.network_state.lock().await.bind_addr.port();
     let hs = network::handshake_initiator(
         &mut stream,
         shared.config.device_id,
         name_to_send,
         shared.identity_key.clone(),
         is_manual_reconnect,
+        (listen_port != 0).then_some(listen_port),
     )
     .await?;
 
@@ -470,7 +480,6 @@ pub(super) async fn connect_once(
         hs.session,
         trusted,
         Some(hs.peer_already_trusted),
-        discovery,
         Some(hs.pin.display()),
         true, // is_outbound
     )

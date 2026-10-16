@@ -191,6 +191,10 @@ pub struct DeviceMetadata {
     /// Indicates if the initiator is manually trying to reconnect.
     #[serde(default)]
     pub is_manual_reconnect: Option<bool>,
+    /// The port the initiator accepts connections on. The responder sees only
+    /// the initiator's outgoing port, which can't be dialled back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub listen_port: Option<u16>,
 }
 
 // ── File transfer metadata ────────────────────────────────────────────────────
