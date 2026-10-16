@@ -708,16 +708,22 @@ impl PeerManager {
         };
 
         {
+            // An incoming session's endpoint is the peer's outgoing port,
+            // which can't be dialled; the caller has already recorded where
+            // the peer listens.
+            let dial = is_outbound.then_some(endpoint);
             let mut entry = self.store.entry(device_id).or_insert_with(|| PeerRecord {
                 id: device_id,
-                port: endpoint.port(),
-                ips: vec![endpoint.ip()],
+                port: dial.map_or(crate::protocol::DEFAULT_PORT, |addr| addr.port()),
+                ips: vec![endpoint.ip().to_canonical()],
                 ..PeerRecord::default()
             });
-            if !entry.ips.contains(&endpoint.ip()) {
-                entry.ips.push(endpoint.ip());
+            if let Some(dial) = dial {
+                if !entry.ips.contains(&dial.ip()) {
+                    entry.ips.push(dial.ip());
+                }
+                entry.port = dial.port();
             }
-            entry.port = endpoint.port();
             entry.last_seen = Some(now_secs());
             entry.status = PeerConnectionState::Connected;
             entry.last_error = None;
@@ -784,14 +790,21 @@ impl PeerManager {
     }
 
     pub fn mark_failed(&self, device_id: Uuid, endpoint: SocketAddr, reason: String) -> Result<()> {
-        if let Some(live_endpoint) = self.live_endpoint(device_id) {
+        let live = self
+            .live
+            .get(&device_id)
+            .map(|session| (session.endpoint, session.is_outbound));
+        if let Some((live_endpoint, live_is_outbound)) = live {
             if live_endpoint != endpoint {
                 {
                     if let Some(mut entry) = self.store.get_mut(&device_id) {
-                        if !entry.ips.contains(&live_endpoint.ip()) {
-                            entry.ips.push(live_endpoint.ip());
+                        // Only an outgoing session's endpoint can be dialled again.
+                        if live_is_outbound {
+                            if !entry.ips.contains(&live_endpoint.ip()) {
+                                entry.ips.push(live_endpoint.ip());
+                            }
+                            entry.port = live_endpoint.port();
                         }
-                        entry.port = live_endpoint.port();
                         entry.status = PeerConnectionState::Connected;
                         entry.last_error = Some(reason);
                         entry.last_failure_at = Some(now_secs());

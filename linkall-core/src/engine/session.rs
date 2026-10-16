@@ -130,7 +130,6 @@ pub(super) fn register_session(
     session: crate::crypto::SessionKey,
     trusted: bool,
     peer_trusts_us: Option<bool>,
-    discovery: DiscoverySource,
     session_pin: Option<String>,
     is_outbound: bool,
 ) -> Result<()> {
@@ -141,16 +140,9 @@ pub(super) fn register_session(
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
     let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(8);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
-    match shared
-        .peer_manager
-        .upsert_peer(peer_id, peer_name.clone(), endpoint, trusted, discovery)
-    {
-        Ok(_) => {}
-        Err(e) => {
-            warn!("peer discovery connect failed error={:?}", e);
-            return Err(e);
-        }
-    }
+    // The caller has already recorded the peer, with the address to dial it
+    // back on. `endpoint` is this connection's, which for an incoming one is
+    // the peer's outgoing port.
     let (session_id, replaced, rejected_new) = shared.peer_manager.replace_live_session(
         shared.config.device_id,
         peer_id,
