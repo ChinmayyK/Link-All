@@ -99,3 +99,72 @@ pub async fn wait_for<F: Fn(&EngineEvent) -> bool>(
         }
     }
 }
+
+pub async fn peer(node: &Node, id: Uuid) -> linkall_core::peer_manager::PeerRecord {
+    node.engine
+        .status_snapshot()
+        .await
+        .peers
+        .into_iter()
+        .find(|p| p.id == id)
+        .expect("peer in snapshot")
+}
+
+/// A node's config, with its stores named by `tag` so a test can restart
+/// the same device (same tag) or start a separate one.
+pub fn twin_config(tmp: &TempDir, tag: &str, id: Uuid, name: &str) -> EngineConfig {
+    EngineConfig {
+        device_id: id,
+        device_name: name.into(),
+        port: 0,
+        trust_store_path: tmp.path().join(format!("trust_{tag}.json")),
+        peer_store_path: tmp.path().join(format!("peers_{tag}.json")),
+        identity_path: tmp.path().join(format!("identity_{tag}.key")),
+        settings_path: tmp.path().join(format!("settings_{tag}.json")),
+        data_dir: tmp.path().join(format!("data_{tag}")),
+        file_save_dir: Some(tmp.path().join(format!("received_{tag}"))),
+        bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+        enable_discovery: false,
+        ..EngineConfig::default()
+    }
+}
+
+pub async fn start_node(cfg: EngineConfig) -> Node {
+    let id = cfg.device_id;
+    let (tx, rx) = mpsc::channel(256);
+    let engine = Engine::start(cfg, tx).await.expect("engine start");
+    Node {
+        engine,
+        events: rx,
+        id,
+    }
+}
+
+/// Seeds the trust store of node `tag` with node `other_tag`'s key.
+pub fn trusts(tmp: &TempDir, tag: &str, other_id: Uuid, other_name: &str, other_tag: &str) {
+    let key = IdentityStore::new(tmp.path().join(format!("identity_{other_tag}.key")))
+        .load_or_create()
+        .unwrap();
+    TrustStore::load(tmp.path().join(format!("trust_{tag}.json")))
+        .unwrap()
+        .trust(other_id, other_name.into(), &key.public_bytes)
+        .unwrap();
+}
+
+pub async fn connected(node: &Node, id: Uuid) -> bool {
+    node.engine.status_snapshot().await.peers.iter().any(|p| {
+        p.id == id && p.status == linkall_core::peer_manager::PeerConnectionState::Connected
+    })
+}
+
+pub async fn eventually(what: &str, check: impl AsyncFnMut() -> bool) {
+    eventually_within(Duration::from_secs(8), what, check).await
+}
+
+pub async fn eventually_within(limit: Duration, what: &str, mut check: impl AsyncFnMut() -> bool) {
+    let deadline = Instant::now() + limit;
+    while !check().await {
+        assert!(Instant::now() < deadline, "timed out: {what}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
