@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{connected, eventually, eventually_within, start_pair, Node};
+use common::{connected, eventually, eventually_within, start_pair, wait_for_disconnect, Node};
 use linkall_core::engine::EngineEvent;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -120,10 +120,7 @@ async fn a_transfer_cut_off_by_a_drop_finishes_after_reconnecting() {
     wait_for_progress(&mut phone, 40).await;
 
     relay.cut();
-    eventually_within(Duration::from_secs(20), "the drop is noticed", async || {
-        !connected(&computer, phone.id).await
-    })
-    .await;
+    wait_for_disconnect(&mut computer, phone.id, Duration::from_secs(20)).await;
     eventually_within(
         Duration::from_secs(60),
         "they reconnect by themselves",

@@ -5,7 +5,7 @@
 
 mod common;
 
-use common::{connected, eventually, eventually_within, start_pair};
+use common::{connected, eventually, eventually_within, start_pair, wait_for_disconnect};
 use linkall_core::protocol::ClipboardContent;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -72,7 +72,7 @@ async fn pipe(
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_sleeping_phone_that_went_silent_is_noticed_after_a_send() {
     let tmp = TempDir::new().unwrap();
-    let (phone, computer) = start_pair(&tmp, true, true).await;
+    let (phone, mut computer) = start_pair(&tmp, true, true).await;
     let relay = Relay::start(computer.engine.bound_port().await).await;
     phone
         .engine
@@ -93,12 +93,7 @@ async fn a_sleeping_phone_that_went_silent_is_noticed_after_a_send() {
         .engine
         .push_clipboard(ClipboardContent::Text("hello".into()))
         .await;
-    eventually_within(
-        Duration::from_secs(30),
-        "the computer notices the phone is gone",
-        async || !connected(&computer, phone.id).await,
-    )
-    .await;
+    wait_for_disconnect(&mut computer, phone.id, Duration::from_secs(30)).await;
 }
 
 /// The network drops out for a while (the computer slept, the router
@@ -107,7 +102,7 @@ async fn a_sleeping_phone_that_went_silent_is_noticed_after_a_send() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn after_an_outage_both_sides_reconnect_by_themselves() {
     let tmp = TempDir::new().unwrap();
-    let (phone, computer) = start_pair(&tmp, true, true).await;
+    let (mut phone, mut computer) = start_pair(&tmp, true, true).await;
     let relay = Relay::start(computer.engine.bound_port().await).await;
     phone
         .engine
@@ -125,12 +120,8 @@ async fn after_an_outage_both_sides_reconnect_by_themselves() {
     relay.go_silent();
     // Asleep, each side pings once a minute, so with nothing sent the dead
     // link shows up within about 72 s (a minute plus the reply timeout).
-    eventually_within(
-        Duration::from_secs(90),
-        "both sides notice the link is gone",
-        async || !connected(&computer, phone.id).await && !connected(&phone, computer.id).await,
-    )
-    .await;
+    wait_for_disconnect(&mut computer, phone.id, Duration::from_secs(90)).await;
+    wait_for_disconnect(&mut phone, computer.id, Duration::from_secs(90)).await;
 
     relay.deliver_again();
     eventually_within(
