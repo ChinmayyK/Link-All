@@ -352,6 +352,16 @@ private struct GroupedDynamicIslandTransferCard: View {
         return Double(totalPercent) / Double(transfers.count * 100)
     }
 
+    /// "To Pixel", "From 2 devices", or both ways at once.
+    var directionLine: String {
+        let names = Set(transfers.map(\.fromDeviceName))
+        let who = names.count == 1 ? (names.first ?? "") : "\(names.count) devices"
+        let sending = transfers.filter(\.isOutbound).count
+        if sending == transfers.count { return "To \(who)" }
+        if sending == 0 { return "From \(who)" }
+        return "Sending and receiving"
+    }
+
     var exactPercentString: String {
         String(format: "%.1f%%", exactRatio * 100.0)
     }
@@ -378,7 +388,7 @@ private struct GroupedDynamicIslandTransferCard: View {
                         .lineLimit(1)
                 }
                 
-                Text("From \(transfers.first?.fromDeviceName ?? "Multiple Devices")")
+                Text(directionLine)
                     .font(.system(size: 12, weight: .medium, design: .default))
                     .foregroundStyle(Color.primary.opacity(0.7))
                     .lineLimit(1)
