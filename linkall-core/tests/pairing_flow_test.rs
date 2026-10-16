@@ -406,3 +406,145 @@ async fn pairing_a_reinstalled_device_replaces_its_old_entry() {
         .collect();
     assert_eq!(trusted, vec![b_id]);
 }
+
+fn twin_config(
+    tmp: &TempDir,
+    tag: &str,
+    id: Uuid,
+    name: &str,
+) -> linkall_core::engine::EngineConfig {
+    use std::net::{IpAddr, Ipv4Addr};
+    linkall_core::engine::EngineConfig {
+        device_id: id,
+        device_name: name.into(),
+        port: 0,
+        trust_store_path: tmp.path().join(format!("trust_{tag}.json")),
+        peer_store_path: tmp.path().join(format!("peers_{tag}.json")),
+        identity_path: tmp.path().join(format!("identity_{tag}.key")),
+        settings_path: tmp.path().join(format!("settings_{tag}.json")),
+        data_dir: tmp.path().join(format!("data_{tag}")),
+        file_save_dir: Some(tmp.path().join(format!("received_{tag}"))),
+        bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
+        enable_discovery: false,
+        ..linkall_core::engine::EngineConfig::default()
+    }
+}
+
+async fn start_node(cfg: linkall_core::engine::EngineConfig) -> Node {
+    let id = cfg.device_id;
+    let (tx, rx) = tokio::sync::mpsc::channel(256);
+    let engine = linkall_core::engine::Engine::start(cfg, tx)
+        .await
+        .expect("engine start");
+    Node {
+        engine,
+        events: rx,
+        id,
+    }
+}
+
+fn trusts(tmp: &TempDir, tag: &str, other_id: Uuid, other_name: &str, other_tag: &str) {
+    let key = linkall_core::identity::IdentityStore::new(
+        tmp.path().join(format!("identity_{other_tag}.key")),
+    )
+    .load_or_create()
+    .unwrap();
+    linkall_core::trust::TrustStore::load(tmp.path().join(format!("trust_{tag}.json")))
+        .unwrap()
+        .trust(other_id, other_name.into(), &key.public_bytes)
+        .unwrap();
+}
+
+async fn connected(node: &Node, id: Uuid) -> bool {
+    node.engine.status_snapshot().await.peers.iter().any(|p| {
+        p.id == id && p.status == linkall_core::peer_manager::PeerConnectionState::Connected
+    })
+}
+
+async fn eventually(what: &str, mut check: impl AsyncFnMut() -> bool) {
+    let deadline = Instant::now() + Duration::from_secs(8);
+    while !check().await {
+        assert!(Instant::now() < deadline, "timed out: {what}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// Two devices share a name (two phones of one model). A has paired and
+/// talked to the first; its app then dies (no goodbye) and the second pairs
+/// with A. A takes the first for an old install and sets it aside. When the
+/// first comes back it must get in, keep its pairing and stay connected.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_second_device_with_the_same_name_keeps_its_pairing() {
+    let tmp = TempDir::new().unwrap();
+    let (a_id, b_id, twin_id) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    trusts(&tmp, "a", b_id, "NodeB", "b");
+    trusts(&tmp, "b", a_id, "NodeA", "a");
+    let mut a = start_node(twin_config(&tmp, "a", a_id, "NodeA")).await;
+
+    // The first NodeB runs in its own runtime, so it can die like an app.
+    let b_rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(1)
+        .enable_all()
+        .build()
+        .unwrap();
+    let b_cfg = twin_config(&tmp, "b", b_id, "NodeB");
+    let b = std::thread::spawn(move || {
+        let node = b_rt.block_on(start_node(b_cfg));
+        (b_rt, node)
+    })
+    .join()
+    .unwrap();
+    let (b_rt, b) = b;
+    let b_port = b.engine.bound_port().await;
+    a.engine
+        .connect_to_peer("127.0.0.1".into(), b_port)
+        .await
+        .expect("A connects to B");
+    eventually("A sees B", async || connected(&a, b_id).await).await;
+
+    // B's process dies.
+    drop(b);
+    std::thread::spawn(move || b_rt.shutdown_timeout(Duration::from_secs(2)))
+        .join()
+        .unwrap();
+    eventually("A notices B is gone", async || !connected(&a, b_id).await).await;
+
+    // A second device, also called "NodeB", pairs with A.
+    let twin = start_node(twin_config(&tmp, "twin", twin_id, "NodeB")).await;
+    connect(&twin, &a).await;
+    twin.engine.send_pairing_request(a_id).await;
+    wait_for(
+        &mut a.events,
+        "request from the twin on A",
+        |e| matches!(e, EngineEvent::PairingRequested { device_id, .. } if *device_id == twin_id),
+    )
+    .await;
+    a.engine.respond_to_pairing(twin_id, true).await.unwrap();
+    eventually("the twin is paired", async || {
+        a.engine.is_trusted(twin_id).await
+    })
+    .await;
+    assert!(
+        !a.engine.is_trusted(b_id).await,
+        "the offline NodeB is set aside"
+    );
+    // Set aside, not forgotten: a forgotten device's automatic reconnects are
+    // refused, so it could never get back to have its trust restored.
+    assert!(
+        !peer(&a, b_id).await.explicit_disconnect,
+        "A must still accept the first NodeB's automatic reconnects"
+    );
+
+    // The first NodeB starts again and dials A, as its app would.
+    let b = start_node(twin_config(&tmp, "b", b_id, "NodeB")).await;
+    connect(&b, &a).await;
+    eventually(
+        "the first NodeB is paired and connected again",
+        async || a.engine.is_trusted(b_id).await && connected(&a, b_id).await,
+    )
+    .await;
+    assert!(
+        a.engine.is_trusted(twin_id).await,
+        "both devices stay paired"
+    );
+}

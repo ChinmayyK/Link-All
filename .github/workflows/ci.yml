@@ -93,7 +93,9 @@ jobs:
           sudo systemctl start avahi-daemon || true
       - name: Run integration tests
         run: cargo test --workspace --tests
-        timeout-minutes: 5
+        # The transfer pause/resume tests alone take 1-1.5 min on a shared
+        # runner; 5 minutes cut off runs where every test passed.
+        timeout-minutes: 10
 
   # ── Benchmarks (compile check only, no execution) ────────────────────────
   bench-check:
