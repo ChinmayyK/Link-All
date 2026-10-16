@@ -96,6 +96,23 @@ impl crate::engine::Engine {
             false,
         );
 
+        // A copy for every device becomes the clipboard to catch up a device
+        // that is away now; one aimed at a single device does not.
+        let copied_at = LatestClipboard::now_ms();
+        if matches!(target, SyncTarget::All) {
+            *self
+                .shared
+                .latest_clipboard
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()) = Some(LatestClipboard {
+                content: std::sync::Arc::clone(&shared_content),
+                seq,
+                origin_device: self.shared.config.device_id,
+                origin_device_name: self.shared.config.device_name.clone(),
+                at_ms: copied_at,
+            });
+        }
+
         let peers = self.shared.peer_manager.active_senders();
         let mut report = SyncDispatchReport {
             seq,

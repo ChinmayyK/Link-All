@@ -179,6 +179,8 @@ impl Engine {
             )),
             local_sleeping: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             local_background_restricted: Arc::new(std::sync::Mutex::new(None)),
+            latest_clipboard: Arc::new(std::sync::Mutex::new(None)),
+            clipboard_seen_by: Arc::new(dashmap::DashMap::new()),
             device_status: DeviceStatus::default(),
 
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),

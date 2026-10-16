@@ -131,6 +131,7 @@ pub(super) fn register_session(
     trusted: bool,
     peer_trusts_us: Option<bool>,
     session_pin: Option<String>,
+    peer_clipboard_at: Option<u64>,
     is_outbound: bool,
 ) -> Result<()> {
     // File chunks get their own small queue: 8 × 4 MB = 32 MB waiting to be
@@ -301,6 +302,20 @@ pub(super) fn register_session(
                 }
             }
         });
+    }
+
+    // The clipboard changed here while this peer was away: send it now,
+    // unless the peer's own clipboard changed later. Both sides make the same
+    // comparison, so only the newer clipboard travels.
+    if let Some(latest) = clipboard_to_catch_up(&shared, peer_id, peer_clipboard_at) {
+        let msg = AppMessage::ClipboardPush {
+            seq: latest.seq,
+            content: latest.content.clone(),
+            origin_device: latest.origin_device,
+            origin_device_name: latest.origin_device_name.clone(),
+            relay_path: vec![shared.config.device_name.clone()],
+        };
+        let _ = outbox_tx.try_send(msg);
     }
 
     // MED-02: wrap the session task in a JoinHandle watcher so that panics
@@ -910,4 +925,32 @@ pub(super) fn register_session(
     });
 
     Ok(())
+}
+
+/// How long a clipboard stays worth sending to a device that missed it.
+const CLIPBOARD_CATCH_UP_WINDOW_MS: u64 = 30 * 60 * 1000;
+
+fn clipboard_to_catch_up(
+    shared: &EngineShared,
+    peer_id: Uuid,
+    peer_clipboard_at: Option<u64>,
+) -> Option<LatestClipboard> {
+    let latest = shared
+        .latest_clipboard
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone()?;
+    let fresh =
+        LatestClipboard::now_ms().saturating_sub(latest.at_ms) < CLIPBOARD_CATCH_UP_WINDOW_MS;
+    let missed = shared
+        .clipboard_seen_by
+        .get(&peer_id)
+        .is_none_or(|seen| *seen < latest.at_ms);
+    let newer_than_theirs = peer_clipboard_at.is_none_or(|theirs| theirs < latest.at_ms);
+    let came_from_them = latest.origin_device == peer_id;
+    let wants_it = shared
+        .peer_manager
+        .get(peer_id)
+        .is_some_and(|peer| peer.is_sync_eligible() && peer.remote_sync_enabled);
+    (fresh && missed && newer_than_theirs && !came_from_them && wants_it).then_some(latest)
 }
