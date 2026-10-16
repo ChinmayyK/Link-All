@@ -114,9 +114,7 @@ class LinkAllNotificationListener : NotificationListenerService() {
      * background, which would otherwise crash the app on the next message.
      */
     private fun relay(intent: Intent) {
-        val running = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
-            .getBoolean(LinkAllService.PREF_SERVICE_RUNNING, false)
-        if (!running) return
+        if (!LinkAllService.isRunning(this)) return
         try {
             startService(intent)
         } catch (e: IllegalStateException) {

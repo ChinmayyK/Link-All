@@ -194,6 +194,15 @@ class LinkAllService : Service() {
         private const val PREF_RECENT_MANUAL = "recent_manual_addresses"
         private const val MAX_RECENT_MANUAL  = 5
 
+        /**
+         * Whether Link All is meant to be running: false once the user stopped
+         * it. Stays true when Android kills the process, so background events
+         * (a notification, a call) bring the service back then, and only then.
+         */
+        fun isRunning(context: Context): Boolean =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(PREF_SERVICE_RUNNING, false)
+
         fun recentManualAddresses(context: Context): List<String> =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .getString(PREF_RECENT_MANUAL, null)
