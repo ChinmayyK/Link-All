@@ -12,8 +12,7 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-  xmlns:desktop6="http://schemas.microsoft.com/appx/manifest/desktop/windows10/6"
-  IgnorableNamespaces="uap rescap desktop desktop6">
+  IgnorableNamespaces="uap rescap desktop">
 
   <Identity
     Name="ChinmayKudalkar.LinkAll"
@@ -24,13 +23,9 @@
     <DisplayName>Link All – Phone &amp; Computer</DisplayName>
     <PublisherDisplayName>Chinmay Kudalkar</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <!-- Keep the device identity, trust store and settings in the real
-         %LOCALAPPDATA%\linkall, the folder the MSI install uses. With write
-         virtualization a packaged install writes a private copy instead,
-         which an uninstall deletes: the device then comes back with a new
-         identity and every paired device lists it twice. -->
-    <desktop6:FileSystemWriteVirtualization>disabled</desktop6:FileSystemWriteVirtualization>
-    <desktop6:RegistryWriteVirtualization>disabled</desktop6:RegistryWriteVirtualization>
+    <!-- Writes to %LOCALAPPDATA% and HKCU are virtualized: the Store build
+         keeps its data in the package's own copy, which updates keep and an
+         uninstall removes. The Store doesn't allow unvirtualizedResources. -->
   </Properties>
 
   <Dependencies>
@@ -55,6 +50,14 @@
         <uap:SplashScreen Image="Assets\SplashScreen.png" />
       </uap:VisualElements>
       <Extensions>
+        <!-- linkall:// pairing links. The registry entry the installer build
+             writes is private to the package here, so Windows learns of the
+             scheme from this; App handles the Protocol activation. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="linkall">
+            <uap:DisplayName>Link All</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
         <!-- "Start with Windows" in Settings turns this on (StartupRegistration.cs).
              It starts the app with no arguments; App treats that as a tray-only launch. -->
         <desktop:Extension Category="windows.startupTask">
@@ -68,6 +71,5 @@
     <Capability Name="internetClientServer" />
     <Capability Name="privateNetworkClientServer" />
     <rescap:Capability Name="runFullTrust" />
-    <rescap:Capability Name="unvirtualizedResources" />
   </Capabilities>
 </Package>
