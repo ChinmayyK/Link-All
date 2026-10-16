@@ -12,15 +12,43 @@ namespace LinkAll.WinUI.Views
         public LinkAllStore mgr => LinkAllStore.Shared;
         public ObservableCollection<ActivityEntry> FilteredFeed { get; } = new ObservableCollection<ActivityEntry>();
         private string _activeFilter = "All";
+        private ObservableCollection<ActivityEntry>? _watchedFeed;
 
         public ClipboardView()
         {
             this.InitializeComponent();
-            mgr.ActivityFeed.CollectionChanged += OnActivityFeedChanged;
+            WatchFeed(mgr.ActivityFeed);
+            mgr.PropertyChanged += OnStorePropertyChanged;
             this.Unloaded += (s, e) => {
-                try { mgr.ActivityFeed.CollectionChanged -= OnActivityFeedChanged; } catch (Exception ex) { App.HandleError(ex); }
+                try
+                {
+                    mgr.PropertyChanged -= OnStorePropertyChanged;
+                    WatchFeed(null);
+                }
+                catch (Exception ex) { App.HandleError(ex); }
             };
             UpdateFilter();
+        }
+
+        // The store swaps in a new ActivityFeed collection whenever the
+        // daemon reports new entries, so listening only to the collection
+        // this page started with left an open Clipboard page frozen until
+        // it was navigated away from and back. Follow the swap.
+        private void WatchFeed(ObservableCollection<ActivityEntry>? feed)
+        {
+            if (_watchedFeed != null) _watchedFeed.CollectionChanged -= OnActivityFeedChanged;
+            _watchedFeed = feed;
+            if (_watchedFeed != null) _watchedFeed.CollectionChanged += OnActivityFeedChanged;
+        }
+
+        private void OnStorePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        {
+            if (e.PropertyName != nameof(LinkAllStore.ActivityFeed)) return;
+            DispatcherQueue?.TryEnqueue(() =>
+            {
+                WatchFeed(mgr.ActivityFeed);
+                UpdateFilter();
+            });
         }
 
         private void OnActivityFeedChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
