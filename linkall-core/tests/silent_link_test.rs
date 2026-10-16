@@ -123,8 +123,10 @@ async fn after_an_outage_both_sides_reconnect_by_themselves() {
     phone.engine.notify_sleep_state(true).await;
     tokio::time::sleep(Duration::from_millis(500)).await;
     relay.go_silent();
+    // Asleep, each side pings once a minute, so with nothing sent the dead
+    // link shows up within about 72 s (a minute plus the reply timeout).
     eventually_within(
-        Duration::from_secs(40),
+        Duration::from_secs(90),
         "both sides notice the link is gone",
         async || !connected(&computer, phone.id).await && !connected(&phone, computer.id).await,
     )
