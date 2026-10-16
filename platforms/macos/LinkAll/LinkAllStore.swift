@@ -38,6 +38,10 @@ final class LinkAllStore: ObservableObject {
     @Published var activityFeed: [IpcActivityEntry] = []
     @Published var activeTransfers: [FileTransferState] = []
     @Published var healthIssues: [IpcHealthIssue] = []
+    /// macOS is blocking Link All from the local network (see LocalNetworkAccess).
+    @Published var localNetworkDenied = false
+    private var localNetworkAccess: LocalNetworkAccess?
+    private var daemonHealth: [IpcHealthIssue] = []
     @Published var folderProgress: [String: IpcFolderProgress] = [:]
     
     var batchedTransfers: [FileTransferState] {
@@ -117,6 +121,28 @@ final class LinkAllStore: ObservableObject {
     init(ipc: LinkAllIPCClient = .shared) {
         self.ipc = ipc
         startPolling()
+        let access = LocalNetworkAccess { [weak self] denied in
+            guard let self, self.localNetworkDenied != denied else { return }
+            self.localNetworkDenied = denied
+            self.publishHealth()
+        }
+        access.start()
+        localNetworkAccess = access
+    }
+
+    /// The daemon's issues, led by the one only the app can see: without
+    /// local network access nothing else can work.
+    private func publishHealth() {
+        var health = daemonHealth
+        if localNetworkDenied {
+            health.insert(IpcHealthIssue(
+                kind: "local_network_denied",
+                title: "macOS is blocking Link All from your network",
+                detail: "Link All can't reach your devices until you allow it. Open Privacy & Security › Local Network and turn on Link All.",
+                device_id: nil
+            ), at: 0)
+        }
+        if health != healthIssues { healthIssues = health }
     }
 
     // MARK: - Computed / Bridging
@@ -398,8 +424,8 @@ final class LinkAllStore: ObservableObject {
             }
 
             set(\.pendingClipboardCount, s.pending_clipboard_count ?? 0)
-            let health = s.health ?? []
-            if health != healthIssues { healthIssues = health }
+            daemonHealth = s.health ?? []
+            publishHealth()
             let folders = Dictionary((s.folders ?? []).map { ($0.batch_id, $0) }, uniquingKeysWith: { a, _ in a })
             if folders != folderProgress { folderProgress = folders }
             if let fp = s.local_fingerprint { set(\.localFingerprint, fp) }

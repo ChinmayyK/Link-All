@@ -41,6 +41,7 @@ struct HealthBanner: View {
     private var actionLabel: String? {
         switch issue.kind {
         case "no_network": return "Network Settings"
+        case "local_network_denied": return "Open Settings"
         case "sync_paused": return "Resume Sync"
         case "devices_not_found", "connection_blocked": return "Search Again"
         default: return nil
@@ -51,6 +52,10 @@ struct HealthBanner: View {
         switch issue.kind {
         case "no_network":
             if let url = URL(string: "x-apple.systempreferences:com.apple.Network-Settings.extension") {
+                NSWorkspace.shared.open(url)
+            }
+        case "local_network_denied":
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_LocalNetwork") {
                 NSWorkspace.shared.open(url)
             }
         case "sync_paused":
