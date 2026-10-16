@@ -472,7 +472,11 @@ fn linux_netlink_change_hints(tx: mpsc::Sender<()>) -> Result<()> {
             let recv_len = unsafe { libc::recv(fd, buf.as_mut_ptr() as *mut _, buf.len(), 0) };
             if recv_len < 0 {
                 let err = std::io::Error::last_os_error();
+                // EINTR: a signal landed mid-read, as when the process is
+                // stopped and resumed (suspend, a frozen container). The
+                // watcher used to give up there for good.
                 if err.kind() == std::io::ErrorKind::WouldBlock
+                    || err.kind() == std::io::ErrorKind::Interrupted
                     || err.raw_os_error() == Some(libc::EAGAIN)
                     || err.raw_os_error() == Some(libc::EWOULDBLOCK)
                 {
