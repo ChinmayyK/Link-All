@@ -2226,6 +2226,23 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_notifyNetworkRestored(
     0
 }
 
+/// Whether Android may pause Link All in the background (battery limits on).
+/// Computers learn it on their next connection.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_setBackgroundRestricted(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    restricted: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    h.engine.set_background_restricted(restricted != 0);
+    0
+}
+
 #[no_mangle]
 pub extern "system" fn Java_app_linkall_LinkAllJni_notifySleepState(
     _env: JNIEnv,

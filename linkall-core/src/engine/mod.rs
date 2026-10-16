@@ -178,6 +178,7 @@ impl Engine {
                     .as_millis() as u64,
             )),
             local_sleeping: Arc::new(std::sync::atomic::AtomicBool::new(false)),
+            local_background_restricted: Arc::new(std::sync::Mutex::new(None)),
             device_status: DeviceStatus::default(),
 
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
@@ -474,6 +475,17 @@ impl Engine {
             .store(now_millis, std::sync::atomic::Ordering::Relaxed);
 
         reconnect_known_peers(self.shared.clone()).await;
+    }
+
+    /// Records whether the OS may pause this app in the background (a
+    /// phone's battery limits). Peers learn it on their next connection, so
+    /// they can explain why this device drops off while its screen is off.
+    pub fn set_background_restricted(&self, restricted: bool) {
+        *self
+            .shared
+            .local_background_restricted
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(restricted);
     }
 
     /// Broadcast sleep state to all connected peers.
