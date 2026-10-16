@@ -86,6 +86,9 @@
                                    Style="{StaticResource AppCaption}" VerticalAlignment="Center"
                                    Visibility="{x:Bind LastSeenText, Converter={StaticResource StringToVisibilityConverter}, Mode=OneWay}" />
                     </StackPanel>
+                    <TextBlock Text="Your phone is pausing Link All to save battery, so it drops off when the screen is off. On the phone, open Link All and tap Allow on the battery notice."
+                               Style="{StaticResource AppCaption}" TextWrapping="Wrap" Margin="0,2,0,0"
+                               Visibility="{x:Bind IsPausedByPhone, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
                     <ProgressBar IsIndeterminate="True" Height="2" Margin="0,6,0,0"
                                  Visibility="{x:Bind ShowTransferIndicator, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}" />
                 </StackPanel>
