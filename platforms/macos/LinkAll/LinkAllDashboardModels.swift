@@ -243,6 +243,9 @@ struct ManagedDevice: Identifiable {
     let ip: String?
     let explicitDisconnect: Bool
     let pairingOutcome: String?
+    /// Offline because the phone's battery settings pause Link All in the
+    /// background (it said so when it last connected).
+    let pausedByPhone: Bool
     /// "Android", "macOS", "Windows" or "Linux"; nil until the device connects with 1.3.4+.
     let platform: String?
     var os: DeviceOS { DeviceOS(platform: platform, name: rawName) }
@@ -301,6 +304,7 @@ struct ManagedDevice: Identifiable {
         self.outgoingPairingWaiting = peer.outgoingPairingWaiting
         self.pairingPin      = peer.pairingPin
         self.pairingOutcome  = peer.pairingOutcome
+        self.pausedByPhone   = peer.backgroundRestricted && !peer.connected && !peer.explicitDisconnect
     }
 }
 

@@ -179,8 +179,18 @@ struct DeviceCard: View {
                 .transition(.opacity)
             }
 
-            // Error
-            if let err = device.lastError, !err.isEmpty {
+            // The phone's battery settings, not the network, keep it offline.
+            if device.pausedByPhone {
+                CRDivider().padding(.horizontal, 14)
+                VStack(alignment: .leading, spacing: 3) {
+                    Label("Your phone is pausing Link All", systemImage: "battery.25percent")
+                        .font(.system(size: 11, weight: .semibold)).foregroundStyle(CRTheme.accentOrange)
+                    Text("It stops Link All in the background to save battery, so it drops off when the screen is off. On the phone, open Link All and tap Allow on the battery notice.")
+                        .font(.system(size: 11)).foregroundStyle(CRTheme.inkSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 6)
+            } else if let err = device.lastError, !err.isEmpty {
                 CRDivider().padding(.horizontal, 14)
                 Label(err, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 11)).foregroundStyle(CRTheme.accentOrange)

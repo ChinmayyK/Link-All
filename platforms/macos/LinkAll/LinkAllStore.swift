@@ -1384,6 +1384,7 @@ final class LinkAllStore: ObservableObject {
             pairingPin: raw.pairing_pin,
             explicitDisconnect: raw.explicit_disconnect ?? false,
             pairingOutcome: raw.pairing_outcome,
+            backgroundRestricted: raw.background_restricted ?? false,
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastDiscoveryAt: raw.last_discovery_at.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },
