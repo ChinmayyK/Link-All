@@ -664,6 +664,21 @@ pub(super) fn register_session(
                         break format!("heartbeat timeout (sleeping: {is_sleeping}, time_since_seen: {time_since_seen}, time_since_wake: {time_since_wake})");
                     }
 
+                    // A ping nobody answered means the link is gone, asleep
+                    // or not: sleep only spares the peer from pinging often,
+                    // it still answers. Without this a phone that left Wi-Fi
+                    // with its screen off stayed "connected" for hours.
+                    let reply_timeout = shared.config.heartbeat_timeout.as_millis() as u64;
+                    let unanswered_ms = ping_sent_at
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .map(|sent| sent.elapsed().as_millis() as u64);
+                    if let Some(waited) = unanswered_ms {
+                        if waited > reply_timeout && time_since_wake > reply_timeout {
+                            break format!("no reply to ping in {waited} ms (sleeping: {is_sleeping})");
+                        }
+                    }
+
                     shared.file_transfers.lock().await.prune_stale_transfers();
 
                     // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
@@ -685,6 +700,21 @@ pub(super) fn register_session(
                 Some(mut msg) = outbox_rx.recv() => {
                     if let Err(err) = sess_tx.send(&mut msg).await {
                         break format!("send failed: {err}");
+                    }
+                    // Clipboard sent to a sleeping peer: ask for a reply too,
+                    // so a dead link shows up now, not at the next rare ping.
+                    let peer_asleep = peer_sleeping.load(std::sync::atomic::Ordering::Relaxed);
+                    if peer_asleep && matches!(msg, AppMessage::ClipboardPush { .. }) {
+                        let start_ping = {
+                            let mut slot = ping_sent_at.lock().unwrap_or_else(|e| e.into_inner());
+                            slot.is_none() && slot.replace(std::time::Instant::now()).is_none()
+                        };
+                        if start_ping {
+                            let mut ping = probe::make_ping();
+                            if let Err(err) = sess_tx.send(&mut ping).await {
+                                break format!("heartbeat send failed: {err}");
+                            }
+                        }
                     }
                 }
                 Some(mut msg) = file_outbox_rx.recv() => {
