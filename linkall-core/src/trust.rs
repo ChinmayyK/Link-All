@@ -144,7 +144,21 @@ struct StoreData {
     /// `clear_old_installs_once`).
     #[serde(default)]
     old_installs_cleared: bool,
+    /// Entries `retire_old_installs` set aside as old installs. Kept with
+    /// their key for a while: if one connects again it was a second device
+    /// that shares the name, not an old install, and its trust comes back.
+    #[serde(default)]
+    retired: HashMap<Uuid, RetiredRecord>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RetiredRecord {
+    record: TrustRecord,
+    retired_at: u64,
+}
+
+/// How long a retired entry can come back before it is forgotten for good.
+const RETIRED_KEEP_SECS: u64 = 30 * 24 * 60 * 60;
 
 pub struct TrustStore {
     data: StoreData,
@@ -186,7 +200,10 @@ impl TrustStore {
             }
             data.legacy_blocks_cleared = true;
         }
-        Ok(Self { data, path })
+        let mut store = Self { data, path };
+        // Written out with the next change; nothing reads expired entries.
+        store.prune_retired();
+        Ok(store)
     }
 
     pub fn save(&self) -> Result<()> {
@@ -236,6 +253,7 @@ impl TrustStore {
             fingerprint,
             now,
         )?;
+        self.restore_if_retired(device_id, fingerprint);
         let record = self
             .data
             .devices
@@ -425,12 +443,55 @@ impl TrustStore {
             .map(|r| r.device_id)
             .collect();
         if !retired.is_empty() {
+            let now = now_secs();
             for id in &retired {
-                self.data.devices.remove(id);
+                if let Some(record) = self.data.devices.remove(id) {
+                    self.data.retired.insert(
+                        *id,
+                        RetiredRecord {
+                            record,
+                            retired_at: now,
+                        },
+                    );
+                }
             }
             self.save()?;
         }
         Ok(retired)
+    }
+
+    /// A retired entry whose exact key connects again belonged to a second
+    /// device with the same name. It was paired before, so its trust comes
+    /// back instead of making the user pair it again.
+    fn restore_if_retired(&mut self, device_id: Uuid, fingerprint: [u8; 32]) {
+        if self.data.devices.contains_key(&device_id) {
+            return;
+        }
+        let matches = self
+            .data
+            .retired
+            .get(&device_id)
+            .is_some_and(|r| r.record.key_fingerprint == fingerprint);
+        if matches {
+            if let Some(retired) = self.data.retired.remove(&device_id) {
+                tracing::info!(
+                    device = %device_id,
+                    name = %retired.record.device_name,
+                    "a device retired as an old install connected again; its trust is restored"
+                );
+                self.data.devices.insert(device_id, retired.record);
+            }
+        }
+    }
+
+    /// Forgets retired entries that never came back.
+    fn prune_retired(&mut self) -> bool {
+        let now = now_secs();
+        let before = self.data.retired.len();
+        self.data
+            .retired
+            .retain(|_, r| now.saturating_sub(r.retired_at) < RETIRED_KEEP_SECS);
+        self.data.retired.len() != before
     }
 
     /// Clears the duplicates that reinstalls left before
@@ -732,6 +793,70 @@ mod tests {
         assert!(store.is_trusted(online_twin));
         assert!(store.is_trusted(other));
         assert!(store.is_trusted(new));
+    }
+
+    #[test]
+    fn a_second_device_with_the_same_name_gets_its_trust_back() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let (phone_a, phone_b) = (Uuid::new_v4(), Uuid::new_v4());
+        store
+            .observe_peer(phone_a, "OnePlus Nord 4".into(), &[1; 32])
+            .unwrap();
+        store.trust_peer(phone_a).unwrap();
+        store
+            .observe_peer(phone_b, "OnePlus Nord 4".into(), &[2; 32])
+            .unwrap();
+        store.trust_peer(phone_b).unwrap();
+
+        // Pairing B while A is offline looks like a reinstall of A.
+        assert_eq!(
+            store.retire_old_installs(phone_b, |_| false).unwrap(),
+            vec![phone_a]
+        );
+        assert!(!store.is_trusted(phone_a));
+
+        // A connects with its own key: it was a real second phone.
+        let store_path = file.path().to_path_buf();
+        let mut store = TrustStore::load(&store_path).unwrap();
+        store
+            .observe_peer(phone_a, "OnePlus Nord 4".into(), &[1; 32])
+            .unwrap();
+        assert!(store.is_trusted(phone_a));
+        assert!(store.is_trusted(phone_b));
+    }
+
+    #[test]
+    fn a_retired_id_with_another_key_is_not_trusted() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let (old, new) = (Uuid::new_v4(), Uuid::new_v4());
+        store.observe_peer(old, "Pixel 8".into(), &[1; 32]).unwrap();
+        store.trust_peer(old).unwrap();
+        store.observe_peer(new, "Pixel 8".into(), &[2; 32]).unwrap();
+        store.trust_peer(new).unwrap();
+        store.retire_old_installs(new, |_| false).unwrap();
+
+        store.observe_peer(old, "Pixel 8".into(), &[9; 32]).unwrap();
+        assert!(!store.is_trusted(old));
+    }
+
+    #[test]
+    fn retired_entries_are_forgotten_after_a_month() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let (old, new) = (Uuid::new_v4(), Uuid::new_v4());
+        store.observe_peer(old, "Pixel 8".into(), &[1; 32]).unwrap();
+        store.trust_peer(old).unwrap();
+        store.observe_peer(new, "Pixel 8".into(), &[2; 32]).unwrap();
+        store.trust_peer(new).unwrap();
+        store.retire_old_installs(new, |_| false).unwrap();
+        store.data.retired.get_mut(&old).unwrap().retired_at = now_secs() - RETIRED_KEEP_SECS - 1;
+        store.save().unwrap();
+
+        let mut store = TrustStore::load(file.path()).unwrap();
+        store.observe_peer(old, "Pixel 8".into(), &[1; 32]).unwrap();
+        assert!(!store.is_trusted(old));
     }
 
     #[test]
