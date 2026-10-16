@@ -540,6 +540,11 @@ pub(crate) struct EngineShared {
     /// Whether this device's OS may pause the app in the background, as the
     /// host reports it (phones only). Peers learn it in the handshake.
     pub(crate) local_background_restricted: Arc<std::sync::Mutex<Option<bool>>>,
+    /// This device's clipboard as Link All last set it (copied here, or
+    /// applied from a peer), for a peer that was away when it changed.
+    pub(crate) latest_clipboard: Arc<std::sync::Mutex<Option<LatestClipboard>>>,
+    /// When each peer last got (or sent us) the clipboard, in unix ms.
+    pub(crate) clipboard_seen_by: Arc<dashmap::DashMap<Uuid, u64>>,
     /// Battery, storage, network and call state, ours and each peer's.
     pub(crate) device_status: DeviceStatus,
     /// Rate limit for pairing UI spam from untrusted peers.
@@ -582,4 +587,24 @@ pub(crate) type RemoteWaiter<T> = (uuid::Uuid, oneshot::Sender<T>);
 pub(crate) struct RemoteWaiters {
     pub(crate) files: Arc<Mutex<HashMap<uuid::Uuid, RemoteWaiter<RemoteFilesResult>>>>,
     pub(crate) thumbnails: Arc<Mutex<HashMap<uuid::Uuid, RemoteWaiter<RemoteThumbnailResult>>>>,
+}
+
+/// The clipboard as Link All last set it on this device.
+#[derive(Clone)]
+pub(crate) struct LatestClipboard {
+    pub(crate) content: Arc<ClipboardContent>,
+    pub(crate) seq: u64,
+    pub(crate) origin_device: Uuid,
+    pub(crate) origin_device_name: String,
+    /// Unix ms when it became this device's clipboard.
+    pub(crate) at_ms: u64,
+}
+
+impl LatestClipboard {
+    pub(crate) fn now_ms() -> u64 {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_millis() as u64)
+            .unwrap_or(0)
+    }
 }

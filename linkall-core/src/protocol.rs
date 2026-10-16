@@ -199,6 +199,10 @@ pub struct DeviceMetadata {
     /// limits) says so, so computers can explain why it drops off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background_restricted: Option<bool>,
+    /// Unix ms when this device's clipboard last changed through Link All,
+    /// so after time apart only the newer clipboard is sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub clipboard_at: Option<u64>,
 }
 
 // ── File transfer metadata ────────────────────────────────────────────────────

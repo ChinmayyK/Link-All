@@ -422,6 +422,8 @@ pub struct HandshakeResult {
     pub peer_listen_port: Option<u16>,
     /// Whether the peer's OS may pause it in the background; None if unknown.
     pub peer_background_restricted: Option<bool>,
+    /// When the peer's clipboard last changed through Link All (unix ms).
+    pub peer_clipboard_at: Option<u64>,
 }
 
 /// The OS this build runs on, as peers show it.
@@ -442,6 +444,8 @@ pub struct Announce {
     pub listen_port: Option<u16>,
     /// Whether the OS may pause this app in the background, when known.
     pub background_restricted: Option<bool>,
+    /// Unix ms when this device's clipboard last changed through Link All.
+    pub clipboard_at: Option<u64>,
 }
 
 fn my_metadata_json(
@@ -456,6 +460,7 @@ fn my_metadata_json(
         is_manual_reconnect: Some(is_manual_reconnect),
         listen_port: announce.listen_port,
         background_restricted: announce.background_restricted,
+        clipboard_at: announce.clipboard_at,
         ..Default::default()
     })
     .ok()
@@ -597,6 +602,7 @@ pub async fn handshake_initiator(
         peer_platform: ack_metadata.platform,
         peer_listen_port: None,
         peer_background_restricted: ack_metadata.background_restricted,
+        peer_clipboard_at: ack_metadata.clipboard_at,
     })
 }
 
@@ -714,6 +720,7 @@ where
         peer_platform: peer_metadata.platform,
         peer_listen_port: peer_metadata.listen_port.filter(|port| *port != 0),
         peer_background_restricted: peer_metadata.background_restricted,
+        peer_clipboard_at: peer_metadata.clipboard_at,
     })
 }
 
@@ -949,8 +956,8 @@ mod tests {
                 "PeerB".to_string(),
                 key_b_clone,
                 Announce {
-                    listen_port: None,
                     background_restricted: Some(true),
+                    ..Announce::default()
                 },
                 |_, _| async { true },
             )
@@ -967,7 +974,7 @@ mod tests {
             false,
             Announce {
                 listen_port: Some(4242),
-                background_restricted: None,
+                ..Announce::default()
             },
         )
         .await

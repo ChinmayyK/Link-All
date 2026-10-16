@@ -131,6 +131,23 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     }
                 };
 
+                // Applied, it is this device's clipboard now: a device that is
+                // away gets it when it returns, and the sender already has it.
+                if auto_apply {
+                    let now = LatestClipboard::now_ms();
+                    *shared
+                        .latest_clipboard
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner()) = Some(LatestClipboard {
+                        content: content.clone(),
+                        seq,
+                        origin_device,
+                        origin_device_name: display_name.clone(),
+                        at_ms: now,
+                    });
+                    shared.clipboard_seen_by.insert(ctx.peer_id, now);
+                }
+
                 // If auto-applying, mark immediately applied.
                 if auto_apply {
                     let mut feed = shared.activity.lock().await;
@@ -240,6 +257,18 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         }
         AppMessage::ClipboardAck { seq } => {
             ctx.touch_last_seen();
+            // Only an answer proves the clipboard arrived: one sent on a
+            // session that was then replaced is lost, and is sent again.
+            let latest_at = shared
+                .latest_clipboard
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_ref()
+                .filter(|latest| latest.seq == seq)
+                .map(|latest| latest.at_ms);
+            if let Some(at) = latest_at {
+                shared.clipboard_seen_by.insert(peer_id, at);
+            }
             let _ = shared.peer_manager.update_last_sync(peer_id);
             let _ = shared
                 .event_tx

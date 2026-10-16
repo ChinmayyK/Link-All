@@ -133,6 +133,7 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         network::Announce {
             listen_port: None,
             background_restricted: local_background_restricted(&shared),
+            clipboard_at: local_clipboard_at(&shared),
         },
         |peer_id, peer_identity| async move {
             let store = shared_clone.trust.lock().await;
@@ -216,6 +217,7 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         trusted,
         None, // the responder never learns the initiator's verdict
         Some(hs.pin.display()),
+        hs.peer_clipboard_at,
         false, // is_outbound
     )
 }
@@ -429,6 +431,7 @@ pub(super) async fn connect_once(
         network::Announce {
             listen_port: (listen_port != 0).then_some(listen_port),
             background_restricted: local_background_restricted(&shared),
+            clipboard_at: local_clipboard_at(&shared),
         },
     )
     .await?;
@@ -490,6 +493,7 @@ pub(super) async fn connect_once(
         trusted,
         Some(hs.peer_already_trusted),
         Some(hs.pin.display()),
+        hs.peer_clipboard_at,
         true, // is_outbound
     )
 }
@@ -606,4 +610,13 @@ fn local_background_restricted(shared: &EngineShared) -> Option<bool> {
         .local_background_restricted
         .lock()
         .unwrap_or_else(|e| e.into_inner())
+}
+
+fn local_clipboard_at(shared: &EngineShared) -> Option<u64> {
+    shared
+        .latest_clipboard
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|latest| latest.at_ms)
 }
