@@ -13,6 +13,8 @@ class CallStateReceiver : BroadcastReceiver() {
             val number = intent.getStringExtra(TelephonyManager.EXTRA_INCOMING_NUMBER)
             
             Log.i("CallStateReceiver", "Received phone state change: state=$stateStr, hasNumber=${!number.isNullOrBlank()}")
+            // A call must not bring back a Link All the user stopped.
+            if (!LinkAllService.isRunning(context)) return
 
             val serviceIntent = Intent(context, LinkAllService::class.java).apply {
                 action = LinkAllService.ACTION_HANDLE_CALL_STATE

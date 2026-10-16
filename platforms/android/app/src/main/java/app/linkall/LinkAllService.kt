@@ -194,6 +194,15 @@ class LinkAllService : Service() {
         private const val PREF_RECENT_MANUAL = "recent_manual_addresses"
         private const val MAX_RECENT_MANUAL  = 5
 
+        /**
+         * Whether Link All is meant to be running: false once the user stopped
+         * it. Stays true when Android kills the process, so background events
+         * (a notification, a call) bring the service back then, and only then.
+         */
+        fun isRunning(context: Context): Boolean =
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(PREF_SERVICE_RUNNING, false)
+
         fun recentManualAddresses(context: Context): List<String> =
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .getString(PREF_RECENT_MANUAL, null)
@@ -531,7 +540,7 @@ class LinkAllService : Service() {
         startEngineHealthCheck()
     }
 
-    // onStartCommand's `if (!engineStarted.getAndSet(true))` block only ever
+    // ensureEngineStarted's `if (!engineStarted.getAndSet(true))` block only ever
     // runs once per service lifetime - if the Rust engine dies afterward
     // (engineHandle drops to 0) while engineStarted stays true, nothing was
     // watching, and every future onStartCommand call took the "already
@@ -563,6 +572,59 @@ class LinkAllService : Service() {
         heartbeatHandler.postDelayed(runnable, intervalMs)
     }
 
+    /**
+     * Starts the Rust engine if this service hasn't yet. Every start except
+     * Stop runs it first: Android may have killed the process, and the
+     * intent that brings the service back can be any action (a notification
+     * button, a settings change); the service must not come back without
+     * its engine.
+     *
+     * Returns false only when the engine can't start.
+     */
+    private fun ensureEngineStarted(intent: Intent?): Boolean {
+        setServiceRunning(true)
+        if (!engineStarted.getAndSet(true)) {
+            val deviceName = resolvedDeviceName()
+            val dataDir = File(filesDir, "linkall").also { it.mkdirs() }.absolutePath
+            val fileSaveDir = receiveStagingDir()
+            LinkAllJni.initContext(applicationContext)
+            engineHandle = LinkAllJni.start(
+                deviceName,
+                0,
+                dataDir,
+                fileSaveDir.absolutePath
+            )
+
+            if (engineHandle == 0L) {
+                Log.e(TAG, "Rust engine failed to start")
+                engineStarted.set(false)
+                setServiceRunning(false)
+                return false
+            }
+
+            applySettingsToEngine()
+
+            Log.i(TAG, "Engine started — $deviceName")
+            startEventDrainThread()
+            acquireContinuousLocks()
+            // Cache our own UUID prefix so NSD can filter self-connections.
+            myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
+            myDeviceUuidPrefix = myDeviceId?.take(8)
+            startNsdDiscovery()   // advertise + browse so the Mac can find us
+            registerNetworkCallback() // restart NSD on WiFi changes
+            // call continuity: receiver is statically registered now
+            startBatteryMonitor()     // F20: relay battery status to peers
+            startStorageMonitor()     // relay storage status to peers
+            persistStatus()
+        } else {
+            // Engine was already running — permission may have just been granted.
+            // A null action is the app being opened: discovery matters now.
+            if (intent?.action == null) acquireContinuousLocks()
+            startBatteryMonitor()
+        }
+        return true
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // Once in the foreground the service stays there, and Android needs no
         // new startForeground for later starts. Calling it on every start
@@ -576,8 +638,36 @@ class LinkAllService : Service() {
             Log.e(TAG, "Early startForegroundCompat failed", e)
         }
 
+        if (intent?.action == ACTION_STOP) {
+            shutdownAndStop()
+            return START_NOT_STICKY
+        }
+        val engineUp = try {
+            ensureEngineStarted(intent)
+        } catch (ex: Throwable) {
+            Log.e(TAG, "Engine start failed", ex)
+            engineStarted.set(false)
+            setServiceRunning(false)
+            false
+        }
+        if (!engineUp) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
+        return try {
+            handleStart(intent)
+        } catch (ex: Throwable) {
+            // One failed action (a notification, a shared file, a button) must
+            // not take the whole service down: the engine is up, keep it running.
+            Log.e(TAG, "Action ${intent?.action} failed", ex)
+            START_STICKY
+        }
+    }
+
+    /** Runs one start's action once the engine is up. */
+    private fun handleStart(intent: Intent?): Int {
         when (intent?.action) {
-            ACTION_STOP         -> { shutdownAndStop(); return START_NOT_STICKY }
             ACTION_SERVICE_NOTIFICATION_DISMISSED -> {
                 serviceNotificationDismissed = true
                 return START_STICKY
@@ -854,48 +944,6 @@ class LinkAllService : Service() {
         // are only taken for real discovery or transfer work - taking them
         // here re-armed them for every notification any app posted.
         return try {
-            setServiceRunning(true)
-
-            if (!engineStarted.getAndSet(true)) {
-                val deviceName = resolvedDeviceName()
-                val dataDir = File(filesDir, "linkall").also { it.mkdirs() }.absolutePath
-                val fileSaveDir = receiveStagingDir()
-                LinkAllJni.initContext(applicationContext)
-                engineHandle = LinkAllJni.start(
-                    deviceName,
-                    0,
-                    dataDir,
-                    fileSaveDir.absolutePath
-                )
-
-                if (engineHandle == 0L) {
-                    Log.e(TAG, "Rust engine failed to start")
-                    setServiceRunning(false)
-                    stopSelf()
-                    return START_NOT_STICKY
-                }
-
-                applySettingsToEngine()
-
-                Log.i(TAG, "Engine started — $deviceName")
-                startEventDrainThread()
-                acquireContinuousLocks()
-                // Cache our own UUID prefix so NSD can filter self-connections.
-                myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
-                myDeviceUuidPrefix = myDeviceId?.take(8)
-                startNsdDiscovery()   // advertise + browse so the Mac can find us
-                registerNetworkCallback() // restart NSD on WiFi changes
-                // call continuity: receiver is statically registered now
-                startBatteryMonitor()     // F20: relay battery status to peers
-                startStorageMonitor()     // relay storage status to peers
-                persistStatus()
-            } else {
-                // Engine was already running — permission may have just been granted.
-                // A null action is the app being opened: discovery matters now.
-                if (intent?.action == null) acquireContinuousLocks()
-                startBatteryMonitor()
-            }
-
             // Process any pending manual connect that was queued before engine started
             val pIp = pendingManualConnectIp
             if (pIp != null && engineHandle != 0L) {
@@ -963,10 +1011,10 @@ class LinkAllService : Service() {
 
             START_STICKY
         } catch (ex: Throwable) {
-            Log.e(TAG, "onStartCommand failed", ex)
-            setServiceRunning(false)
-            stopSelf()
-            START_NOT_STICKY
+            // One failed action (a notification, a shared file) must not take
+            // the whole service down: the engine is up, keep it running.
+            Log.e(TAG, "Action ${intent?.action} failed", ex)
+            START_STICKY
         }
     }
 

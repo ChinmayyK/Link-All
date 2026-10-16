@@ -66,7 +66,7 @@ class LinkAllNotificationListener : NotificationListenerService() {
         // mirrored (it is ongoing, and the call is sent on its own).
         if (notif.category == Notification.CATEGORY_CALL && pkg != packageName) {
             callerName(notif)?.let { name ->
-                startService(Intent(this, LinkAllService::class.java).apply {
+                relay(Intent(this, LinkAllService::class.java).apply {
                     action = LinkAllService.ACTION_CALLER_FROM_NOTIFICATION
                     putExtra(LinkAllService.EXTRA_CALLER_NAME, name)
                 })
@@ -104,7 +104,24 @@ class LinkAllNotificationListener : NotificationListenerService() {
             putExtra(LinkAllService.EXTRA_NOTIFICATION_TITLE, title)
             putExtra(LinkAllService.EXTRA_NOTIFICATION_TEXT, text)
         }
-        startService(intent)
+        relay(intent)
+    }
+
+    /**
+     * Hands a notification to the running service. When the user stopped
+     * Link All the service is gone and stays gone: a new message must not
+     * start it again. And Android refuses to start a service from the
+     * background, which would otherwise crash the app on the next message.
+     */
+    private fun relay(intent: Intent) {
+        if (!LinkAllService.isRunning(this)) return
+        try {
+            startService(intent)
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Link All isn't running; notification not sent")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Couldn't reach the Link All service", e)
+        }
     }
 
     /** The caller on a call notification: CallStyle's person, else its title. */
