@@ -377,6 +377,12 @@ impl PeerManager {
             if !peer.trusted && !peer.pairing_requested && !peer.outgoing_pairing_waiting {
                 peer.remembered = false;
             }
+            // A paired device is a remembered one. Pairing used to set only
+            // `trusted`, leaving devices first seen unpaired (the usual way)
+            // unremembered, so the reconnector never dialled them.
+            if peer.trusted {
+                peer.remembered = true;
+            }
         }
 
         // Pairing requests ride on a session and its code, and neither
@@ -582,6 +588,10 @@ impl PeerManager {
             if record.port != endpoint.port() || record.trusted != trusted {
                 record.port = endpoint.port();
                 record.trusted = trusted;
+                changed = true;
+            }
+            if trusted && !record.remembered {
+                record.remembered = true;
                 changed = true;
             }
             if record
@@ -848,6 +858,10 @@ impl PeerManager {
         {
             if let Some(mut entry) = self.store.get_mut(&device_id) {
                 entry.trusted = trusted;
+                // Pairing makes a device one to reconnect to by itself.
+                if trusted {
+                    entry.remembered = true;
+                }
             }
         }
         self.save()
@@ -1427,6 +1441,29 @@ mod tests {
             )
             .unwrap();
         assert!(peer.remembered);
+    }
+
+    #[test]
+    fn pairing_a_seen_device_remembers_it_and_load_repairs_old_stores() {
+        let file = NamedTempFile::new().unwrap();
+        let id = Uuid::new_v4();
+        let addr = SocketAddr::from(([192, 168, 1, 42], 47823));
+        {
+            let manager = PeerManager::load(file.path()).unwrap();
+            manager
+                .upsert_peer(id, "Pixel".into(), addr, false, DiscoverySource::Mdns)
+                .unwrap();
+            assert!(!manager.get(id).unwrap().remembered);
+            manager.update_trust(id, true).unwrap();
+            assert!(manager.get(id).unwrap().remembered, "pairing remembers it");
+            // A store written before the fix: trusted, never remembered.
+            if let Some(mut entry) = manager.store.get_mut(&id) {
+                entry.remembered = false;
+            }
+            manager.save().unwrap();
+        }
+        let reloaded = PeerManager::load(file.path()).unwrap();
+        assert!(reloaded.get(id).unwrap().should_auto_reconnect());
     }
 
     #[test]
