@@ -615,6 +615,10 @@ pub(super) fn register_session(
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_millis() as u64;
+        // When this session last pinged. Kept apart from `ping_sent_at`,
+        // which the Pong clears: reading that one made a sleeping link ping
+        // on every 5 s tick, keeping the phone's radio awake all night.
+        let mut last_ping_at: Option<std::time::Instant> = None;
 
         let disconnect_reason = loop {
             let now_millis = std::time::SystemTime::now()
@@ -697,15 +701,15 @@ pub(super) fn register_session(
                     shared.file_transfers.lock().await.prune_stale_transfers();
 
                     // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
-                    let should_ping = if !is_sleeping {
-                        true
-                    } else {
-                        let last_ping_elapsed = ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()).map(|i| i.elapsed().as_millis() as u64).unwrap_or(u64::MAX);
-                        last_ping_elapsed > 5 * 60 * 1000
-                    };
+                    // Asleep, a ping a minute: rare enough for the radio to
+                    // idle, often enough that a dead link (an unanswered
+                    // ping, above) shows up within about a minute.
+                    let should_ping = !is_sleeping
+                        || last_ping_at.is_none_or(|at| at.elapsed() >= SLEEP_PING_INTERVAL);
 
                     if should_ping {
                         let mut ping = probe::make_ping();
+                        last_ping_at = Some(std::time::Instant::now());
                         *ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
                         if let Err(err) = sess_tx.send(&mut ping).await {
                             break format!("heartbeat send failed: {err}");
@@ -954,3 +958,6 @@ fn clipboard_to_catch_up(
         .is_some_and(|peer| peer.is_sync_eligible() && peer.remote_sync_enabled);
     (fresh && missed && newer_than_theirs && !came_from_them && wants_it).then_some(latest)
 }
+
+/// How often a session pings while either side is asleep.
+const SLEEP_PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
