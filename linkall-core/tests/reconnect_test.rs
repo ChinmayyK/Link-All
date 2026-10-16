@@ -2,7 +2,10 @@
 
 mod common;
 
-use common::{connected, eventually, eventually_within, peer, start_node, trusts, twin_config};
+use common::{
+    connected, eventually, eventually_within, peer, start_node, trusts, twin_config, wait_for,
+};
+use linkall_core::engine::EngineEvent;
 use std::time::Duration;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -83,6 +86,86 @@ async fn the_computer_redials_a_phone_that_had_dialled_in() {
     // can't dial the computer itself: only the computer can bring them back.
     let phone = start_node(phone_config("peers_phone_fresh.json")).await;
     assert_eq!(phone.engine.bound_port().await, phone_port);
+    eventually_within(
+        Duration::from_secs(45),
+        "the computer reconnects to the phone",
+        async || connected(&computer, phone_id).await && connected(&phone, computer_id).await,
+    )
+    .await;
+}
+
+/// Devices that pair the usual way (seen first, then a PIN accepted) must
+/// be ones each side reconnects to by itself. Pairing used to mark a device
+/// trusted but not remembered, and the reconnector only dials remembered
+/// devices, so after any drop the computer waited for the phone.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_device_paired_with_a_pin_is_redialled_after_a_drop() {
+    let tmp = TempDir::new().unwrap();
+    let (phone_id, computer_id) = (Uuid::new_v4(), Uuid::new_v4());
+    let mut computer = start_node(twin_config(&tmp, "computer", computer_id, "Computer")).await;
+    let computer_port = computer.engine.bound_port().await;
+    let phone_port = free_port();
+    let phone_config = |peer_store: &str| {
+        let mut cfg = twin_config(&tmp, "phone", phone_id, "Phone");
+        cfg.port = phone_port;
+        cfg.peer_store_path = tmp.path().join(peer_store);
+        cfg
+    };
+
+    let cfg = phone_config("peers_phone.json");
+    let (phone_rt, phone) = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+        let node = rt.block_on(start_node(cfg));
+        (rt, node)
+    })
+    .join()
+    .unwrap();
+    let engine = phone.engine.clone();
+    phone_rt
+        .spawn(async move {
+            engine
+                .connect_to_peer("127.0.0.1".into(), computer_port)
+                .await?;
+            engine.send_pairing_request(computer_id).await;
+            anyhow::Ok(())
+        })
+        .await
+        .unwrap()
+        .expect("the phone asks to pair");
+    wait_for(
+        &mut computer.events,
+        "the pairing request",
+        |e| matches!(e, EngineEvent::PairingRequested { device_id, .. } if *device_id == phone_id),
+    )
+    .await;
+    computer
+        .engine
+        .respond_to_pairing(phone_id, true)
+        .await
+        .unwrap();
+    eventually("both sides paired and connected", async || {
+        computer.engine.is_trusted(phone_id).await && connected(&computer, phone_id).await
+    })
+    .await;
+    assert!(
+        peer(&computer, phone_id).await.remembered,
+        "a paired device is remembered"
+    );
+
+    // The phone's app dies, then starts again without its device list.
+    drop(phone);
+    std::thread::spawn(move || phone_rt.shutdown_timeout(Duration::from_secs(2)))
+        .join()
+        .unwrap();
+    eventually("the computer notices the phone is gone", async || {
+        !connected(&computer, phone_id).await
+    })
+    .await;
+    let phone = start_node(phone_config("peers_phone_fresh.json")).await;
     eventually_within(
         Duration::from_secs(45),
         "the computer reconnects to the phone",
