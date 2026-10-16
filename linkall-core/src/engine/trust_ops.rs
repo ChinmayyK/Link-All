@@ -453,7 +453,10 @@ pub(super) async fn retire_old_installs(shared: &EngineShared, kept: Uuid) {
         Ok(retired) => {
             for id in retired {
                 tracing::info!(old = %id, new = %kept, "retired an old install of a paired device");
-                let _ = shared.peer_manager.forget_device(id);
+                // Untrusted, not forgotten: forgetting also blocks the device's
+                // connections, and a second device that shares the name has to
+                // connect for its trust to come back.
+                let _ = shared.peer_manager.update_trust(id, false);
                 super::telemetry::forget_device_status(shared, id).await;
             }
         }

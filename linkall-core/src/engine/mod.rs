@@ -96,8 +96,11 @@ impl Engine {
                     PeerManager::load(&config.peer_store_path).context("loading peer store")?;
                 match trust.clear_old_installs_once() {
                     Ok(retired) => {
+                        // Untrusted, not forgotten: a retired device that turns
+                        // out to be a second device must still be let in, so
+                        // its trust can be restored (see TrustStore::retire_old_installs).
                         for id in retired {
-                            let _ = peer_manager.forget_device(id);
+                            let _ = peer_manager.update_trust(id, false);
                         }
                     }
                     Err(e) => tracing::warn!("could not clear old installs: {e:#}"),
