@@ -196,8 +196,14 @@ public partial class App : Application
 
             _keyInstance.Activated += OnAppActivated;
 
-            LinkAll.WinUI.Native.ContextMenuIntegration.RegisterContextMenu();
-            LinkAll.WinUI.Native.ContextMenuIntegration.RegisterUriProtocol();
+            // Registry writes from the Store build land in the package's private
+            // copy, which Explorer never reads; its linkall:// scheme comes from
+            // the package manifest instead.
+            if (!LinkAll.WinUI.Services.StartupRegistration.IsPackaged)
+            {
+                LinkAll.WinUI.Native.ContextMenuIntegration.RegisterContextMenu();
+                LinkAll.WinUI.Native.ContextMenuIntegration.RegisterUriProtocol();
+            }
             NotificationHelper.EnsureRegistered();
 
             // Process initial launch arguments

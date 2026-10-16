@@ -90,13 +90,13 @@ https://linkall.chinmaykudalkar.com/support
 Upload docs/store/microsoft/*.png (1920×1080, in file-name order). Each has its caption built in.
 
 ## Notes for certification (Submission options › Notes for certification)
-Link All needs a second device to show its main features: install Link All on an Android phone, Mac or another PC on the same network, then pair them by confirming the PIN shown on both. The app requests runFullTrust (a desktop app with a system tray helper) and unvirtualizedResources (it keeps the device's pairing keys in %LOCALAPPDATA%\linkall so an update or reinstall doesn't change its identity). It needs no account and has no in-app purchases.
+Link All needs a second device to show its main features: install Link All on an Android phone, Mac or another PC on the same network, then pair them by confirming the PIN shown on both. The app requests runFullTrust (a desktop app with a system tray helper). It needs no account and has no in-app purchases.
 
 ## Restricted capabilities justification
 runFullTrust: Link All is a Win32/WinUI desktop app with a separate system tray helper process and named-pipe IPC.
-unvirtualizedResources: the app stores its device identity, pairing trust store and settings in %LOCALAPPDATA%\linkall, shared with the non-Store installer, so paired devices keep recognising this PC across updates and reinstalls.
+(unvirtualizedResources was requested for the first submission and denied on 16 Oct 2026, policy 10.6.3. The Store build no longer asks for it: its data lives in the package's virtualized copy.)
 
 ## Claims to keep out (the Store build doesn't do these)
+• "Send with Link All" in File Explorer's right-click menu: the Store build can't register it (the installer build does).
 • Answering or declining calls from the PC, and SMS code forwarding: need the Android app from the website, not the Google Play one.
 • Browsing a phone's files from the PC: needs the Android app from the website.
-• File Explorer's right-click "Send with Link All": not yet checked in the Store build.
