@@ -168,3 +168,19 @@ pub async fn eventually_within(limit: Duration, what: &str, mut check: impl Asyn
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
 }
+
+/// Waits for `node` to report losing `peer`. Paired devices reconnect within
+/// milliseconds when they can, too fast to catch by polling the status.
+pub async fn wait_for_disconnect(node: &mut Node, peer: Uuid, limit: Duration) {
+    let deadline = Instant::now() + limit;
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let event = timeout(remaining, node.events.recv())
+            .await
+            .unwrap_or_else(|_| panic!("timed out: {peer} never disconnected"))
+            .expect("channel closed");
+        if matches!(event, EngineEvent::PeerDisconnected { device_id, .. } if device_id == peer) {
+            return;
+        }
+    }
+}
