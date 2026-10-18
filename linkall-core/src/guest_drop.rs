@@ -70,6 +70,10 @@ struct Shared {
 /// Starts a session that saves into `dir`, listening on `bind_ip` (any free port).
 pub async fn start(bind_ip: IpAddr, dir: PathBuf, on_file: OnFile) -> Result<GuestHandle> {
     std::fs::create_dir_all(&dir).context("creating the guest folder")?;
+    let prune_dir = dir.clone();
+    tokio::spawn(async move {
+        prune_stale_partial_uploads(&prune_dir).await;
+    });
     let listener = TcpListener::bind(SocketAddr::new(bind_ip, 0))
         .await
         .context("opening the guest page")?;
@@ -447,6 +451,32 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     a.len() == b.len() && a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
+/// Cleans up partial upload temporary files older than 1 hour left behind by crashed or aborted sessions.
+async fn prune_stale_partial_uploads(dir: &Path) {
+    if let Some(threshold) = std::time::SystemTime::now().checked_sub(Duration::from_secs(3600)) {
+        prune_stale_partial_uploads_with_threshold(dir, threshold).await;
+    }
+}
+
+async fn prune_stale_partial_uploads_with_threshold(dir: &Path, threshold: std::time::SystemTime) {
+    let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
+        return;
+    };
+    while let Ok(Some(entry)) = entries.next_entry().await {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if name.starts_with('.') && name.ends_with(".part-upload") {
+            if let Ok(meta) = entry.metadata().await {
+                if let Ok(modified) = meta.modified() {
+                    if modified <= threshold {
+                        let _ = tokio::fs::remove_file(entry.path()).await;
+                    }
+                }
+            }
+        }
+    }
+}
+
 const PAGE: &str = r#"<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -543,5 +573,21 @@ mod tests {
         assert!(constant_time_eq(b"123456", b"123456"));
         assert!(!constant_time_eq(b"123456", b"123457"));
         assert!(!constant_time_eq(b"12345", b"123456"));
+    }
+
+    #[tokio::test]
+    async fn prune_stale_partial_uploads_removes_old_tmp_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_part = dir.path().join(".old.part-upload");
+        let regular_file = dir.path().join("regular.txt");
+
+        std::fs::write(&old_part, "old partial data").unwrap();
+        std::fs::write(&regular_file, "regular file").unwrap();
+
+        let threshold = std::time::SystemTime::now() + Duration::from_secs(60);
+        prune_stale_partial_uploads_with_threshold(dir.path(), threshold).await;
+
+        assert!(!old_part.exists(), "stale partial upload must be pruned");
+        assert!(regular_file.exists(), "regular files must not be touched");
     }
 }
