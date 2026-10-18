@@ -48,6 +48,9 @@ pub fn staleness_timeout(source: DiscoverySource) -> Duration {
     }
 }
 
+/// Maximum number of discovered peers held in memory to prevent flood exhaustion.
+pub const MAX_DISCOVERED_PEERS: usize = 512;
+
 // ── Public types ──────────────────────────────────────────────────────────────
 
 /// A peer discovered by any discovery layer.
@@ -453,6 +456,18 @@ impl DiscoveryManager {
                 let _ = self.output_tx.send(event).await;
             }
         } else {
+            // Cap discovered peers to prevent unbounded memory growth from broadcast floods
+            if self.peers.len() >= MAX_DISCOVERED_PEERS {
+                self.evict_all_stale().await;
+                if self.peers.len() >= MAX_DISCOVERED_PEERS {
+                    warn!(
+                        "discovery manager: peer table full ({}), dropping new peer {}",
+                        self.peers.len(),
+                        peer.device_id
+                    );
+                    return;
+                }
+            }
             let mut merged = MergedPeer::new(&peer);
             merged.announced = true;
             let event = DiscoveryEvent::PeerAppeared(merged.to_discovered_peer());
@@ -748,5 +763,29 @@ mod tests {
         assert!(staleness_timeout(DiscoverySource::Mdns) >= Duration::from_secs(30));
         assert!(staleness_timeout(DiscoverySource::UdpBeacon) >= Duration::from_secs(10));
         assert!(staleness_timeout(DiscoverySource::UdpMulticast) >= Duration::from_secs(10));
+    }
+
+    #[tokio::test]
+    async fn peer_table_capped_at_max_discovered_peers() {
+        let my_id = Uuid::new_v4();
+        let (mut manager, _handle, mut output) = DiscoveryManager::new(my_id);
+        let drain_handle = tokio::spawn(async move {
+            while output.recv().await.is_some() {}
+        });
+
+        for _ in 0..MAX_DISCOVERED_PEERS {
+            let id = Uuid::new_v4();
+            let peer = make_peer(id, DiscoverySource::Manual);
+            manager.handle_found(peer).await;
+        }
+        assert_eq!(manager.peers.len(), MAX_DISCOVERED_PEERS);
+
+        // One more peer should be rejected since Manual sources do not expire
+        let extra_id = Uuid::new_v4();
+        let extra_peer = make_peer(extra_id, DiscoverySource::Manual);
+        manager.handle_found(extra_peer).await;
+        assert_eq!(manager.peers.len(), MAX_DISCOVERED_PEERS);
+        assert!(!manager.peers.contains_key(&extra_id));
+        drain_handle.abort();
     }
 }
