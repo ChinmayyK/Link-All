@@ -108,6 +108,45 @@ impl Scratchpad {
         self.notes.values().cloned().collect()
     }
 
+    /// Search visible notes for matching keywords. Pinned and title (first line) matches are ranked first.
+    pub fn search(&self, query: &str) -> Vec<Note> {
+        let q = query.trim().to_lowercase();
+        if q.is_empty() {
+            return self.visible();
+        }
+        let terms: Vec<&str> = q.split_whitespace().collect();
+        let mut scored: Vec<(u32, Note)> = self
+            .notes
+            .values()
+            .filter(|n| !n.deleted)
+            .filter_map(|n| {
+                let text_lower = n.text.to_lowercase();
+                if !terms.iter().all(|term| text_lower.contains(term)) {
+                    return None;
+                }
+                let first_line = text_lower.lines().next().unwrap_or("");
+                let title_matches = terms
+                    .iter()
+                    .filter(|term| first_line.contains(**term))
+                    .count() as u32;
+                let mut score = title_matches * 10;
+                if n.pinned {
+                    score += 20;
+                }
+                Some((score, n.clone()))
+            })
+            .collect();
+
+        scored.sort_by(|(score_a, note_a), (score_b, note_b)| {
+            score_b
+                .cmp(score_a)
+                .then(note_b.updated_at_ms.cmp(&note_a.updated_at_ms))
+                .then(note_a.id.cmp(&note_b.id))
+        });
+
+        scored.into_iter().map(|(_, n)| n).collect()
+    }
+
     fn visible_count(&self) -> usize {
         self.notes.values().filter(|n| !n.deleted).count()
     }
@@ -372,5 +411,35 @@ mod tests {
         };
         assert!(pad.merge_batch(vec![n1, n2], 300));
         assert_eq!(pad.visible().len(), 2);
+    }
+
+    #[test]
+    fn search_filters_and_ranks_notes() {
+        let mut pad = Scratchpad::new(None);
+        pad.upsert_local(None, "Meeting Notes\nDiscuss project deadlines", false, 100).unwrap();
+        pad.upsert_local(None, "Grocery List\nMilk, eggs, coffee", false, 200).unwrap();
+        pad.upsert_local(None, "Important Tasks\nReview pull requests and meeting summary", true, 300).unwrap();
+
+        // Empty search returns all visible
+        assert_eq!(pad.search("").len(), 3);
+        assert_eq!(pad.search("   ").len(), 3);
+
+        // Search "meeting" matches two notes; the pinned one ("Important Tasks") ranks first
+        let meeting_results = pad.search("meeting");
+        assert_eq!(meeting_results.len(), 2);
+        assert!(meeting_results[0].pinned);
+        assert_eq!(meeting_results[0].text.lines().next().unwrap(), "Important Tasks");
+
+        // Multi-term search
+        let multi = pad.search("coffee milk");
+        assert_eq!(multi.len(), 1);
+        assert_eq!(multi[0].text.lines().next().unwrap(), "Grocery List");
+
+        // Case-insensitive search
+        let lower = pad.search("grocery");
+        assert_eq!(lower.len(), 1);
+
+        // Non-matching query
+        assert!(pad.search("nonexistent").is_empty());
     }
 }
