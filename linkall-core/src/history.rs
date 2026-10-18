@@ -359,6 +359,37 @@ impl History {
                     entries.push_back(entry);
                 }
             }
+        } else if let Some(parent) = path.parent() {
+            // Check for orphaned tmp file from a previous atomic save crash
+            if let Ok(dir_entries) = std::fs::read_dir(parent) {
+                let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("history");
+                let mut best_tmp = None;
+                for entry in dir_entries.flatten() {
+                    let p = entry.path();
+                    let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                    if name.starts_with(file_stem) && name.ends_with(".tmp") {
+                        if let Ok(meta) = entry.metadata() {
+                            if meta.len() > 0 {
+                                best_tmp = Some(p);
+                                break;
+                            }
+                        }
+                    }
+                }
+                if let Some(tmp_path) = best_tmp {
+                    if let Ok(bytes) = std::fs::read(&tmp_path) {
+                        let parsed = parse_history(&tmp_path, &bytes);
+                        if !parsed.is_empty() {
+                            tracing::info!("Recovered clipboard history from orphaned tmp file");
+                            for entry in parsed {
+                                next_id = next_id.max(entry.id + 1);
+                                entries.push_back(entry);
+                            }
+                            let _ = std::fs::rename(&tmp_path, &path);
+                        }
+                    }
+                }
+            }
         }
 
         let mut history = Self {
@@ -1100,6 +1131,21 @@ mod tests {
             })
             .collect();
         assert_eq!(saved.len(), 1, "the damaged file is kept for inspection");
+    }
+
+    #[test]
+    fn history_recovers_from_tmp_file_after_crash() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("history.json");
+        let tmp = dir.path().join("history.99999.tmp");
+        saved_history(&tmp, &["alpha", "beta"]);
+
+        assert!(!target.exists());
+        assert!(tmp.exists());
+
+        let h = History::load_with_limit(&target, 50).unwrap();
+        assert_eq!(h.entries().len(), 2);
+        assert!(target.exists(), "history file should be restored from tmp");
     }
 
     #[test]
