@@ -373,7 +373,23 @@ impl SettingsStore {
                 })
             }
         } else {
-            Settings::default()
+            // Check for orphaned tmp file from a crashed atomic save.
+            let tmp = path.with_extension("tmp");
+            if tmp.exists() {
+                if let Ok(bytes) = std::fs::read(&tmp) {
+                    if let Ok(s) = serde_json::from_slice::<Settings>(&bytes) {
+                        tracing::info!("Recovered settings from orphaned temporary file");
+                        let _ = std::fs::rename(&tmp, &path);
+                        s
+                    } else {
+                        Settings::default()
+                    }
+                } else {
+                    Settings::default()
+                }
+            } else {
+                Settings::default()
+            }
         }
         .sanitize();
         Ok(Self { settings, path })
@@ -662,5 +678,27 @@ mod tests {
 
         assert_eq!(store.get().clipboard_poll_ms, 10);
         assert_eq!(store.get().history_limit, MIN_HISTORY_ENTRIES);
+    }
+
+    #[test]
+    fn load_recovers_from_tmp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let target = dir.path().join("settings.json");
+        let tmp = dir.path().join("settings.tmp");
+
+        let s = Settings {
+            device_name: "Recovered Machine".into(),
+            history_limit: 42,
+            ..Default::default()
+        };
+        std::fs::write(&tmp, serde_json::to_vec(&s).unwrap()).unwrap();
+
+        assert!(!target.exists());
+        assert!(tmp.exists());
+
+        let store = SettingsStore::load(&target).unwrap();
+        assert_eq!(store.get().device_name, "Recovered Machine");
+        assert_eq!(store.get().history_limit, 42);
+        assert!(target.exists(), "target file should be restored from tmp");
     }
 }
