@@ -915,6 +915,8 @@ pub(super) fn register_session(
                 // A call this peer was relaying ends with it: its "idle" can
                 // no longer arrive.
                 super::telemetry::clear_call_from(&shared, peer_id).await;
+                // Clear any held keys, modifiers or buttons from remote control.
+                let _ = tokio::task::spawn_blocking(crate::remote_input::release_all).await;
 
                 {
                     // A reconnect can register a new session and resume the

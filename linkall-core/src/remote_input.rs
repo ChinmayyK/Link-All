@@ -680,7 +680,7 @@ fn note_button(button: Button, down: bool) {
     }
 }
 
-/// Lets go of every key and button still held.
+/// Lets go of every key, modifier and button still held.
 pub fn release_all() {
     let (keys, buttons) = {
         let mut held = HELD_RAW.lock().unwrap();
@@ -700,6 +700,17 @@ pub fn release_all() {
             Some(be) => be.button(b, false),
             None => imp::pointer_button(b, false),
         };
+    }
+    let stale_modifiers: Vec<Modifier> = {
+        let mut held = HELD.lock().unwrap();
+        held.since = None;
+        Modifier::ALL
+            .into_iter()
+            .filter(|m| std::mem::replace(&mut held.down[m.index()], false))
+            .collect()
+    };
+    for m in stale_modifiers {
+        let _ = imp::modifier(m, false);
     }
 }
 
@@ -2138,6 +2149,33 @@ mod keymap_tests {
                     panic!("{sc:#x} and {other:#x} both map to mac key {code}");
                 }
             }
+        }
+    }
+
+    #[test]
+    fn release_all_clears_held_keys_and_modifiers() {
+        {
+            let mut held_raw = HELD_RAW.lock().unwrap();
+            held_raw.keys.push(0x1E);
+            held_raw.buttons.push(Button::Left);
+        }
+        {
+            let mut held = HELD.lock().unwrap();
+            held.down[Modifier::Shift.index()] = true;
+            held.since = Some(Instant::now());
+        }
+
+        release_all();
+
+        {
+            let held_raw = HELD_RAW.lock().unwrap();
+            assert!(held_raw.keys.is_empty());
+            assert!(held_raw.buttons.is_empty());
+        }
+        {
+            let held = HELD.lock().unwrap();
+            assert!(held.down.iter().all(|&d| !d));
+            assert!(held.since.is_none());
         }
     }
 }
