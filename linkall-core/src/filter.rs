@@ -1040,4 +1040,20 @@ mod tests {
         assert!(matches!(f2.check(&text("axxb1c")), Verdict::Deny { .. }));
         assert_eq!(f2.check(&text("axxb12c")), Verdict::Allow);
     }
+
+    #[test]
+    fn chain_blocks_oversized_before_content_inspection() {
+        let mut chain = FilterChain::new();
+        chain.push(SizeFilter { max_bytes: 10 });
+        chain.push(SensitiveTextFilter::default());
+
+        let payload = ClipboardContent::Text("a".repeat(100));
+        let verdict = chain.run(&payload);
+        assert_eq!(
+            verdict,
+            Verdict::Deny {
+                reason: "payload 100 bytes exceeds limit 10 bytes".into()
+            }
+        );
+    }
 }

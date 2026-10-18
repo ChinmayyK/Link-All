@@ -1658,4 +1658,31 @@ mod tests {
         // Exact prefix token match on Apple should score higher than inner substring Pineapple
         assert_eq!(results[0].entry.summary(), "Apple iPhone 15 Pro Max specs");
     }
+
+    #[test]
+    fn rapid_history_trimming_with_multibyte_emoji_safe() {
+        let tmp = NamedTempFile::new().unwrap();
+        let mut history = History::load_with_limit(tmp.path(), 20).unwrap();
+
+        for i in 0..50 {
+            let emoji_text = format!("🦀🚀🎉❤️🔥 Note #{} — {}", i, "✨".repeat(20));
+            history
+                .push_with_options(
+                    &ClipboardContent::Text(emoji_text),
+                    "LocalDevice".into(),
+                    7, // Intentionally 7 bytes, which falls inside multi-byte emoji codepoints
+                )
+                .unwrap();
+        }
+
+        assert_eq!(history.entries().len(), 20);
+        for entry in history.entries() {
+            if let HistoryPayload::Text { preview, full_text, .. } = &entry.payload {
+                assert!(!preview.is_empty());
+                if let Some(full) = full_text {
+                    assert!(std::str::from_utf8(full.as_bytes()).is_ok());
+                }
+            }
+        }
+    }
 }
