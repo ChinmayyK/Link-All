@@ -315,15 +315,14 @@ impl PairingManager {
         self.ui_tx.send(pr).await.ok();
 
         // Wait for user decision with timeout.
-        match tokio::time::timeout(PAIRING_TIMEOUT, decision_rx).await {
-            Ok(Ok(approved)) => Ok(approved),
-            Ok(Err(_)) => Ok(false), // sender dropped
-            Err(_) => {
-                // Timed out — clean up using the captured device_id, not Uuid::nil().
-                self.pending.lock().await.remove(&device_id);
-                Ok(false)
-            }
-        }
+        let approved = match tokio::time::timeout(PAIRING_TIMEOUT, decision_rx).await {
+            Ok(Ok(approved)) => approved,
+            Ok(Err(_)) => false, // sender dropped
+            Err(_) => false,     // timed out
+        };
+        // Always ensure device_id is cleaned up from pending map
+        self.pending.lock().await.remove(&device_id);
+        Ok(approved)
     }
 
     /// Called by the platform UI when the user approves or denies.
@@ -477,5 +476,29 @@ mod tests {
 
         // Map should be empty after resolution.
         assert_eq!(mgr_ref.pending_count().await, 0);
+    }
+
+    #[tokio::test]
+    async fn pairing_manager_cleans_up_on_dropped_channel() {
+        let (ui_tx, _ui_rx) = tokio::sync::mpsc::channel(4);
+        let mgr = std::sync::Arc::new(PairingManager::new(ui_tx));
+        let id = Uuid::new_v4();
+        let pairing = PendingPairing::new(id, "Phone".into(), &[0xCC; 32], &[0u8; 32], [0u8; 32]);
+
+        let mgr2 = mgr.clone();
+        let handle = tokio::spawn(async move { mgr2.request_pairing(pairing).await });
+
+        // Force-drop the sender by removing it from the map without sending
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        {
+            let mut map = mgr.pending.lock().await;
+            if let Some((_, tx)) = map.remove(&id) {
+                drop(tx);
+            }
+        }
+
+        let approved = handle.await.unwrap().unwrap();
+        assert!(!approved);
+        assert_eq!(mgr.pending_count().await, 0);
     }
 }
