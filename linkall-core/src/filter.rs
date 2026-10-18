@@ -218,24 +218,28 @@ impl GlobPatternFilter {
 
     fn match_dp(pat: &[char], txt: &[char]) -> bool {
         let (m, n) = (pat.len(), txt.len());
-        let mut dp = vec![vec![false; n + 1]; m + 1];
-        dp[0][0] = true;
-        // Leading stars match empty string.
-        for i in 1..=m {
-            if pat[i - 1] == '*' {
-                dp[i][0] = dp[i - 1][0];
-            }
+        if m == 0 {
+            return n == 0;
         }
+        let mut prev = vec![false; n + 1];
+        let mut curr = vec![false; n + 1];
+        prev[0] = true;
+
         for i in 1..=m {
+            let p = pat[i - 1];
+            curr[0] = prev[0] && p == '*';
             for j in 1..=n {
-                if pat[i - 1] == '*' {
-                    dp[i][j] = dp[i - 1][j] || dp[i][j - 1];
-                } else if pat[i - 1] == '?' || pat[i - 1] == txt[j - 1] {
-                    dp[i][j] = dp[i - 1][j - 1];
+                if p == '*' {
+                    curr[j] = prev[j] || curr[j - 1];
+                } else if p == '?' || p == txt[j - 1] {
+                    curr[j] = prev[j - 1];
+                } else {
+                    curr[j] = false;
                 }
             }
+            std::mem::swap(&mut prev, &mut curr);
         }
-        dp[m][n]
+        prev[n]
     }
 }
 
@@ -1020,5 +1024,20 @@ mod tests {
     fn glob_star_star_matches_everything() {
         let f = GlobPatternFilter::new(vec!["*".into()]);
         assert!(matches!(f.check(&text("any text")), Verdict::Deny { .. }));
+    }
+
+    #[test]
+    fn glob_complex_multiple_wildcards() {
+        let f = GlobPatternFilter::new(vec!["*token*key*".into()]);
+        assert!(matches!(
+            f.check(&text("my_token_secret_key_123")),
+            Verdict::Deny { .. }
+        ));
+        assert_eq!(f.check(&text("token_only")), Verdict::Allow);
+        assert_eq!(f.check(&text("key_only")), Verdict::Allow);
+
+        let f2 = GlobPatternFilter::new(vec!["a*b?c".into()]);
+        assert!(matches!(f2.check(&text("axxb1c")), Verdict::Deny { .. }));
+        assert_eq!(f2.check(&text("axxb12c")), Verdict::Allow);
     }
 }
