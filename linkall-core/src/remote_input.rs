@@ -588,6 +588,8 @@ pub fn from_fraction(pos: u16, total: i32) -> i32 {
 /// Where the pointer appears on a `width` x `height` screen after it came in
 /// over `arrived`, `pos` of the way along that edge.
 pub fn entry_point(arrived: Edge, pos: u16, width: i32, height: i32) -> (i32, i32) {
+    let width = width.max(1);
+    let height = height.max(1);
     match arrived {
         Edge::Left => (0, from_fraction(pos, height)),
         Edge::Right => (width - 1, from_fraction(pos, height)),
@@ -610,6 +612,9 @@ pub fn outward_push(edge: Edge, dx: i32, dy: i32) -> i32 {
 /// True when (`x`, `y`) is on `edge` of a `width` x `height` screen, and where
 /// along it.
 pub fn on_edge(edge: Edge, x: i32, y: i32, width: i32, height: i32) -> Option<u16> {
+    if width <= 0 || height <= 0 {
+        return None;
+    }
     match edge {
         Edge::Left if x <= 0 => Some(to_fraction(y, height)),
         Edge::Right if x >= width - 1 => Some(to_fraction(y, height)),
@@ -2079,6 +2084,14 @@ mod edge_tests {
         assert_eq!(on_edge(Edge::Right, 1919, 1079, 1920, 1080), Some(65535));
         assert!(on_edge(Edge::Bottom, 960, 1079, 1920, 1080).is_some());
         assert_eq!(on_edge(Edge::Top, 960, 5, 1920, 1080), None);
+    }
+
+    #[test]
+    fn zero_or_negative_screen_bounds_safe() {
+        assert_eq!(entry_point(Edge::Right, 100, 0, 0), (0, 0));
+        assert_eq!(entry_point(Edge::Bottom, 100, -100, -200), (0, 0));
+        assert_eq!(on_edge(Edge::Left, 0, 0, 0, 0), None);
+        assert_eq!(on_edge(Edge::Right, 0, 0, -10, 1080), None);
     }
 }
 
