@@ -178,6 +178,10 @@ mod platform {
                                 }
 
                                 let port = info.get_port();
+                                if port == 0 {
+                                    warn!("mDNS: resolved service {} has invalid port 0, skipping", peer_id);
+                                    continue;
+                                }
                                 info!(
                                     "mDNS: found peer {} at {:?}:{} (name resolved after handshake)",
                                     peer_id, addrs, port
@@ -295,6 +299,15 @@ mod platform {
             assert_eq!(Some(old_version).filter(|&v| v == PROTOCOL_VERSION), None);
             // Future version should also be filtered out.
             assert_eq!(Some(new_version).filter(|&v| v == PROTOCOL_VERSION), None);
+        }
+
+        #[test]
+        fn port_validation_logic() {
+            let valid_port: u16 = 53317;
+            let invalid_port: u16 = 0;
+
+            assert_eq!(Some(valid_port).filter(|&p| p > 0), Some(53317));
+            assert_eq!(Some(invalid_port).filter(|&p| p > 0), None);
         }
     }
 }
