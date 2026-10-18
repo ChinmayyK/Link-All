@@ -335,10 +335,38 @@ pub fn clean_name(raw: &str) -> String {
             }
         })
         .collect();
-    let cleaned = cleaned.trim().trim_start_matches('.').trim().to_string();
+    let cleaned = cleaned
+        .trim()
+        .trim_start_matches('.')
+        .trim_end_matches(['.', ' '])
+        .trim()
+        .to_string();
     let cleaned: String = cleaned.chars().take(120).collect();
     if cleaned.is_empty() {
-        "file".to_string()
+        return "file".to_string();
+    }
+
+    // Windows reserved device names check (stem before the first dot).
+    let stem = match cleaned.split_once('.') {
+        Some((s, _)) => s,
+        None => &cleaned,
+    };
+    let upper = stem.to_ascii_uppercase();
+    let is_reserved = match upper.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" => true,
+        s if (s.len() == 4
+            && (s.starts_with("COM") || s.starts_with("LPT"))
+            && s.chars()
+                .nth(3)
+                .is_some_and(|c| c.is_ascii_digit() && c != '0')) =>
+        {
+            true
+        }
+        _ => false,
+    };
+
+    if is_reserved {
+        format!("file_{}", cleaned)
     } else {
         cleaned
     }
@@ -471,6 +499,15 @@ mod tests {
         assert_eq!(clean_name("a:b*c.txt"), "a_b_c.txt");
         assert_eq!(clean_name(""), "file");
         assert_eq!(clean_name("  "), "file");
+        assert_eq!(clean_name("..."), "file");
+        assert_eq!(clean_name("foo.txt. "), "foo.txt");
+        assert_eq!(clean_name("CON"), "file_CON");
+        assert_eq!(clean_name("con.txt"), "file_con.txt");
+        assert_eq!(clean_name("aux.tar.gz"), "file_aux.tar.gz");
+        assert_eq!(clean_name("NUL"), "file_NUL");
+        assert_eq!(clean_name("com1.png"), "file_com1.png");
+        assert_eq!(clean_name("lpt9.pdf"), "file_lpt9.pdf");
+        assert_eq!(clean_name("safe_con.txt"), "safe_con.txt");
         assert!(clean_name(&"x".repeat(500)).chars().count() <= 120);
     }
 
