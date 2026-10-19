@@ -64,6 +64,14 @@ try {
   foreach ($need in 'LinkAll.exe', 'linkall_core.dll', 'tray/LinkAll.Tray.exe') {
     if (-not ($zip.Entries | Where-Object { $_.FullName -eq $need })) { throw "the MSIX is missing $need" }
   }
+  # The unused Windows AI runtime is ~16 MB; the csproj keeps it out (TrimMsixPayload).
+  foreach ($unused in 'onnxruntime.dll', 'DirectML.dll') {
+    if ($zip.Entries | Where-Object { $_.Name -eq $unused }) { throw "the MSIX still contains $unused" }
+  }
+  $ai = $zip.Entries | Where-Object { $_.Name -like 'Microsoft.Windows.AI.*' } | Select-Object -First 1
+  if ($ai) { throw "the MSIX still contains $($ai.Name)" }
+  $mb = [math]::Round((Get-Item $msix.FullName).Length / 1MB, 1)
+  Write-Host "MSIX size: $mb MB"
 } finally { $zip.Dispose() }
 
 $out = Join-Path $root "$OutDir\LinkAll-windows-x64.msix"
