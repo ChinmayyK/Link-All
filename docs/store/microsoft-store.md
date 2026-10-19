@@ -69,6 +69,7 @@ android pc
 cross device
 clipboard sync
 file transfer
+folder transfer
 
 (No other products' names: "airdrop for windows" was rejected on 19 Oct 2026 under policy 10.1.3,
 and "phone link" and "universal clipboard" are Microsoft's and Apple's names.)
