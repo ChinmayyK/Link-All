@@ -191,7 +191,9 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Build Windows DLL
-        run: cargo build --release -p linkall-core
+        run: |
+          cargo build --release -p linkall-core -p linkall-cli
+          cargo build --release -p linkall-core --example smoke_peer
 
       - name: Build C# project
         run: |
@@ -207,6 +209,11 @@ jobs:
       # the Store signs it.
       - name: Build Store package (MSIX)
         run: pwsh scripts\windows-msix.ps1 -SkipRust
+
+      # Installs the MSIX and uses the installed app: start-up, tray, IPC,
+      # linkall://, and pairing, clipboard and files with a second device.
+      - name: Smoke-test the installed Store package
+        run: pwsh scripts\windows-msix-smoke.ps1 -Msix dist\msix\LinkAll-windows-x64.msix
 
       - name: Upload Store package
         uses: actions/upload-artifact@v4
