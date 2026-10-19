@@ -1100,6 +1100,29 @@ impl PeerManager {
         Ok(found)
     }
 
+    /// Drop a device we have no relationship with (not trusted, not
+    /// remembered, no pairing in flight, not connected) once discovery stops
+    /// seeing it. It is only a "Nearby" entry; the next sighting adds it again.
+    /// `forget_device` is for the user's own disconnect and marks the device
+    /// explicitly disconnected, which refuses every automatic connection, so
+    /// using it here blocked a nearby device (a freshly reinstalled phone, say)
+    /// from ever connecting or asking to pair after one missed announcement.
+    pub fn drop_stranger(&self, device_id: Uuid) -> Result<bool> {
+        if self.live.contains_key(&device_id) {
+            return Ok(false);
+        }
+        let removed = self
+            .store
+            .remove_if(&device_id, |_, p| {
+                !p.trusted && !p.remembered && !p.pairing_requested && !p.outgoing_pairing_waiting
+            })
+            .is_some();
+        if removed {
+            self.save()?;
+        }
+        Ok(removed)
+    }
+
     /// Stop dialling `ip` for this peer: another device answers there now.
     /// Returns whether anything was removed.
     pub fn forget_address(&self, device_id: Uuid, ip: IpAddr) -> Result<bool> {
@@ -1717,6 +1740,33 @@ mod tests {
         let peer = manager.get(id).unwrap();
         assert!(!peer.trusted);
         assert!(!peer.remembered);
+    }
+
+    #[test]
+    fn a_stranger_leaving_discovery_can_still_connect_later() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let (stranger, paired) = (Uuid::new_v4(), Uuid::new_v4());
+        let addr = SocketAddr::from(([192, 168, 1, 21], 47823));
+        manager
+            .upsert_peer(stranger, "Phone".into(), addr, false, DiscoverySource::Mdns)
+            .unwrap();
+        manager
+            .upsert_peer(paired, "Laptop".into(), addr, true, DiscoverySource::Mdns)
+            .unwrap();
+
+        assert!(manager.drop_stranger(stranger).unwrap());
+        assert!(manager.get(stranger).is_none());
+        assert!(
+            !manager.is_explicitly_disconnected(stranger),
+            "a stranger that left mDNS must not be refused when it comes back"
+        );
+
+        assert!(
+            !manager.drop_stranger(paired).unwrap(),
+            "a paired device is kept"
+        );
+        assert!(manager.get(paired).is_some());
     }
 
     #[test]
