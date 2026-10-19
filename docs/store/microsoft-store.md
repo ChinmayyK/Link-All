@@ -64,12 +64,15 @@ Free and open source
 
 ## Search terms (7 max, 30 characters each)
 continuity
-universal clipboard
-phone link
 send files to phone
 android pc
-airdrop for windows
 cross device
+clipboard sync
+file transfer
+folder transfer
+
+(No other products' names: "airdrop for windows" was rejected on 19 Oct 2026 under policy 10.1.3,
+and "phone link" and "universal clipboard" are Microsoft's and Apple's names.)
 
 ## What's new in this version
 First release on the Microsoft Store.
