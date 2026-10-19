@@ -176,6 +176,12 @@ pub struct OutboundTransfer {
     /// so a resume can rewind to the last confirmed chunk without hashing
     /// the whole delivered prefix again (most of a 12 GB file at 95%).
     hash_checkpoints: std::collections::VecDeque<(u32, Sha256)>,
+    /// The whole file's checksum once worked out. Finishing takes the
+    /// hasher, and after a fast reconnect two send loops can each finish
+    /// the transfer: the second used to send an empty checksum, and when
+    /// the first had gone out on the replaced connection the receiver threw
+    /// away a good file.
+    final_checksum: Option<String>,
 }
 
 impl OutboundTransfer {
@@ -210,6 +216,7 @@ impl OutboundTransfer {
             rehash_chunks: 0,
             send_run: 0,
             hash_checkpoints: Default::default(),
+            final_checksum: None,
         }
     }
 
@@ -244,6 +251,7 @@ impl OutboundTransfer {
             rehash_chunks: 0,
             send_run: 0,
             hash_checkpoints: Default::default(),
+            final_checksum: None,
         })
     }
 
@@ -371,11 +379,15 @@ impl OutboundTransfer {
     }
 
     pub fn finalize_checksum(&mut self) -> String {
-        if let Some(h) = self.hasher.take() {
-            hex::encode(h.finalize())
-        } else {
-            String::new()
+        if let Some(done) = &self.final_checksum {
+            return done.clone();
         }
+        let Some(h) = self.hasher.take() else {
+            return String::new();
+        };
+        let checksum = hex::encode(h.finalize());
+        self.final_checksum = Some(checksum.clone());
+        checksum
     }
 
     pub fn progress(&mut self) -> TransferProgress {
@@ -1751,6 +1763,19 @@ mod tests {
     fn sanitize_file_name_blocks_alternate_data_streams() {
         assert_eq!(sanitize_file_name("a.txt:evil.exe"), "a.txt_evil.exe");
         assert_eq!(sanitize_file_name("notes 12:30.txt"), "notes 12_30.txt");
+    }
+
+    #[test]
+    fn finishing_twice_gives_the_same_checksum() {
+        // Two send loops can both finish a resumed transfer after a fast
+        // reconnect; the second must not send an empty checksum.
+        let data = b"link all".repeat(1000);
+        let meta = make_meta(&data);
+        let mut transfer = OutboundTransfer::new(data.clone(), meta, None);
+        transfer.hasher.as_mut().unwrap().update(&data);
+        let first = transfer.finalize_checksum();
+        assert_eq!(first, hex::encode(Sha256::digest(&data)));
+        assert_eq!(transfer.finalize_checksum(), first);
     }
 
     #[test]
