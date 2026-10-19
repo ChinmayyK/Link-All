@@ -185,6 +185,20 @@
     <Unzip SourceFiles="@(_RuntimeMsix)" DestinationFolder="$(PublishDir)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
   </Target>
 
+  <!-- The Store package lists its payload itself, so the copy above never
+       reached it, and the Store build's toast buttons had the same
+       0x8007007E failure. Add the file to the package payload too. -->
+  <Target Name="PackageWindowsAppRuntimeInsights" AfterTargets="GetPackagingOutputs" DependsOnTargets="_FindWindowsAppRuntimeMsix" Condition="'$(WindowsPackageType)' == 'MSIX'">
+    <Unzip SourceFiles="@(_RuntimeMsix)" DestinationFolder="$(OutDir)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <PackagingOutputs Include="$(OutDir)Microsoft.WindowsAppRuntime.Insights.Resource.dll">
+        <TargetPath>Microsoft.WindowsAppRuntime.Insights.Resource.dll</TargetPath>
+        <OutputGroup>CustomOutputGroupForPackaging</OutputGroup>
+        <ProjectName>$(ProjectName)</ProjectName>
+      </PackagingOutputs>
+    </ItemGroup>
+  </Target>
+
   <!--
     Self-contained Microsoft.WindowsAppSDK 2.3.1 deploys its Windows AI /
     Copilot Runtime component (Phi Silica, ContentSafety, Imaging super

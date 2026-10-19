@@ -61,7 +61,7 @@ if (-not $msix) { throw "no .msix was produced under $pkgDir" }
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [System.IO.Compression.ZipFile]::OpenRead($msix.FullName)
 try {
-  foreach ($need in 'LinkAll.exe', 'linkall_core.dll', 'tray/LinkAll.Tray.exe') {
+  foreach ($need in 'LinkAll.exe', 'linkall_core.dll', 'tray/LinkAll.Tray.exe', 'Microsoft.WindowsAppRuntime.Insights.Resource.dll') {
     if (-not ($zip.Entries | Where-Object { $_.FullName -eq $need })) { throw "the MSIX is missing $need" }
   }
   # The unused Windows AI runtime is ~16 MB; the csproj keeps it out (TrimMsixPayload).
