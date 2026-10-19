@@ -120,7 +120,8 @@ async fn main() -> anyhow::Result<()> {
                 file_name,
                 dest_path,
                 ..
-            } if from_device == app => {
+            // The sender gets this event too, for its own file: skip ours.
+            } if from_device == app && file_name != name => {
                 let bytes = std::fs::metadata(&dest_path).map(|m| m.len()).unwrap_or(0);
                 say(format!("GOT_FILE {file_name} {bytes}"));
                 got_file = true;
