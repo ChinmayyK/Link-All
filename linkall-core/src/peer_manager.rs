@@ -1100,6 +1100,27 @@ impl PeerManager {
         Ok(found)
     }
 
+    /// Stop dialling `ip` for this peer: another device answers there now.
+    /// Returns whether anything was removed.
+    pub fn forget_address(&self, device_id: Uuid, ip: IpAddr) -> Result<bool> {
+        let ip = ip.to_canonical();
+        let removed = match self.store.get_mut(&device_id) {
+            Some(mut entry) => {
+                let before = entry.ips.len() + entry.addr_history.len();
+                entry.ips.retain(|known| known.to_canonical() != ip);
+                entry
+                    .addr_history
+                    .retain(|record| record.addr.ip().to_canonical() != ip);
+                before != entry.ips.len() + entry.addr_history.len()
+            }
+            None => false,
+        };
+        if removed {
+            self.save()?;
+        }
+        Ok(removed)
+    }
+
     // ── Sender views ──────────────────────────────────────────────────────────
 
     /// Connected + trusted + sync_enabled peers — receives clipboard payloads.
