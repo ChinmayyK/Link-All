@@ -17,11 +17,11 @@ use crate::crypto::{EphemeralKeypair, SessionKey};
 use crate::protocol::{AppMessage, EcdhFrame, PROTOCOL_VERSION};
 use anyhow::{Context, Result};
 use serde::{de::DeserializeOwned, Serialize};
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 
 static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> =
@@ -812,9 +812,24 @@ pub struct Server {
 
 impl Server {
     pub async fn bind(addr: SocketAddr) -> Result<Self> {
-        let listener = TcpListener::bind(addr)
-            .await
-            .context(format!("binding to {}", addr))?;
+        let listener = if addr.ip() == IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED) {
+            match dual_stack_listener(addr) {
+                Ok(listener) => listener,
+                Err(err) => {
+                    // No IPv6 on this host: IPv4 is what devices use anyway.
+                    warn!(error = %err, "dual-stack listener unavailable, listening on IPv4");
+                    let v4 =
+                        SocketAddr::new(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), addr.port());
+                    TcpListener::bind(v4)
+                        .await
+                        .context(format!("binding to {}", v4))?
+                }
+            }
+        } else {
+            TcpListener::bind(addr)
+                .await
+                .context(format!("binding to {}", addr))?
+        };
         info!("Link All server listening on {}", addr);
         Ok(Self { listener })
     }
@@ -831,11 +846,56 @@ impl Server {
     }
 }
 
+/// One listener for IPv4 and IPv6 on `[::]:port`. Windows makes an IPv6
+/// socket IPv6-only unless told otherwise (Linux and macOS don't), so the
+/// Windows app refused every IPv4 connection: a phone dialling the PC's
+/// 192.168.x.x address never got through, and only the PC could connect.
+fn dual_stack_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
+    use socket2::{Domain, Protocol, Socket, Type};
+    let socket = Socket::new(Domain::IPV6, Type::STREAM, Some(Protocol::TCP))?;
+    socket.set_only_v6(false)?;
+    // As tokio's own bind does: lets a restarted engine take the port back
+    // while old connections linger in TIME_WAIT. Not on Windows, where
+    // SO_REUSEADDR would let another process bind the same port.
+    #[cfg(not(windows))]
+    socket.set_reuse_address(true)?;
+    socket.bind(&addr.into())?;
+    socket.listen(1024)?;
+    socket.set_nonblocking(true)?;
+    TcpListener::from_std(socket.into())
+}
+
 // ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The engine listens on [::]. Devices dial it over IPv4 as well, which
+    /// Windows refused while the socket was left IPv6-only.
+    #[tokio::test]
+    async fn the_wildcard_listener_accepts_ipv4_and_ipv6() {
+        let server = Server::bind("[::]:0".parse().unwrap()).await.unwrap();
+        let port = server.local_addr().unwrap().port();
+        let accept = tokio::spawn(async move {
+            for _ in 0..2 {
+                server.accept().await.unwrap();
+            }
+        });
+        TcpStream::connect(("127.0.0.1", port))
+            .await
+            .expect("an IPv4 connection reaches the [::] listener");
+        if let Ok(v6) = TcpStream::connect(("::1", port)).await {
+            drop(v6);
+        } else {
+            // No IPv6 loopback on this machine: the listener fell back to IPv4.
+            TcpStream::connect(("127.0.0.1", port)).await.unwrap();
+        }
+        tokio::time::timeout(Duration::from_secs(5), accept)
+            .await
+            .unwrap()
+            .unwrap();
+    }
 
     // ── Framing round-trip ────────────────────────────────────────────────────
 
