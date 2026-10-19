@@ -173,3 +173,96 @@ async fn a_device_paired_with_a_pin_is_redialled_after_a_drop() {
     )
     .await;
 }
+
+/// Reinstalling the phone app gives the phone a new identity on the same
+/// address. The computer still redials the old, paired identity there, and
+/// used to close the connection on finding another device. That also ended
+/// the session the phone already had with it, every reconnect cycle, so the
+/// reinstalled phone could never stay connected long enough to pair.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_reinstalled_phone_on_the_old_address_stays_connected() {
+    let tmp = TempDir::new().unwrap();
+    let (old_phone_id, new_phone_id, computer_id) =
+        (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
+    trusts(&tmp, "old_phone", computer_id, "Computer", "computer");
+    trusts(&tmp, "computer", old_phone_id, "Phone", "old_phone");
+    let computer = start_node(twin_config(&tmp, "computer", computer_id, "Computer")).await;
+    let computer_port = computer.engine.bound_port().await;
+    let phone_port = free_port();
+
+    let mut cfg = twin_config(&tmp, "old_phone", old_phone_id, "Phone");
+    cfg.port = phone_port;
+    let (phone_rt, old_phone) = std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+        let node = rt.block_on(start_node(cfg));
+        (rt, node)
+    })
+    .join()
+    .unwrap();
+    let engine = old_phone.engine.clone();
+    phone_rt
+        .spawn(async move {
+            engine
+                .connect_to_peer("127.0.0.1".into(), computer_port)
+                .await
+        })
+        .await
+        .unwrap()
+        .expect("the old phone dials the computer");
+    eventually("the computer sees the old phone", async || {
+        connected(&computer, old_phone_id).await
+    })
+    .await;
+
+    // The app is uninstalled, then installed again: a new identity, no
+    // pairings, listening where the old install did.
+    drop(old_phone);
+    std::thread::spawn(move || phone_rt.shutdown_timeout(Duration::from_secs(2)))
+        .join()
+        .unwrap();
+    eventually("the computer notices the old phone is gone", async || {
+        !connected(&computer, old_phone_id).await
+    })
+    .await;
+    let mut cfg = twin_config(&tmp, "new_phone", new_phone_id, "Phone");
+    cfg.port = phone_port;
+    let mut new_phone = start_node(cfg).await;
+
+    eventually_within(
+        Duration::from_secs(45),
+        "the computer's redial reaches the new phone",
+        async || {
+            connected(&computer, new_phone_id).await && connected(&new_phone, computer_id).await
+        },
+    )
+    .await;
+    while new_phone.events.try_recv().is_ok() {}
+
+    // The link must hold through further reconnect cycles, or a pairing
+    // request has nothing to travel on.
+    let hold = Duration::from_secs(15);
+    let ended = tokio::time::timeout(hold, async {
+        loop {
+            match new_phone.events.recv().await {
+                Some(EngineEvent::PeerDisconnected { device_id, .. })
+                    if device_id == computer_id =>
+                {
+                    return;
+                }
+                Some(_) => {}
+                None => std::future::pending::<()>().await,
+            }
+        }
+    })
+    .await;
+    assert!(ended.is_err(), "the new phone lost the computer");
+    assert!(connected(&computer, new_phone_id).await);
+    assert!(
+        peer(&computer, old_phone_id).await.ips.is_empty(),
+        "the computer stops dialling the old identity at the new phone's address"
+    );
+}
