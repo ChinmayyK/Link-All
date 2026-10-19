@@ -12,7 +12,9 @@
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
   xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
-  IgnorableNamespaces="uap rescap desktop">
+  xmlns:desktop2="http://schemas.microsoft.com/appx/manifest/desktop/windows10/2"
+  xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+  IgnorableNamespaces="uap rescap desktop desktop2 com">
 
   <Identity
     Name="ChinmayKudalkar.LinkAll"
@@ -63,9 +65,41 @@
         <desktop:Extension Category="windows.startupTask">
           <desktop:StartupTask TaskId="LinkAllStartup" Enabled="false" DisplayName="Link All" />
         </desktop:Extension>
+        <!-- Accept / Reject on a pairing toast. A packaged app receives toast
+             button clicks through a COM activator declared here; without it
+             AppNotificationManager.Register() fails ("No COM servers are
+             registered for this app") and the buttons do nothing. The CLSID
+             is this app's own: keep it the same across versions. -->
+        <desktop:Extension Category="windows.toastNotificationActivation">
+          <desktop:ToastNotificationActivation ToastActivatorCLSID="5A968521-68FD-4BAB-B606-182378102763" />
+        </desktop:Extension>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:ExeServer Executable="LinkAll.exe" Arguments="----AppNotificationActivated:" DisplayName="Link All">
+              <com:Class Id="5A968521-68FD-4BAB-B606-182378102763" DisplayName="Link All notifications" />
+            </com:ExeServer>
+          </com:ComServer>
+        </com:Extension>
       </Extensions>
     </Application>
   </Applications>
+
+  <!-- Devices dial this PC on TCP 47823 and find it by UDP beacons (47824)
+       and mDNS (5353). Without these rules Windows asks on first launch, and
+       on a network marked Public (many home Wi-Fi networks are) a dismissed
+       prompt leaves block rules that stop every phone from reaching this PC.
+       Windows adds these at install with no prompt and removes them on
+       uninstall. Connections are still authenticated and encrypted, and only
+       paired devices are trusted. -->
+  <Extensions>
+    <desktop2:Extension Category="windows.firewallRules">
+      <desktop2:FirewallRules Executable="LinkAll.exe">
+        <desktop2:Rule Direction="in" IPProtocol="TCP" Profile="all" LocalPortMin="47823" LocalPortMax="47823" />
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="all" LocalPortMin="47824" LocalPortMax="47824" />
+        <desktop2:Rule Direction="in" IPProtocol="UDP" Profile="all" LocalPortMin="5353" LocalPortMax="5353" />
+      </desktop2:FirewallRules>
+    </desktop2:Extension>
+  </Extensions>
 
   <Capabilities>
     <Capability Name="internetClientServer" />

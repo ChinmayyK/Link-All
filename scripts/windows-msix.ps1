@@ -72,6 +72,14 @@ try {
   if ($ai) { throw "the MSIX still contains $($ai.Name)" }
   $mb = [math]::Round((Get-Item $msix.FullName).Length / 1MB, 1)
   Write-Host "MSIX size: $mb MB"
+  # Without the toast activator, pairing toasts' Accept does nothing; without
+  # the firewall rules, phones can't reach the PC on a Public network.
+  $entry = $zip.Entries | Where-Object { $_.FullName -eq 'AppxManifest.xml' }
+  $reader = New-Object System.IO.StreamReader($entry.Open())
+  try { $built = $reader.ReadToEnd() } finally { $reader.Dispose() }
+  foreach ($need in 'windows.toastNotificationActivation', 'windows.comServer', 'windows.firewallRules') {
+    if ($built -notmatch [regex]::Escape($need)) { throw "the MSIX manifest is missing $need" }
+  }
 } finally { $zip.Dispose() }
 
 $out = Join-Path $root "$OutDir\LinkAll-windows-x64.msix"

@@ -94,6 +94,7 @@ Upload docs/store/microsoft/*.png (1920×1080, in file-name order). Each has its
 
 ## Notes for certification (Submission options › Notes for certification)
 Link All needs a second device to show its main features: install Link All on an Android phone, Mac or another PC on the same network, then pair them by confirming the PIN shown on both. The app requests runFullTrust (a desktop app with a system tray helper). It needs no account and has no in-app purchases.
+The package declares inbound Windows Firewall rules for LinkAll.exe only (TCP 47823 for device connections, UDP 47824 and 5353 for local discovery), so devices on the same network can reach the PC. Every connection is authenticated and encrypted, and only devices the user pairs are trusted. It also declares a COM activator for its own notification buttons (Accept / Reject a pairing request).
 
 ## Restricted capabilities justification
 runFullTrust: Link All is a Win32/WinUI desktop app with a separate system tray helper process and named-pipe IPC.
