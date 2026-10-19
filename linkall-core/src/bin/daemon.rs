@@ -6,7 +6,7 @@ use linkall_core::{
     ipc::{IpcRequest, IpcResponse},
     peer_manager::PeerConnectionState,
     protocol::ClipboardContent,
-    settings::{default_history_path, default_settings_path, ClipboardTemplate, SettingsStore},
+    settings::{default_settings_path, ClipboardTemplate, SettingsStore},
     trust::format_fingerprint,
 };
 use serde::Serialize;
@@ -82,16 +82,19 @@ async fn run() -> Result<()> {
     let engine = Arc::new(Engine::start(config, event_tx).await?);
     engine.apply_settings(initial_settings.clone()).await;
 
-    let history = History::load_with_limit(
-        default_history_path(),
-        initial_settings.effective_history_limit(),
-    )
-    .context("loading history")?;
+    // The engine already keeps history.json; a second copy of it here made
+    // the two save over each other on every clip.
+    let history = engine.history_store();
+    history
+        .lock()
+        .await
+        .set_max_entries(initial_settings.effective_history_limit())
+        .context("applying the history limit")?;
 
     let state = DaemonState {
         engine: engine.clone(),
         settings: Arc::new(Mutex::new(settings_store)),
-        history: Arc::new(Mutex::new(history)),
+        history,
         feedback: Arc::new(Mutex::new(VecDeque::new())),
         incoming_clipboards: Arc::new(Mutex::new(HashMap::new())),
         incoming_order: Arc::new(Mutex::new(VecDeque::new())),

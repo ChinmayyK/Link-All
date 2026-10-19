@@ -400,6 +400,13 @@ impl Engine {
         self.shared.config.device_id
     }
 
+    /// The clipboard history this engine keeps. A host that also records
+    /// history must use this one: two copies of the same file, each saving
+    /// on every clip, fail each other's saves and overwrite each other.
+    pub fn history_store(&self) -> Arc<Mutex<crate::history::History>> {
+        self.shared.history.clone()
+    }
+
     pub fn local_device_id(&self) -> Uuid {
         self.shared.config.device_id
     }
