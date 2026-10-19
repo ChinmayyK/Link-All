@@ -87,7 +87,8 @@ Check (WaitFor { (Trace) -match 'protocol activation' } 20) "a linkall:// link r
 # A second device: pair, then a clip and a file each way.
 $peerOut = Join-Path $env:TEMP "linkall-smoke-peer.txt"
 $peerErr = Join-Path $env:TEMP "linkall-smoke-peer.err"
-$peerProc = Start-Process $Peer -ArgumentList '127.0.0.1', '47823', '150' -PassThru -NoNewWindow `
+$env:RUST_BACKTRACE = '0'
+$peerProc = Start-Process $Peer -ArgumentList '::1', '47823', '150' -PassThru -NoNewWindow `
   -RedirectStandardOutput $peerOut -RedirectStandardError $peerErr
 function PeerSaid([string]$pattern) { (Test-Path $peerOut) -and ((Get-Content $peerOut -Raw) -match $pattern) }
 
@@ -97,7 +98,8 @@ if (WaitFor { PeerSaid '(?m)^APP ' } 40) {
 }
 Check ([bool]$peerId) "the second device connects"
 if ($peerId) {
-  Check (WaitFor { (& $Cli pair accept $peerId 2>&1 | Out-String) -notmatch '(?i)error|not found|no pending'; PeerSaid '(?m)^PAIRED' } 40) "pairing is accepted"
+  # Accept until the request has arrived and the device reports it paired.
+  Check (WaitFor { & $Cli pair accept $peerId *> $null; PeerSaid '(?m)^PAIRED' } 40) "pairing is accepted"
   Check (WaitFor { (& $Cli history --search "smoke clip from peer" 2>&1 | Out-String) -match 'smoke clip from peer' } 30) "a clip from the device reaches the app"
   Check (WaitFor { Get-ChildItem "$env:USERPROFILE\Downloads\smoke-from-peer-*.bin" -ErrorAction SilentlyContinue | Where-Object Length -eq (3MB + 17) } 60) "a file from the device reaches the app"
 
@@ -109,7 +111,7 @@ if ($peerId) {
   Check (WaitFor { PeerSaid "(?m)^GOT_FILE smoke-from-app\.bin $(2MB + 5)" } 60) "a file from the app reaches the device"
 }
 if (-not $peerProc.HasExited) { $peerProc.Kill() }
-Write-Host "--- second device"; Get-Content $peerOut -ErrorAction SilentlyContinue; Get-Content $peerErr -ErrorAction SilentlyContinue | Select-Object -Last 20
+Write-Host "--- second device"; Get-Content $peerOut -ErrorAction SilentlyContinue; Get-Content $peerErr -ErrorAction SilentlyContinue | Select-Object -First 40
 
 Check ($null -ne (Get-Process LinkAll -ErrorAction SilentlyContinue)) "LinkAll.exe is still running at the end"
 Check ((Trace) -notmatch '(?i)onnxruntime|DirectML|Microsoft\.Windows\.AI') "no trace line mentions the Windows AI runtime"
