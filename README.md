@@ -4,7 +4,7 @@
 
   <p><strong>A local-first, zero-cloud desktop and mobile continuity engine for resumable file transfers, clipboard synchronization, and hardware interaction across mixed operating systems.</strong></p>
 
-  <p><a href="#test-the-google-play-version">Help test the Android app on Google Play</a></p>
+  <p><a href="https://apps.microsoft.com/detail/9P9DJW3KCK9K">Get it from the Microsoft Store</a> · <a href="#test-the-google-play-version">Help test the Android app on Google Play</a></p>
 
   <div>
     <img src="https://img.shields.io/badge/Platform-macOS-lightgrey?style=for-the-badge&logo=apple" alt="macOS" />
@@ -128,12 +128,14 @@ Below is a technical feature comparison between Link All and existing cross-plat
 
 ## Download
 
+On Windows, the easiest way is the [Microsoft Store](https://apps.microsoft.com/detail/9P9DJW3KCK9K), which keeps Link All up to date. The Store version has everything except "Send with Link All" in File Explorer's right-click menu, which comes with the `.msi`.
+
 Get the latest build for each platform from [GitHub Releases](https://github.com/ChinmayyK/Link-All/releases/latest):
 
 | Platform | File |
 | :--- | :--- |
 | macOS 13+ (Apple Silicon) | `LinkAll.dmg` |
-| Windows 10/11 x64 | `LinkAll-windows-x64.msi` (installer) or `LinkAll-windows-x64.zip` (portable) |
+| Windows 10/11 x64 | [Microsoft Store](https://apps.microsoft.com/detail/9P9DJW3KCK9K), or `LinkAll-windows-x64.msi` (installer) or `LinkAll-windows-x64.zip` (portable) |
 | Android 8.0+ | `LinkAll-android.apk` |
 | Linux x86_64 / ARM64 (Ubuntu 24.04+, Debian 13, Fedora 40+, Arch) | `linkall_<version>_amd64.deb` / `_arm64.deb`, or `LinkAll-linux-<arch>.tar.gz` (unpack and run `./install.sh`, no root needed) |
 
