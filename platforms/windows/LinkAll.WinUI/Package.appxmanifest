@@ -19,7 +19,7 @@
   <Identity
     Name="ChinmayKudalkar.LinkAll"
     Publisher="CN=0F47A9E1-2B5F-4DF7-98AC-BA72D6C4A793"
-    Version="2.0.1.0" />
+    Version="2.0.2.0" />
 
   <Properties>
     <DisplayName>Link All – Phone &amp; Computer</DisplayName>

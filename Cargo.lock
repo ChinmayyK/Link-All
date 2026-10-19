@@ -1566,7 +1566,7 @@ dependencies = [
 
 [[package]]
 name = "linkall-cli"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1578,7 +1578,7 @@ dependencies = [
 
 [[package]]
 name = "linkall-core"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -1624,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "linkall-linux"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1647,7 +1647,7 @@ dependencies = [
 
 [[package]]
 name = "linkall-tray"
-version = "2.0.1"
+version = "2.0.2"
 dependencies = [
  "windows-sys 0.61.2",
 ]
