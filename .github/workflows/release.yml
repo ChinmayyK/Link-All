@@ -318,3 +318,32 @@ jobs:
             sha256sums.txt
           draft: false
           prerelease: ${{ contains(github.ref, '-rc') || contains(github.ref, '-beta') }}
+
+  # Keeps `brew install --cask ChinmayyK/tap/link-all` on the latest release.
+  # Needs a TAP_TOKEN secret: a token with write access to ChinmayyK/homebrew-tap.
+  update-homebrew-tap:
+    name: Update Homebrew tap
+    needs: create-release
+    runs-on: ubuntu-latest
+    if: ${{ !contains(github.ref, '-rc') && !contains(github.ref, '-beta') }}
+    steps:
+      - name: Bump cask
+        env:
+          GH_TOKEN: ${{ secrets.TAP_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::TAP_TOKEN isn't set, so the Homebrew cask wasn't bumped. Update Casks/link-all.rb in ChinmayyK/homebrew-tap by hand."
+            exit 0
+          fi
+          version="${TAG#v}"
+          sha=$(gh release download "$TAG" --repo "$GITHUB_REPOSITORY" -p sha256sums.txt -O - | awk '$2 == "LinkAll.dmg" { print $1 }')
+          [ -n "$sha" ] || { echo "ERROR: no LinkAll.dmg checksum for $TAG" >&2; exit 1; }
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/ChinmayyK/homebrew-tap.git" tap
+          cd tap
+          sed -i -E "s/^  version \".*\"/  version \"$version\"/; s/^  sha256 \".*\"/  sha256 \"$sha\"/" Casks/link-all.rb
+          git diff --quiet && exit 0
+          git config user.name "Chinmay Kudalkar"
+          git config user.email "chinmaykudalkarrr@gmail.com"
+          git commit -am "link-all $version"
+          git push
