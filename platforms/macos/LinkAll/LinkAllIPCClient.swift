@@ -179,6 +179,10 @@ struct IpcRemoteFilesResult: Codable {
     let error: String?
 }
 
+struct IpcDiagnosticReport: Codable {
+    let text: String
+}
+
 struct IpcRemoteThumbnailResult: Codable {
     let file_id: UInt64
     let data_base64: String?
@@ -507,6 +511,14 @@ final class LinkAllIPCClient {
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
         guard let b64 = resp.data?.data_base64 else { return nil }
         return Data(base64Encoded: b64)
+    }
+
+    /// The daemon's redacted problem report; `header` is what only the app knows.
+    func diagnosticReport(header: String) async throws -> String {
+        let raw = try await send(cmd: ["cmd": "diagnostic_report", "header": header])
+        let resp = try await decode(IpcResponse<IpcDiagnosticReport>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        return resp.data?.text ?? ""
     }
 
     func requestRemoteFilePull(targetDevice: String, fileId: UInt64) async throws {

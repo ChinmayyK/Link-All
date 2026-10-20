@@ -261,6 +261,22 @@ final class LinkAllStore: ObservableObject {
         }
     }
     
+    /// The text for Report a problem: the daemon's redacted report plus the
+    /// Mac model, macOS version and how this copy was installed.
+    func problemReport() async -> String {
+        var model = [CChar](repeating: 0, count: 64)
+        var size = model.count
+        sysctlbyname("hw.model", &model, &size, nil, 0)
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "unknown"
+        let build = UpdateChecker.shared.installedWithBrew ? "Homebrew" : "direct download"
+        let header = "macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)\nMac: \(String(cString: model))\nBuild: \(build), \(version)"
+        do {
+            return try await ipc.diagnosticReport(header: header)
+        } catch {
+            return "Link All problem report\n\(header)\n\nThe Link All background service did not answer, so there is no device state or log.\n"
+        }
+    }
+
     func rescanNetwork() {
         scanForDevices()
     }

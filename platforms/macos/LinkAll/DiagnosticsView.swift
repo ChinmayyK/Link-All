@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct DiagnosticsView: View {
     @ObservedObject var store: LinkAllStore
@@ -55,6 +56,8 @@ struct DiagnosticsView: View {
                         onAction: { store.enableAutoApply() }
                     )
                     
+                    ReportItem(store: store)
+
                     if let status = store.status {
                         DiagnosticItem(
                             icon: "cpu",
@@ -70,8 +73,63 @@ struct DiagnosticsView: View {
                 .padding()
             }
         }
-        .frame(width: 400, height: 350)
+        .frame(width: 400, height: 460)
         .background(CRHUDMaterial())
+    }
+}
+
+/// Builds the problem report and lets the user copy it or save it as a file.
+private struct ReportItem: View {
+    @ObservedObject var store: LinkAllStore
+    @State private var busy = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 16) {
+            Image(systemName: "ladybug.fill")
+                .font(.system(size: 20))
+                .foregroundStyle(CRTheme.accentGreen)
+                .frame(width: 24)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Report a problem")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.primary)
+                Text("Has versions, device states and recent log lines. No clipboard text, file names, device names or full addresses.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 8) {
+                    Button(busy ? "Preparing…" : "Copy Report") { run(save: false) }
+                        .buttonStyle(CRPrimaryButtonStyle(tint: CRTheme.brandElectric))
+                    Button("Save as File…") { run(save: true) }
+                        .buttonStyle(CRSecondaryButtonStyle())
+                }
+                .disabled(busy)
+                .padding(.top, 8)
+            }
+        }
+        .padding()
+        .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private func run(save: Bool) {
+        busy = true
+        Task {
+            let text = await store.problemReport()
+            busy = false
+            if save {
+                let panel = NSSavePanel()
+                panel.nameFieldStringValue = "link-all-report.txt"
+                panel.allowedContentTypes = [.plainText]
+                if panel.runModal() == .OK, let url = panel.url {
+                    try? text.write(to: url, atomically: true, encoding: .utf8)
+                }
+            } else {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(text, forType: .string)
+            }
+        }
     }
 }
 
