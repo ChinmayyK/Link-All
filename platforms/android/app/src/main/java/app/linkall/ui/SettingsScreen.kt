@@ -159,6 +159,8 @@ fun SettingsTab(
             item { SharedFoldersSection(c) }
         }
 
+        item { FolderSyncSection(c) }
+
         item {
             Column {
                 SectionHeader(c, "Appearance", null)
