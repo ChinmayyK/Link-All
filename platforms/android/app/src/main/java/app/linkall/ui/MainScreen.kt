@@ -237,6 +237,7 @@ fun MainScreen(
                                     }
                                 },
                                 onRespondPairing = onRespondPairing,
+                                onSendPairingRequest = onSendPairingRequest,
                                 onCancelPairing = onCancelPairing
                             )
                             AppTab.Activity -> ActivityTab(
