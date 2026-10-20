@@ -14,6 +14,9 @@ Phones can reach Windows PCs again, pairing works after a reinstall, and the Win
 
 ### Changed
 - **Windows (Microsoft Store):** The download is 30.5 MB instead of 49.9 MB. The package no longer carries the Windows App SDK's AI runtime, which Link All never used, or its string tables for languages other than English.
+- **Windows:** A new call banner: a round avatar, "INCOMING CALL" (a running timer once you answer), the caller, the number and which phone is ringing, and round Decline and Answer buttons. The old one had window buttons drawn over it and cut off text.
+- **Android:** Home lists your devices once, under Your devices, with the link state under the app's name. A device that isn't paired has a Pair button on its row.
+- **macOS:** The audio menu during a call offers the earpiece and the speaker. Android lets only the phone's dialer choose a Bluetooth device for a call.
 
 ### Fixed
 - **Windows:** Phones and other devices can connect to the PC again. Link All listened in a way that Windows limits to IPv6, so every connection to the PC's usual 192.168.x.x address was refused, and the link only came up when the PC dialled the phone. Pairing from the phone, and the phone reconnecting by itself, failed on every Windows PC.
@@ -22,6 +25,8 @@ Phones can reach Windows PCs again, pairing works after a reinstall, and the Win
 - **All:** Pause stops a transfer within a few MB instead of letting about 64 MB more arrive.
 - **All:** Unfinished downloads left behind when an app was closed mid-transfer are cleared from Downloads.
 - **Windows:** The logo in the sidebar and in notifications follows dark mode.
+- **Android:** Switching a call to the speaker or back to the earpiece from a computer works. The phone used to change audio settings that Android ignores for phone calls; it now presses the Speaker button on the call's notification.
+- **Android:** If Link All's engine fails partway through starting, it is shut down instead of left running alongside the next attempt.
 - **All:** A nearby device that hasn't been paired yet can still connect, and ask to pair, after it briefly drops off the network. Missing one discovery announcement used to mark it as disconnected by the user, which refused every automatic connection from it.
 - **Windows (Microsoft Store):** Accept and Reject on a pairing notification now work. The Store package didn't register the notification activator, or include the runtime file notifications need, so the buttons did nothing.
 - **Windows (Microsoft Store):** Windows Firewall rules for Link All are added at install. Without them, on a network marked Public (as many home Wi-Fi networks are), a dismissed firewall prompt blocked every phone from reaching the PC.
