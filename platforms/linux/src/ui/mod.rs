@@ -17,11 +17,52 @@ use gtk::{gio, glib};
 use serde_json::Value;
 use std::cell::RefCell;
 use std::path::Path;
+use std::rc::Rc;
 
 thread_local! {
     static TOASTS: RefCell<Option<adw::ToastOverlay>> = const { RefCell::new(None) };
     static WINDOW: RefCell<Option<adw::ApplicationWindow>> = const { RefCell::new(None) };
     static SIDEBAR: RefCell<Option<gtk::ListBox>> = const { RefCell::new(None) };
+}
+
+/// Shows the banner while a newer Link All exists, checking at start and every
+/// six hours; the check itself runs at most once a day (see `update`).
+fn watch_updates(banner: &adw::Banner) {
+    let shown: Rc<RefCell<Option<crate::update::Update>>> = Rc::new(RefCell::new(None));
+    {
+        let shown = shown.clone();
+        banner.connect_button_clicked(move |_| {
+            if let Some(update) = shown.borrow().as_ref() {
+                let _ = gio::AppInfo::launch_default_for_uri(
+                    &update.url,
+                    None::<&gio::AppLaunchContext>,
+                );
+            }
+        });
+    }
+    fn check(banner: &adw::Banner, shown: &Rc<RefCell<Option<crate::update::Update>>>) {
+        let (tx, rx) = async_channel::bounded(1);
+        std::thread::spawn(move || {
+            crate::update::refresh_if_due();
+            let _ = tx.send_blocking(crate::update::known());
+        });
+        let (banner, shown) = (banner.clone(), shown.clone());
+        glib::spawn_future_local(async move {
+            if let Ok(found) = rx.recv().await {
+                if let Some(update) = &found {
+                    banner.set_title(&format!("Link All {} is out", update.version));
+                }
+                banner.set_revealed(found.is_some());
+                *shown.borrow_mut() = found;
+            }
+        });
+    }
+    check(banner, &shown);
+    let banner = banner.clone();
+    glib::timeout_add_seconds_local(6 * 60 * 60, move || {
+        check(&banner, &shown);
+        glib::ControlFlow::Continue
+    });
 }
 
 /// Shows a short message at the bottom of the window.
@@ -375,6 +416,11 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
             });
         }
     });
+    let update_banner = adw::Banner::builder()
+        .button_label("See What's New")
+        .revealed(false)
+        .build();
+    watch_updates(&update_banner);
     let toasts = adw::ToastOverlay::new();
     toasts.set_child(Some(&stack));
     let content_view = adw::ToolbarView::new();
@@ -393,6 +439,7 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
     content_header.pack_start(&search_button);
     content_view.add_top_bar(&content_header);
     content_view.add_top_bar(&banner);
+    content_view.add_top_bar(&update_banner);
     content_view.set_content(Some(&toasts));
     content_page.set_child(Some(&content_view));
 

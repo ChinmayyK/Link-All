@@ -214,6 +214,15 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         }
     });
     startup.add(&login);
+    let updates = adw::SwitchRow::builder()
+        .title("Check for Updates")
+        .subtitle("Asks GitHub once a day if a newer version exists. Never installs anything.")
+        .active(crate::update::enabled())
+        .build();
+    updates.connect_active_notify(|r| {
+        prefs::set(crate::update::ENABLED, r.is_active().into());
+    });
+    startup.add(&updates);
     page.add(&startup);
 
     let advanced = adw::PreferencesGroup::builder().title("Advanced").build();
@@ -263,15 +272,12 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
     }
     advanced.add(&disconnect);
     let diagnostics = adw::ActionRow::builder()
-        .title("Diagnostics")
-        .subtitle("Service status, for bug reports")
+        .title("Report a Problem")
+        .subtitle("Copy or save a report for a bug report")
         .activatable(true)
         .build();
     diagnostics.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
-    {
-        let hub = hub.clone();
-        diagnostics.connect_activated(move |_| show_diagnostics(&hub));
-    }
+    diagnostics.connect_activated(|_| show_diagnostics());
     advanced.add(&diagnostics);
     page.add(&advanced);
 
@@ -288,54 +294,32 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
     page
 }
 
-fn show_diagnostics(hub: &Hub) {
-    let hub = hub.clone();
+/// Distro, desktop and session: what only this app knows, for the report.
+fn report_header() -> String {
+    let distro = std::fs::read_to_string("/etc/os-release")
+        .ok()
+        .and_then(|t| {
+            t.lines().find_map(|l| {
+                l.strip_prefix("PRETTY_NAME=")
+                    .map(|v| v.trim_matches('"').to_string())
+            })
+        })
+        .unwrap_or_else(|| "unknown".into());
+    format!(
+        "Linux: {distro}\nDesktop: {} ({})",
+        std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "unknown".into()),
+        std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".into()),
+    )
+}
+
+/// The daemon's redacted problem report, to copy or save.
+fn show_diagnostics() {
     glib::spawn_future_local(async move {
-        let metrics = ipc::call(json!({ "cmd": "get_metrics" }))
-            .await
-            .unwrap_or_default();
-        let status = hub.status.borrow().clone();
-        let mut lines = vec![
-            format!("Link All {} for Linux", env!("CARGO_PKG_VERSION")),
-            format!(
-                "Service running for {}",
-                metrics["uptime"].as_str().unwrap_or("?")
-            ),
-            format!(
-                "Device ID {}",
-                status["local_device_id"].as_str().unwrap_or("?")
-            ),
-            format!(
-                "Key fingerprint {}",
-                status["local_fingerprint"].as_str().unwrap_or("?")
-            ),
-            format!("Port {}", metrics["port"]),
-            format!("Connected devices {}", metrics["connected_peers"]),
-            format!("Clipboard history {} items", metrics["history_entries"]),
-            format!(
-                "Session {}",
-                std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".into())
-            ),
-            format!(
-                "Desktop {}",
-                std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_else(|_| "unknown".into())
-            ),
-        ];
-        for issue in status["health"].as_array().into_iter().flatten() {
-            lines.push(format!(
-                "Issue: {}",
-                issue["title"].as_str().unwrap_or_default()
-            ));
-        }
-        for p in hub.peers().iter().filter(|p| p["trusted"] == true) {
-            lines.push(format!(
-                "{} ({}) {}",
-                p["friendly_name"].as_str().unwrap_or("?"),
-                p["platform"].as_str().unwrap_or("?"),
-                p["status"].as_str().unwrap_or("?")
-            ));
-        }
-        let text = lines.join("\n");
+        let header = report_header();
+        let text = match ipc::call(json!({ "cmd": "diagnostic_report", "header": header })).await {
+            Ok(data) => data["text"].as_str().unwrap_or_default().to_string(),
+            Err(e) => format!("Link All problem report\n{header}\n\n{e}\n"),
+        };
         let view = gtk::TextView::builder()
             .editable(false)
             .monospace(true)
@@ -347,17 +331,43 @@ fn show_diagnostics(hub: &Hub) {
             .build();
         view.buffer().set_text(&text);
         view.add_css_class("card");
+        let scroller = gtk::ScrolledWindow::builder()
+            .child(&view)
+            .min_content_height(320)
+            .min_content_width(520)
+            .build();
         let dialog = adw::AlertDialog::builder()
-            .heading("Diagnostics")
-            .extra_child(&view)
+            .heading("Report a Problem")
+            .body("Versions, device states and recent log lines. No clipboard text, file names, device names or full addresses.")
+            .extra_child(&scroller)
             .close_response("close")
             .build();
-        dialog.add_responses(&[("copy", "Copy"), ("close", "Close")]);
-        dialog.connect_response(Some("copy"), move |_, _| {
-            if let Some(display) = gtk::gdk::Display::default() {
-                display.clipboard().set_text(&text);
-                toast("Copied");
-            }
+        dialog.add_responses(&[("copy", "Copy"), ("save", "Save…"), ("close", "Close")]);
+        {
+            let text = text.clone();
+            dialog.connect_response(Some("copy"), move |_, _| {
+                if let Some(display) = gtk::gdk::Display::default() {
+                    display.clipboard().set_text(&text);
+                    toast("Copied");
+                }
+            });
+        }
+        dialog.connect_response(Some("save"), move |_, _| {
+            let text = text.clone();
+            gtk::FileDialog::builder()
+                .initial_name("link-all-report.txt")
+                .build()
+                .save(
+                    super::window().as_ref(),
+                    None::<&gtk::gio::Cancellable>,
+                    move |picked| {
+                        if let Some(path) = picked.ok().and_then(|f| f.path()) {
+                            if let Err(e) = std::fs::write(path, &text) {
+                                toast(&format!("Couldn't save the report: {e}"));
+                            }
+                        }
+                    },
+                );
         });
         dialog.present(super::window().as_ref());
     });

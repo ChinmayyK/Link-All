@@ -28,4 +28,5 @@ ksni = "0.2"
 async-channel = "2"
 libc = "0.2"
 tracing = "0.1"
+ureq = { version = "2", default-features = false, features = ["tls"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
