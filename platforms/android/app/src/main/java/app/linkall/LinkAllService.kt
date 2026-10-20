@@ -129,6 +129,7 @@ class LinkAllService : Service() {
         /** Transfer ids of a whole folder's row: "folder:" + batch id. */
         const val FOLDER_ROW_PREFIX         = "folder:"
         const val ACTION_SCAN_NOW           = "app.linkall.SCAN_NOW"
+        const val ACTION_FOLDER_SYNC_NOW    = "app.linkall.FOLDER_SYNC_NOW"
         const val ACTION_STATUS_CHANGED     = "app.linkall.STATUS_CHANGED"
         const val ACTION_SETTINGS_CHANGED   = "app.linkall.SETTINGS_CHANGED"  // re-read prefs live
         const val ACTION_PUSH_CLIPBOARD     = "app.linkall.PUSH_CLIPBOARD"    // send Android clipboard to peers
@@ -550,6 +551,7 @@ class LinkAllService : Service() {
 
         setServiceRunning(true)
         startEngineHealthCheck()
+        startFolderSyncTimer()
     }
 
     // ensureEngineStarted's `if (!engineStarted.getAndSet(true))` block only ever
@@ -783,6 +785,10 @@ class LinkAllService : Service() {
             }
             ACTION_SCAN_NOW -> {
                 restartDiscoveryNow()
+                return START_STICKY
+            }
+            ACTION_FOLDER_SYNC_NOW -> {
+                runFolderSync()
                 return START_STICKY
             }
             ACTION_PAUSE_SYNC   -> { setSyncEnabled(false); return START_STICKY }
@@ -1636,6 +1642,7 @@ class LinkAllService : Service() {
                     }
                     TransferManager.activeTransfers.remove(tid)
                     TransferManager.pendingOutboundTransferIds.remove(tid)
+                    if (destPath.isEmpty()) FolderSync.delivered(this, tid)
                     onFolderItemProgress(fileName, destPath.isEmpty(), from, force = true)
                     return
                 }
@@ -1719,6 +1726,7 @@ class LinkAllService : Service() {
                 if (LinkAllJni.eventTransferInFolder(ev)) {
                     TransferManager.activeTransfers.remove(tid)
                     TransferManager.pendingOutboundTransferIds.remove(tid)
+                    FolderSync.failed(tid)
                     return
                 }
                 val from = resolvePeerDisplayName(
@@ -1900,6 +1908,7 @@ class LinkAllService : Service() {
                 // The storage monitor only runs with peers present, so give
                 // the new peer a reading straight away.
                 pushStorageStatusAsync()
+                runFolderSync()
             }
 
             // ── Peer disconnected ─────────────────────────────────────────────
@@ -3137,7 +3146,7 @@ class LinkAllService : Service() {
             )?.use { if (it.moveToFirst()) it.getString(0) else null }
         }.getOrNull()?.takeIf { it.isNotBlank() } ?: "Folder"
 
-        val files = listFolderTree(treeUri, rootId)
+        val files = FolderSync.walk(this, treeUri)
         if (files.isEmpty()) {
             Log.i(TAG, "Folder $folderName has no files to send")
             android.os.Handler(android.os.Looper.getMainLooper()).post {
@@ -3145,46 +3154,73 @@ class LinkAllService : Service() {
             }
             return
         }
+        sendTreeFiles(treeUri, folderName, files, targetDeviceId)
+    }
+
+    /**
+     * Hands [files] of a picked folder to the engine as one batch named
+     * [folderName]. [onQueued] gets each file with its transfer id.
+     */
+    private fun sendTreeFiles(
+        treeUri: Uri,
+        folderName: String,
+        files: List<FolderSync.TreeFile>,
+        targetDeviceId: String?,
+        onQueued: (String, FolderSync.TreeFile) -> Unit = { _, _ -> },
+    ) {
+        val handle = engineHandle
+        if (handle == 0L) return
         val batchId = java.util.UUID.randomUUID().toString()
-        for ((docId, relPath) in files) {
-            val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
+        for (file in files) {
+            val uri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, file.docId)
             val pfd = runCatching { contentResolver.openFileDescriptor(uri, "r") }.getOrNull() ?: continue
             val tid = LinkAllJni.sendFolderItemFd(
-                handle, pfd.detachFd(), relPath, folderName, targetDeviceId, batchId, files.size
+                handle, pfd.detachFd(), file.relPath, folderName, targetDeviceId, batchId, files.size
             ) ?: break
             TransferManager.pendingOutboundTransferIds.add(tid)
+            onQueued(tid, file)
         }
         withEngine { live -> LinkAllJni.finishFolderSend(live, batchId) }
     }
 
-    /** Every file under a document tree as (document id, path inside the folder). */
-    private fun listFolderTree(treeUri: Uri, rootId: String): List<Pair<String, String>> {
-        val skipped = setOf(".DS_Store", "Thumbs.db", "desktop.ini")
-        val out = mutableListOf<Pair<String, String>>()
-        val dirs = ArrayDeque(listOf(rootId to ""))
-        val columns = arrayOf(
-            android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-            android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-            android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE,
-        )
-        while (dirs.isNotEmpty() && out.size < 10_000) {
-            val (dirId, prefix) = dirs.removeFirst()
-            val children = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, dirId)
-            val rows = runCatching {
-                contentResolver.query(children, columns, null, null, null)?.use { c ->
-                    buildList { while (c.moveToNext()) add(Triple(c.getString(0), c.getString(1) ?: "", c.getString(2) ?: "")) }
+    private val folderSyncRunning = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /**
+     * Sends the new files of every folder-sync job whose computer is connected.
+     * Runs on its own thread, one run at a time; safe to call often.
+     */
+    private fun runFolderSync() {
+        if (engineHandle == 0L || FolderSync.list(this).isEmpty()) return
+        if (!folderSyncRunning.compareAndSet(false, true)) return
+        Thread {
+            try {
+                for (job in FolderSync.list(this)) {
+                    if (job.paused || !isPeerConnected(job.targetDeviceId)) continue
+                    val files = FolderSync.pending(this, job)
+                    if (files.isEmpty()) continue
+                    Log.i(TAG, "Folder sync: ${files.size} new file(s) in ${job.label} for ${job.targetName}")
+                    sendTreeFiles(job.treeUri, job.label, files, job.targetDeviceId) { tid, file ->
+                        FolderSync.queued(this, tid, job.id, file.key)
+                    }
+                    FolderSync.markRan(this, job.id)
                 }
-            }.getOrNull() ?: continue
-            for ((id, name, mime) in rows.sortedBy { it.second }) {
-                if (name.isEmpty() || name in skipped || name.startsWith("._")) continue
-                if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
-                    dirs.addLast(id to "$prefix$name/")
-                } else {
-                    out.add(id to "$prefix$name")
-                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Folder sync failed", e)
+            } finally {
+                folderSyncRunning.set(false)
+            }
+        }.start()
+    }
+
+    private fun startFolderSyncTimer() {
+        val every = 10 * 60 * 1000L
+        val tick = object : Runnable {
+            override fun run() {
+                runFolderSync()
+                heartbeatHandler.postDelayed(this, every)
             }
         }
-        return out
+        heartbeatHandler.postDelayed(tick, every)
     }
 
     private fun cleanupStagedOutgoingFiles(dir: File) {
