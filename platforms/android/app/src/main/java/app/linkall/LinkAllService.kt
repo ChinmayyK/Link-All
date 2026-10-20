@@ -618,6 +618,9 @@ class LinkAllService : Service() {
 
             Log.i(TAG, "Engine started — $deviceName")
             startEventDrainThread()
+            // Nothing called this since July, so what you copied on the phone
+            // only reached computers when sent by hand.
+            scheduleClipboardWatch()
             acquireContinuousLocks()
             // Cache our own UUID prefix so NSD can filter self-connections.
             myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
@@ -2451,10 +2454,17 @@ class LinkAllService : Service() {
 
     // ── Clipboard watch (Kotlin → Rust) ──────────────────────────────────────
 
+    // One watch loop at a time: the engine can restart while the old loop is
+    // still waiting for its next tick.
+    @Volatile private var clipboardWatchRunning = false
+
     private fun scheduleClipboardWatch() {
+        if (clipboardWatchRunning) return
+        clipboardWatchRunning = true
         val interval = clipInterval
         handler.postDelayed(object : Runnable {
             override fun run() {
+                if (engineHandle == 0L) { clipboardWatchRunning = false; return }
                 // Since Android 10 a background app reads an empty clipboard
                 // unless it has focus or an enabled accessibility service, so
                 // polling 2-5 times a second otherwise only kept the CPU awake.
@@ -2465,6 +2475,8 @@ class LinkAllService : Service() {
                 if (canRead) checkClipboard()
                 if (engineHandle != 0L) {
                     handler.postDelayed(this, if (canRead) clipInterval else CLIP_UNREADABLE_MS)
+                } else {
+                    clipboardWatchRunning = false
                 }
             }
         }, interval)
