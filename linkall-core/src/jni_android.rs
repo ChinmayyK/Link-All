@@ -113,11 +113,18 @@ mod logcat {
     }
 
     pub fn init() {
-        let _ = tracing_subscriber::fmt()
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        use tracing_subscriber::Layer;
+
+        let output = tracing_subscriber::fmt::layer()
             .with_writer(|| Line(Vec::new()))
             .with_ansi(false)
             .without_time()
-            .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
+            .with_filter(tracing_subscriber::EnvFilter::new("info"));
+        let _ = tracing_subscriber::registry()
+            .with(output)
+            .with(crate::diag_log::layer())
             .try_init();
     }
 }
@@ -224,6 +231,28 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_stop(
     if handle != 0 {
         unsafe { drop(Box::from_raw(handle as *mut AndroidHandle)) };
     }
+}
+
+// ── diagnosticReport ──────────────────────────────────────────────────────────
+
+/// The redacted problem report. `header` is what only the app knows (Android
+/// version, phone model, build).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_diagnosticReport(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    header: JString,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let header: String = env.get_string(&header).map(Into::into).unwrap_or_default();
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let text = rt().block_on(h.engine.diagnostic_report(&header));
+    env.new_string(text)
+        .map(|s| s.into_raw())
+        .unwrap_or(std::ptr::null_mut())
 }
 
 // ── pushText ──────────────────────────────────────────────────────────────────
