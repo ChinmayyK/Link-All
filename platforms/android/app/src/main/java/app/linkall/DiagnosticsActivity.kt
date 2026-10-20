@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.NetworkCell
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material3.*
@@ -116,6 +117,27 @@ class DiagnosticsActivity : ComponentActivity() {
                             }
                         )
                         
+                        var reportBusy by remember { mutableStateOf(false) }
+                        DiagnosticItem(
+                            isDark = isDark,
+                            icon = Icons.Default.BugReport,
+                            title = "Report a problem",
+                            status = if (reportBusy) "Preparing…" else "Create a report to send us",
+                            isOk = true,
+                            suggestion = "Has versions, device states and recent log lines. No clipboard text, file names, device names or full addresses.",
+                            actionLabel = if (reportBusy) null else "Share report",
+                            onAction = {
+                                reportBusy = true
+                                Thread {
+                                    val text = ProblemReport.build(this@DiagnosticsActivity)
+                                    runOnUiThread {
+                                        reportBusy = false
+                                        ProblemReport.share(this@DiagnosticsActivity, text)
+                                    }
+                                }.start()
+                            }
+                        )
+
                         val manufacturer = android.os.Build.MANUFACTURER.lowercase()
                         val isAggressiveOem = manufacturer in listOf("xiaomi", "samsung", "oppo", "vivo", "oneplus", "huawei")
                         
