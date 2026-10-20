@@ -24,6 +24,10 @@ namespace LinkAll.WinUI.Views
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
             _ = LoadFileBrowsingAsync();
+            UpdateRow.Visibility = LinkAll.WinUI.Services.UpdateChecker.Supported ? Visibility.Visible : Visibility.Collapsed;
+            _showingSavedUpdateCheck = true;
+            UpdateCheckToggle.IsOn = LinkAll.WinUI.Services.UpdateChecker.Enabled;
+            _showingSavedUpdateCheck = false;
 
             ThemeSelector.SelectedIndex = LinkAll.WinUI.Services.ThemeService.CurrentPreference switch
             {
@@ -62,6 +66,55 @@ namespace LinkAll.WinUI.Views
             var on = FileBrowsingToggle.IsOn;
             var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("allow_file_browsing", on))));
             DaemonActions.ReportIfFailed("Let devices browse files", resp);
+        }
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _showingSavedUpdateCheck;
+
+        private void OnUpdateCheckToggled(object sender, RoutedEventArgs e)
+        {
+            if (_showingSavedUpdateCheck) return;
+            LinkAll.WinUI.Services.UpdateChecker.Enabled = UpdateCheckToggle.IsOn;
+        }
+
+        private async void OnCopyReportClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ReportStatusText.Text = "Preparing the report...";
+                var text = await LinkAll.WinUI.Services.ProblemReport.BuildAsync();
+                var package = new Windows.ApplicationModel.DataTransfer.DataPackage();
+                package.SetText(text);
+                Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+                ReportStatusText.Text = "Copied. Paste it into your message or issue.";
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+                ReportStatusText.Text = "Couldn't prepare the report.";
+            }
+        }
+
+        private async void OnSaveReportClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                ReportStatusText.Text = "Preparing the report...";
+                var text = await LinkAll.WinUI.Services.ProblemReport.BuildAsync();
+                var path = LinkAll.WinUI.Services.ProblemReport.SaveToDownloads(text);
+                ReportStatusText.Text = $"Saved to {path}";
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                App.HandleError(ex);
+                ReportStatusText.Text = "Couldn't save the report.";
+            }
         }
 
         private void OnPhoneNotificationsToggled(object sender, RoutedEventArgs e)

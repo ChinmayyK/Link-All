@@ -54,6 +54,7 @@ async fn run() -> Result<()> {
         ["connect", ip] => cmd_connect(ip, linkall_core::protocol::DEFAULT_PORT).await,
         ["connect", ip, port] => cmd_connect(ip, port.parse().context("bad port")?).await,
         ["peers"] => cmd_peers().await,
+        ["report"] => cmd_report().await,
         ["events"] => cmd_events(20).await,
         ["events", "--last", n] => cmd_events(n.parse().context("bad N")?).await,
         ["devices"] | ["devices", "list"] => cmd_devices_list(),
@@ -383,6 +384,18 @@ async fn cmd_connect(ip: &str, port: u16) -> Result<()> {
         response => bail!("{:?}", response),
     }
     Ok(())
+}
+
+/// Prints the same redacted text the apps offer under "Report a problem".
+async fn cmd_report() -> Result<()> {
+    let header = format!("Reported by: linkall-cli {}", env!("CARGO_PKG_VERSION"));
+    match ipc(&IpcRequest::DiagnosticReport { header }).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            print!("{}", data["text"].as_str().unwrap_or_default());
+            Ok(())
+        }
+        other => bail!("daemon did not return a report: {other:?}"),
+    }
 }
 
 async fn cmd_peers() -> Result<()> {
@@ -1280,6 +1293,7 @@ DAEMON CONTROL
 
 PEERS
   peers                           List currently connected peers with stats
+  report                          Print a redacted problem report to attach to an issue
   events [--last N]               Show recent feedback events (default: last 20)
 
 PAIRING

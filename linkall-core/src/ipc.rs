@@ -117,6 +117,12 @@ pub fn parse_remote_file_source(s: &str) -> Option<crate::protocol::RemoteFileSo
 pub enum IpcRequest {
     /// Get daemon status snapshot.
     Status,
+    /// A redacted text report for a problem report. `header` holds what only
+    /// the app knows (OS version, device model); the daemon adds the rest.
+    DiagnosticReport {
+        #[serde(default)]
+        header: String,
+    },
     /// List connected peers with stats.
     Peers,
     /// List trusted devices from the store.
@@ -766,6 +772,9 @@ pub async fn handle_ipc_request(
         IpcRequest::RescanPeers => {
             eng.rescan_peers().await;
             IpcResponse::ok_empty()
+        }
+        IpcRequest::DiagnosticReport { header } => {
+            IpcResponse::ok(serde_json::json!({ "text": eng.diagnostic_report(&header).await }))
         }
         IpcRequest::Peers => IpcResponse::ok(eng.status_snapshot().await.peers),
         IpcRequest::PushStorageStatus {

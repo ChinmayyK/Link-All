@@ -25,6 +25,8 @@ mod theme;
 mod tray;
 #[cfg(target_os = "linux")]
 mod ui;
+#[cfg(target_os = "linux")]
+mod update;
 
 #[cfg(target_os = "linux")]
 pub const APP_ID: &str = "app.linkall.LinkAll";

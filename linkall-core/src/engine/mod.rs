@@ -43,6 +43,7 @@ use uuid::Uuid;
 mod background;
 pub(crate) mod clipboard;
 mod connection;
+mod diagnostics;
 pub(crate) mod file_ops;
 mod folder_ops;
 mod health;

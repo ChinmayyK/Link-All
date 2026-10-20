@@ -454,6 +454,55 @@
 
                         <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
 
+                        <Grid x:Name="UpdateRow" Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE895;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Check for updates" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Asks GitHub once a day if a newer version exists. Never installs anything."
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="UpdateCheckToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnUpdateCheckToggled"
+                                          AutomationProperties.Name="Check for updates" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xEBE8;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Report a problem" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock x:Name="ReportStatusText"
+                                           Text="Versions, device states and recent log lines. No clipboard text, file names, device names or full addresses."
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button Style="{StaticResource AppSecondaryButton}" Content="Copy"
+                                        Click="OnCopyReportClicked" />
+                                <Button Style="{StaticResource AppSecondaryButton}" Content="Save"
+                                        Click="OnSaveReportClicked" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
                         <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />

@@ -2,6 +2,7 @@
 
 package app.linkall.ui
 
+import app.linkall.UpdateChecker
 import app.linkall.HealthIssue
 
 import androidx.compose.animation.AnimatedContent
@@ -154,6 +155,11 @@ fun HomeTab(
         } else if (outgoingRequest != null) {
             OutgoingPairingPanel(c, outgoingRequest, onCancelPairing)
         } else {
+            val update = UpdateChecker.available.collectAsState().value
+            if (update != null) {
+                UpdateBanner(c, update)
+                Spacer(Modifier.height(20.dp))
+            }
             if (healthIssue != null) {
                 HealthBanner(c, healthIssue, onHealthAction)
                 Spacer(Modifier.height(20.dp))
@@ -318,6 +324,26 @@ private fun HomeTopBar(
 // ---------------------------------------------------------------- status
 
 /** Who this phone is linked to, said plainly. */
+/** A newer version exists. Opens its release page; never installs. */
+@Composable
+private fun UpdateBanner(c: DdColors, update: UpdateChecker.Update) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    Panel(c) {
+        Column(Modifier.padding(16.dp)) {
+            Text("Link All ${update.version} is out", style = DdType.label, color = c.text)
+            Spacer(Modifier.height(4.dp))
+            Text("Download it from the release page to update.", style = DdType.small, color = c.textMuted)
+            Spacer(Modifier.height(12.dp))
+            PillButton(c, "See what's new", filled = true, compact = true) {
+                context.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(update.url))
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
+    }
+}
+
 /** What stops sync right now, and the one thing to do about it. */
 @Composable
 private fun HealthBanner(c: DdColors, issue: HealthIssue, onAction: (HealthIssue) -> Unit) {

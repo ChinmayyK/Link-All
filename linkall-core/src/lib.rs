@@ -39,6 +39,7 @@ pub mod chunked;
 pub mod compress;
 pub mod crypto;
 pub mod dedup;
+pub mod diag_log;
 pub mod discovery;
 pub mod discovery_manager;
 pub mod engine;

@@ -8,6 +8,10 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **macOS, Windows, Linux, Android (direct download):** Link All tells you when a newer version exists. It asks GitHub's public release list once a day and shows a banner with a link to the release page (or the `brew upgrade --cask link-all` command for a Homebrew install). It never installs anything and sends nothing about you. Turn it off in Settings › Check for updates. The Google Play and Microsoft Store builds don't check, because the stores update them.
+- **All:** Report a problem, in Diagnostics on macOS and Android and in Settings on Windows and Linux. It builds a report you can copy or save: the app and OS version, device states and the last log lines, with no clipboard text, file names, device names or full addresses (addresses keep only their last number, device IDs six characters). Nothing is uploaded. `linkall-cli report` prints the same text.
+
 ## [2.0.2] - 2026-10-20
 
 Phones can reach Windows PCs again, pairing works after a reinstall, and the Windows Store app is quieter, smaller and fully working.

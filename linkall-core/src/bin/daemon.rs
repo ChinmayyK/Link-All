@@ -59,14 +59,24 @@ async fn run() -> Result<()> {
     let env_filter = tracing_subscriber::EnvFilter::try_from_env("LINKALL_LOG")
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
 
-    if std::env::var("LINKALL_LOG_JSON").is_ok() {
-        tracing_subscriber::fmt()
+    use tracing_subscriber::layer::SubscriberExt;
+    use tracing_subscriber::util::SubscriberInitExt;
+    use tracing_subscriber::Layer;
+
+    let output = if std::env::var("LINKALL_LOG_JSON").is_ok() {
+        tracing_subscriber::fmt::layer()
             .json()
-            .with_env_filter(env_filter)
-            .init();
+            .with_filter(env_filter)
+            .boxed()
     } else {
-        tracing_subscriber::fmt().with_env_filter(env_filter).init();
-    }
+        tracing_subscriber::fmt::layer()
+            .with_filter(env_filter)
+            .boxed()
+    };
+    tracing_subscriber::registry()
+        .with(output)
+        .with(linkall_core::diag_log::layer())
+        .init();
 
     let settings_store =
         SettingsStore::load(default_settings_path()).context("loading settings")?;
@@ -668,6 +678,9 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.rescan_peers().await;
             Ok(IpcResponse::ok(json!({ "ok": true })))
         }
+        IpcRequest::DiagnosticReport { header } => Ok(IpcResponse::ok(
+            json!({ "text": state.engine.diagnostic_report(&header).await }),
+        )),
         IpcRequest::Peers => {
             let snapshot = state.engine.status_snapshot().await;
             Ok(IpcResponse::ok(snapshot.peers))

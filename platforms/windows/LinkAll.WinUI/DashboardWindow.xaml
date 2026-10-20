@@ -198,17 +198,26 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <!-- What stops sync right now (engine health), with its fix. -->
-                        <InfoBar Grid.Row="0" Margin="24,0,24,12"
-                                 Severity="Warning" IsClosable="False"
-                                 IsOpen="{x:Bind mgr.HasHealthIssue, Mode=OneWay}"
-                                 Title="{x:Bind mgr.HealthTitle, Mode=OneWay}"
-                                 Message="{x:Bind mgr.HealthDetail, Mode=OneWay}">
-                            <InfoBar.ActionButton>
-                                <Button Content="{x:Bind mgr.HealthActionLabel, Mode=OneWay}"
-                                        Visibility="{x:Bind mgr.HealthActionVisibility, Mode=OneWay}"
-                                        Click="OnHealthActionClick" />
-                            </InfoBar.ActionButton>
-                        </InfoBar>
+                        <StackPanel Grid.Row="0">
+                            <!-- A newer Link All exists. Opens its release page; never installs. -->
+                            <InfoBar x:Name="UpdateBar" Margin="24,0,24,12"
+                                     Severity="Informational" IsClosable="True" IsOpen="False">
+                                <InfoBar.ActionButton>
+                                    <Button Content="See what's new" Click="OnUpdateActionClick" />
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+                            <InfoBar Margin="24,0,24,12"
+                                     Severity="Warning" IsClosable="False"
+                                     IsOpen="{x:Bind mgr.HasHealthIssue, Mode=OneWay}"
+                                     Title="{x:Bind mgr.HealthTitle, Mode=OneWay}"
+                                     Message="{x:Bind mgr.HealthDetail, Mode=OneWay}">
+                                <InfoBar.ActionButton>
+                                    <Button Content="{x:Bind mgr.HealthActionLabel, Mode=OneWay}"
+                                            Visibility="{x:Bind mgr.HealthActionVisibility, Mode=OneWay}"
+                                            Click="OnHealthActionClick" />
+                                </InfoBar.ActionButton>
+                            </InfoBar>
+                        </StackPanel>
                         <Frame x:Name="ContentFrame" Grid.Row="1" Background="Transparent">
                             <Frame.ContentTransitions>
                                 <TransitionCollection>

@@ -19,6 +19,10 @@ pub fn get_bool(key: &str, default: bool) -> bool {
     load()[key].as_bool().unwrap_or(default)
 }
 
+pub fn get_u64(key: &str) -> Option<u64> {
+    load()[key].as_u64()
+}
+
 pub fn get_string(key: &str) -> Option<String> {
     load()[key].as_str().map(str::to_string)
 }

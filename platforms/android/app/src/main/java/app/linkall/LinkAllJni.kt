@@ -53,6 +53,8 @@ object LinkAllJni {
     @JvmStatic external fun start(deviceName: String?, port: Int, dataDir: String?, fileSaveDir: String?): Long
     @JvmStatic external fun stop(handle: Long)
     @JvmStatic external fun protocolVersion(): Int
+    /** A redacted text report for a problem report; [header] is what only the app knows. */
+    @JvmStatic external fun diagnosticReport(handle: Long, header: String): String?
 
     // ── Clipboard push ────────────────────────────────────────────────────────
     @JvmStatic external fun pushText(handle: Long, text: String): Int
