@@ -12,6 +12,36 @@ namespace LinkAll.WinUI
 
         private void OnHealthActionClick(object sender, RoutedEventArgs e) => mgr.RunHealthAction();
 
+        private string? _updateUrl;
+
+        // Raised from a background thread; the banner is only touched on the UI thread.
+        private void OnUpdateChanged(LinkAll.WinUI.Services.UpdateChecker.Update? update)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _updateUrl = update?.Url;
+                if (update != null)
+                {
+                    UpdateBar.Title = $"Link All {update.Version} is out";
+                    UpdateBar.Message = "Download it from the release page to update.";
+                }
+                UpdateBar.IsOpen = update != null;
+            });
+        }
+
+        private void OnUpdateActionClick(object sender, RoutedEventArgs e)
+        {
+            if (_updateUrl == null) return;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(_updateUrl) { UseShellExecute = true });
+            }
+            catch (System.Exception ex)
+            {
+                App.HandleError(ex);
+            }
+        }
+
         // The brand mark on its own tile: the dark tile in dark mode.
         private void UpdateBrandMark(FrameworkElement root)
         {
@@ -31,6 +61,9 @@ namespace LinkAll.WinUI
             this.InitializeComponent();
 
             TraceLog.Write("InitializeComponent completed");
+
+            LinkAll.WinUI.Services.UpdateChecker.Changed += OnUpdateChanged;
+            _ = LinkAll.WinUI.Services.UpdateChecker.CheckIfDueAsync();
 
             var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             TraceLog.Write("DashboardWindow HWND=0x" + hwnd.ToString("X"));
