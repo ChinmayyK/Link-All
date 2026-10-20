@@ -314,6 +314,7 @@ private struct NotificationsPane: View {
 
 private struct GeneralPane: View {
     @Binding var copy: LinkAllSettingsSnapshot
+    @State private var checkForUpdates = UpdateChecker.shared.isEnabled
     @AppStorage("cr_app_theme") private var appTheme: String = "system"
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
     @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
@@ -329,6 +330,12 @@ private struct GeneralPane: View {
             PrefsRow(icon: "power", label: "Start on login",
                      description: "Launch Link All automatically at login.") {
                 Toggle("", isOn: $copy.startOnLogin).labelsHidden()
+            }
+            PrefsDivider()
+            PrefsRow(icon: "arrow.down.circle.fill", label: "Check for updates",
+                     description: "Asks GitHub once a day if a newer version exists. Never installs anything.") {
+                Toggle("", isOn: $checkForUpdates).labelsHidden()
+                    .onChange(of: checkForUpdates) { UpdateChecker.shared.isEnabled = $0 }
             }
             PrefsDivider()
             PrefsRow(icon: "sparkles", label: "Onboarding",

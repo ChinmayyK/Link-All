@@ -6,6 +6,7 @@ struct CommandCenterRootView: View {
     @State private var renameTarget: ManagedDevice?
     @State private var renameDraft = ""
     @State private var density: CRDensityMode = .comfortable
+    @ObservedObject private var updates = UpdateChecker.shared
 
     private var pendingContinuityItems: [IpcActivityEntry] {
         store.activityFeed.filter(\.isApplicable)
@@ -27,6 +28,11 @@ struct CommandCenterRootView: View {
             
             // Center Column: Main Workspace (Flexible)
             VStack(spacing: 0) {
+                if let update = updates.available {
+                    UpdateBanner(update: update)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 14)
+                }
                 if let issue = store.healthIssues.first {
                     HealthBanner(issue: issue, store: store)
                         .padding(.horizontal, 20)

@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard ensureSingleRunningInstance() else { return }
         triggerLocalNetworkPrivacyPrompt()
         NSApp.setActivationPolicy(.accessory)
+        UpdateChecker.shared.start()
         // Restore user's theme preference (defaults to system)
         let savedTheme = UserDefaults.standard.string(forKey: "cr_app_theme") ?? "light"
         switch savedTheme {
