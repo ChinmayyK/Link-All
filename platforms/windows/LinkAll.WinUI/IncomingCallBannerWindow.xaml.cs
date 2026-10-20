@@ -56,8 +56,9 @@ namespace LinkAll.WinUI
             this.InitializeComponent();
             _call = call;
             _initialsFont = TxtInitials.FontFamily;
-            ExtendsContentIntoTitleBar = true;
-            SetTitleBar(AppTitleBar);
+            // No ExtendsContentIntoTitleBar: with it, Windows still drew the
+            // minimise, maximise and close buttons over the banner even though
+            // the presenter has no title bar.
             LinkAll.WinUI.Services.ThemeService.Register(this);
 
             if (Microsoft.UI.Composition.SystemBackdrops.MicaController.IsSupported())
@@ -84,7 +85,11 @@ namespace LinkAll.WinUI
                 presenter.IsMinimizable = false;
                 presenter.SetBorderAndTitleBar(false, false);
             }
-            LinkAll.WinUI.Services.WindowIconHelper.ResizeAndPlaceTopRightDips(_appWindow, hwnd, 360, 100, 16);
+            // A borderless window has square corners; ask Windows 11 for the
+            // usual rounded ones (ignored on Windows 10).
+            int round = DWMWCP_ROUND;
+            DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref round, sizeof(int));
+            LinkAll.WinUI.Services.WindowIconHelper.ResizeAndPlaceTopRightDips(_appWindow, hwnd, 380, 84, 16);
 
             _ringTimer.Tick += (_, _) => Close();
             Closed += (_, _) =>
@@ -95,6 +100,12 @@ namespace LinkAll.WinUI
 
             Update(call);
         }
+
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWCP_ROUND = 2;
+
+        [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
 
         // A call banner must not take focus from whatever the user is typing in.
         private void ShowWithoutFocus()
@@ -123,13 +134,13 @@ namespace LinkAll.WinUI
             TxtInitials.FontFamily = initials != null ? _initialsFont : IconFont;
 
             var ringing = _call.State == "ringing";
-            TxtDetail.Text = ringing
-                ? (string.IsNullOrEmpty(_call.ContactName) && string.IsNullOrEmpty(_call.Number)
-                    ? "Incoming call"
-                    : string.IsNullOrEmpty(_call.ContactName) || string.IsNullOrEmpty(_call.Number)
-                    ? $"Incoming call on {phone}"
-                    : $"{_call.Number} · {phone}")
-                : $"On call · {phone}";
+            // The number on its own line (when the name is above it), and which
+            // phone is ringing below: together on one line the phone's name was
+            // cut off.
+            var showNumber = !string.IsNullOrEmpty(_call.ContactName) && !string.IsNullOrEmpty(_call.Number);
+            TxtDetail.Text = showNumber ? _call.Number : "";
+            TxtDetail.Visibility = showNumber ? Visibility.Visible : Visibility.Collapsed;
+            TxtSource.Text = ringing ? $"Incoming call · {phone}" : $"On call · {phone}";
 
             BtnAccept.Visibility = ringing ? Visibility.Visible : Visibility.Collapsed;
             BtnDecline.IsEnabled = true;
@@ -177,7 +188,7 @@ namespace LinkAll.WinUI
             }
             if (result != 0)
             {
-                TxtDetail.Text = "Couldn't reach your phone";
+                TxtSource.Text = "Couldn't reach your phone";
                 BtnDecline.IsEnabled = true;
                 BtnAccept.IsEnabled = true;
             }

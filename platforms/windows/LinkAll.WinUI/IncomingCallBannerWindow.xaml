@@ -9,62 +9,60 @@
     Title="Incoming call">
 
     <!--
-        Call banner for the paired phone, laid out as a single list row: an initials
-        well, caller and the call state, then round Decline (or End) and Answer
-        buttons built on the shared pill styles.
+        Call banner for the paired phone. The window is the card: no title bar
+        and no caption buttons, Mica behind, rounded corners from Windows (set in
+        code). An initials well, the caller, the number and which phone is
+        ringing, then round Decline (or End) and Answer buttons.
     -->
-    <Grid Background="Transparent">
-        <Border x:Name="AppTitleBar" Height="1" VerticalAlignment="Top" Background="Transparent" />
+    <Grid Padding="14,12,12,12" ColumnSpacing="12">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
 
-        <Border Style="{StaticResource AppCardLarge}"
-                Margin="8"
-                Padding="{StaticResource RowPadding}"
+        <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
+                Background="{ThemeResource AppAccentSubtleBrush}"
                 VerticalAlignment="Center">
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
-                        Background="{ThemeResource AppAccentSubtleBrush}"
-                        VerticalAlignment="Center">
-                    <TextBlock x:Name="TxtInitials" Text="D"
-                               Foreground="{ThemeResource AppAccentBrush}"
-                               FontFamily="{StaticResource AppDisplayFont}"
-                               FontSize="17" FontWeight="Bold"
-                               HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                    <TextBlock x:Name="TxtCallerName" Text="Incoming call"
-                               Style="{StaticResource AppBodyStrong}"
-                               TextTrimming="CharacterEllipsis" />
-                    <TextBlock x:Name="TxtDetail" Text="Incoming call"
-                               Style="{StaticResource AppSecondary}"
-                               TextTrimming="CharacterEllipsis" />
-                </StackPanel>
-
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-                    <Button x:Name="BtnDecline"
-                            Style="{StaticResource AppDestructiveButton}"
-                            Width="40" Height="40" MinHeight="0" Padding="0"
-                            Click="BtnDecline_Click"
-                            ToolTipService.ToolTip="Decline"
-                            AutomationProperties.Name="Decline the call">
-                        <FontIcon Glyph="&#xE778;" FontSize="15" />
-                    </Button>
-                    <Button x:Name="BtnAccept"
-                            Style="{StaticResource AppPrimaryButton}"
-                            Width="40" Height="40" MinHeight="0" Padding="0"
-                            Click="BtnAccept_Click"
-                            ToolTipService.ToolTip="Answer on phone"
-                            AutomationProperties.Name="Answer the call on your phone">
-                        <FontIcon Glyph="&#xE717;" FontSize="15" />
-                    </Button>
-                </StackPanel>
-            </Grid>
+            <TextBlock x:Name="TxtInitials" Text="D"
+                       Foreground="{ThemeResource AppAccentBrush}"
+                       FontFamily="{StaticResource AppDisplayFont}"
+                       FontSize="17" FontWeight="Bold"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
         </Border>
+
+        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+            <TextBlock x:Name="TxtCallerName" Text="Incoming call"
+                       Style="{StaticResource AppBodyStrong}"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="TxtDetail" Text=""
+                       Style="{StaticResource AppSecondary}"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="TxtSource" Text="Incoming call"
+                       Style="{StaticResource AppCaption}"
+                       Opacity="0.75"
+                       TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
+            <Button x:Name="BtnDecline"
+                    Style="{StaticResource AppDestructiveButton}"
+                    Width="40" Height="40" MinHeight="0" Padding="0"
+                    CornerRadius="20"
+                    Click="BtnDecline_Click"
+                    ToolTipService.ToolTip="Decline"
+                    AutomationProperties.Name="Decline the call">
+                <FontIcon Glyph="&#xE778;" FontSize="15" />
+            </Button>
+            <Button x:Name="BtnAccept"
+                    Style="{StaticResource AppPrimaryButton}"
+                    Width="40" Height="40" MinHeight="0" Padding="0"
+                    CornerRadius="20"
+                    Click="BtnAccept_Click"
+                    ToolTipService.ToolTip="Answer on phone"
+                    AutomationProperties.Name="Answer the call on your phone">
+                <FontIcon Glyph="&#xE717;" FontSize="15" />
+            </Button>
+        </StackPanel>
     </Grid>
 </Window>
