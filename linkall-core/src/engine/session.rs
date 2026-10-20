@@ -134,12 +134,14 @@ pub(super) fn register_session(
     peer_clipboard_at: Option<u64>,
     is_outbound: bool,
 ) -> Result<()> {
-    // File chunks get their own small queue: 8 × 4 MB = 32 MB waiting to be
-    // encrypted, on top of the kernel socket buffer. That is enough to keep
-    // any LAN link busy, and the backpressure stops the reader from racing
-    // ahead of the network and pinning hundreds of MB on a phone.
+    // File chunks get their own small queue: 2 × 4 MB waiting to be
+    // encrypted, on top of the kernel socket buffer. That keeps a LAN link
+    // busy, and the backpressure stops the reader from racing ahead of the
+    // network. It is also what still goes out after a pause: with 8 queued
+    // here and 8 more on the receiver's disk queue, a paused transfer kept
+    // arriving for about 64 MB (seconds on Wi-Fi).
     let (outbox_tx, mut outbox_rx) = mpsc::channel::<AppMessage>(64);
-    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(8);
+    let (file_outbox_tx, mut file_outbox_rx) = mpsc::channel::<AppMessage>(2);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel::<SessionShutdown>();
     // The caller has already recorded the peer, with the address to dial it
     // back on. `endpoint` is this connection's, which for an incoming one is
@@ -353,7 +355,9 @@ pub(super) fn register_session(
         let rx_peer_id = peer_id;
         let rx_session_pin = session_pin.clone();
 
-        let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(8);
+        // Two 4 MB chunks waiting for the disk keep writes overlapped with the
+        // network; more only delays a pause (see file_outbox above).
+        let (disk_tx, mut disk_rx) = tokio::sync::mpsc::channel::<DiskTaskMsg>(2);
         let mut last_disk_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
             std::collections::HashMap::new();
 
