@@ -11,6 +11,13 @@ namespace LinkAll.WinUI
         public LinkAllStore mgr => LinkAllStore.Shared;
 
         private void OnHealthActionClick(object sender, RoutedEventArgs e) => mgr.RunHealthAction();
+
+        // The brand mark on its own tile: the dark tile in dark mode.
+        private void UpdateBrandMark(FrameworkElement root)
+        {
+            var file = root.ActualTheme == ElementTheme.Dark ? "BrandMarkDark.png" : "Square44x44Logo.scale-200.png";
+            BrandMark.Source = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new System.Uri($"ms-appx:///Assets/{file}"));
+        }
         public string localMachineName => LinkAll.WinUI.Services.LocalSettingsStore.DeviceName;
         public System.Windows.Input.ICommand ShowMainWindowCommand => ((App)App.Current).ShowMainWindowCommand;
 
@@ -56,6 +63,11 @@ namespace LinkAll.WinUI
             this.ExtendsContentIntoTitleBar = true;
             this.SetTitleBar(AppTitleBar);
             LinkAll.WinUI.Services.ThemeService.Register(this);
+            if (this.Content is FrameworkElement themedRoot)
+            {
+                UpdateBrandMark(themedRoot);
+                themedRoot.ActualThemeChanged += (sender, _) => UpdateBrandMark(sender);
+            }
 
             // A utility-sized window, sized in DIPs and clamped to the
             // monitor's work area, centred. The old fixed 1180x740 was
