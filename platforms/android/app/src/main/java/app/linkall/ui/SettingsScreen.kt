@@ -1,5 +1,7 @@
 package app.linkall.ui
 
+import app.linkall.UpdateChecker
+import app.linkall.LinkAllService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -213,6 +215,26 @@ fun SettingsTab(
                         titleColor = c.danger,
                         onClick = onActionStopService
                     )
+                }
+            }
+        }
+
+        if (UpdateChecker.supported) {
+            item {
+                val prefs = remember { context.getSharedPreferences(LinkAllService.PREFS_NAME, android.content.Context.MODE_PRIVATE) }
+                var checkForUpdates by remember { mutableStateOf(UpdateChecker.isEnabled(prefs)) }
+                Column(Modifier.padding(top = 20.dp)) {
+                    Panel(c) {
+                        SwitchRow(
+                            c, Icons.Outlined.Sync, "Check for updates",
+                            "Asks GitHub once a day if a newer version exists. Never installs.",
+                            checkForUpdates
+                        ) {
+                            checkForUpdates = it
+                            UpdateChecker.setEnabled(prefs, it)
+                            if (it) UpdateChecker.checkIfDue(context)
+                        }
+                    }
                 }
             }
         }
