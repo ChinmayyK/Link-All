@@ -91,7 +91,6 @@ import kotlin.math.sin
 @Composable
 fun HomeTab(
     isDark: Boolean,
-    deviceName: String,
     ambientStatus: String,
     peers: List<PeerSnapshot>,
     feed: List<ActivityEntry>,
@@ -142,7 +141,6 @@ fun HomeTab(
         HomeTopBar(
             c = c,
             isDark = isDark,
-            deviceName = deviceName,
             peers = peers,
             onScanQr = onActionPairMagicLink,
             onManualIp = onManualIp
@@ -282,7 +280,6 @@ fun HomeTab(
 private fun HomeTopBar(
     c: DdColors,
     isDark: Boolean,
-    deviceName: String,
     peers: List<PeerSnapshot>,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit
@@ -312,8 +309,7 @@ private fun HomeTopBar(
             val synced = remember(linked, now) {
                 agoLabel(linked.filter { it.isConnected }.mapNotNull { it.lastSyncSecs }.maxOrNull())
             }
-            if (linked.size <= LINK_MAP_MAX) LinkMap(c, deviceName, linked, synced)
-            else DeviceChips(c, linked, synced)
+            DeviceChips(c, linked, synced)
         }
     }
 }

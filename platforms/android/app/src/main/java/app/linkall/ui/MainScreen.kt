@@ -199,7 +199,6 @@ fun MainScreen(
                         when (tabs[page]) {
                             AppTab.Home -> HomeTab(
                                 isDark = isDark,
-                                deviceName = deviceName,
                                 ambientStatus = ambientStatus,
                                 healthIssue = healthIssue,
                                 onHealthAction = onHealthAction,
