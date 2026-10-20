@@ -3421,6 +3421,17 @@ class LinkAllService : Service() {
         }
     }
 
+    /** Whether the call's audio is on the loudspeaker (readable by any app). */
+    private fun callOnSpeaker(): Boolean {
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            am.communicationDevice?.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        } else {
+            @Suppress("DEPRECATION")
+            am.isSpeakerphoneOn
+        }
+    }
+
     private fun hasCallPermissions(): Boolean =
         checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -3546,28 +3557,22 @@ class LinkAllService : Service() {
             return
         }
 
+        // Only the default dialer can route a phone call's audio: setting
+        // AudioManager.isSpeakerphoneOn or starting Bluetooth SCO from here was
+        // ignored for the call on Android 12+, so the computer's audio switch
+        // did nothing. The current route can still be read, and the phone
+        // app's ongoing-call notification has a Speaker toggle to press.
         when (action) {
-            "audio_earpiece" -> {
-                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                am?.isSpeakerphoneOn = false
-                am?.stopBluetoothSco()
-                am?.isBluetoothScoOn = false
-                Log.i(TAG, "Remote audio route: Earpiece")
+            "audio_speaker", "audio_earpiece" -> {
+                val wantSpeaker = action == "audio_speaker"
+                if (callOnSpeaker() == wantSpeaker) {
+                    Log.i(TAG, "Remote audio route: already ${if (wantSpeaker) "speaker" else "earpiece"}")
+                } else if (!LinkAllNotificationListener.pressSpeakerToggle()) {
+                    Log.w(TAG, "Remote audio route: no Speaker button on the call notification")
+                }
             }
-            "audio_speaker" -> {
-                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                am?.isSpeakerphoneOn = true
-                am?.stopBluetoothSco()
-                am?.isBluetoothScoOn = false
-                Log.i(TAG, "Remote audio route: Speaker")
-            }
-            "audio_bluetooth" -> {
-                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                am?.isSpeakerphoneOn = false
-                am?.startBluetoothSco()
-                am?.isBluetoothScoOn = true
-                Log.i(TAG, "Remote audio route: Bluetooth")
-            }
+            "audio_bluetooth" ->
+                Log.w(TAG, "Remote audio route: Bluetooth can only be chosen on the phone")
             else -> Log.w(TAG, "Unknown remote call action: $action")
         }
     }

@@ -22,6 +22,8 @@ class LinkAllNotificationListener : NotificationListenerService() {
             val inst = instance ?: return false
             return inst.handleCallAction(action)
         }
+
+        fun pressSpeakerToggle(): Boolean = instance?.pressSpeakerToggle() ?: false
     }
 
     /** Title and text last forwarded per notification key; see onNotificationPosted. */
@@ -189,6 +191,33 @@ class LinkAllNotificationListener : NotificationListenerService() {
             }
         }
         Log.w(TAG, "No matching call notification found for action: $actionWanted")
+        return false
+    }
+
+    /**
+     * Presses the Speaker toggle on the phone app's ongoing-call notification.
+     * Only the default dialer can route a call's audio; AudioManager calls from
+     * any other app change nothing for a phone call since Android 12. The
+     * dialer's own button is the one route that works.
+     */
+    fun pressSpeakerToggle(): Boolean {
+        val activeNotifs = activeNotifications ?: return false
+        for (sbn in activeNotifs) {
+            val notif = sbn.notification ?: continue
+            if (notif.category != Notification.CATEGORY_CALL) continue
+            val action = notif.actions?.firstOrNull { a ->
+                a.title?.toString()?.lowercase()?.contains("speaker") == true
+            } ?: continue
+            return try {
+                action.actionIntent.send()
+                Log.i(TAG, "Pressed the call notification's Speaker toggle (${sbn.packageName})")
+                true
+            } catch (e: Exception) {
+                Log.e(TAG, "Couldn't press the Speaker toggle", e)
+                false
+            }
+        }
+        Log.w(TAG, "No call notification with a Speaker button")
         return false
     }
 }
