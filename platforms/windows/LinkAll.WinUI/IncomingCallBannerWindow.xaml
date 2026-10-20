@@ -9,59 +9,94 @@
     Title="Incoming call">
 
     <!--
-        Call banner for the paired phone. The window is the card: no title bar
-        and no caption buttons, Mica behind, rounded corners from Windows (set in
-        code). An initials well, the caller, the number and which phone is
-        ringing, then round Decline (or End) and Answer buttons.
+        Call banner for the paired phone, after the Mac one. The window is the
+        card: acrylic, rounded by Windows, no caption buttons. A round avatar,
+        "INCOMING CALL" (or the call's running time), the caller, the number
+        and the ringing phone, then solid round Decline and Answer buttons.
     -->
-    <Grid Padding="14,12,12,12" ColumnSpacing="12">
+    <Grid Padding="16,14,14,14" ColumnSpacing="14">
+        <Grid.Resources>
+            <!-- Round, solid call buttons that keep their colour on hover and press. -->
+            <Style x:Key="CallButton" TargetType="Button">
+                <Setter Property="Width" Value="44" />
+                <Setter Property="Height" Value="44" />
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="CornerRadius" Value="22" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Foreground" Value="White" />
+            </Style>
+            <SolidColorBrush x:Key="DeclineBrush" Color="#FF453A" />
+            <SolidColorBrush x:Key="DeclineHoverBrush" Color="#FF6259" />
+            <SolidColorBrush x:Key="DeclinePressedBrush" Color="#E0392F" />
+            <SolidColorBrush x:Key="AnswerBrush" Color="#30D158" />
+            <SolidColorBrush x:Key="AnswerHoverBrush" Color="#4ADB6E" />
+            <SolidColorBrush x:Key="AnswerPressedBrush" Color="#28B84C" />
+        </Grid.Resources>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto" />
             <ColumnDefinition Width="*" />
             <ColumnDefinition Width="Auto" />
         </Grid.ColumnDefinitions>
 
-        <Border Grid.Column="0" Style="{StaticResource AppIconTile}"
-                Background="{ThemeResource AppAccentSubtleBrush}"
-                VerticalAlignment="Center">
-            <TextBlock x:Name="TxtInitials" Text="D"
-                       Foreground="{ThemeResource AppAccentBrush}"
-                       FontFamily="{StaticResource AppDisplayFont}"
-                       FontSize="17" FontWeight="Bold"
+        <!-- Avatar: the caller's initials, or a phone glyph without a name. -->
+        <Grid Grid.Column="0" Width="48" Height="48" VerticalAlignment="Center">
+            <Ellipse>
+                <Ellipse.Fill>
+                    <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                        <GradientStop Color="#059669" Offset="0" />
+                        <GradientStop Color="#34D399" Offset="1" />
+                    </LinearGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+            <TextBlock x:Name="TxtInitials" Text="M"
+                       Foreground="White"
+                       FontSize="19" FontWeight="SemiBold"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
-        </Border>
+        </Grid>
 
         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+            <TextBlock x:Name="TxtState" Text="INCOMING CALL"
+                       FontSize="11" FontWeight="Bold" CharacterSpacing="60"
+                       Foreground="#30D158" />
             <TextBlock x:Name="TxtCallerName" Text="Incoming call"
-                       Style="{StaticResource AppBodyStrong}"
+                       FontSize="16" FontWeight="SemiBold"
+                       Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                        TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="TxtDetail" Text=""
-                       Style="{StaticResource AppSecondary}"
-                       TextTrimming="CharacterEllipsis" />
-            <TextBlock x:Name="TxtSource" Text="Incoming call"
-                       Style="{StaticResource AppCaption}"
-                       Opacity="0.75"
+            <TextBlock x:Name="TxtSource" Text=""
+                       Style="{StaticResource AppSecondary}" FontSize="12"
                        TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
-        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="8">
-            <Button x:Name="BtnDecline"
-                    Style="{StaticResource AppDestructiveButton}"
-                    Width="40" Height="40" MinHeight="0" Padding="0"
-                    CornerRadius="20"
+        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+            <Button x:Name="BtnDecline" Style="{StaticResource CallButton}"
+                    Background="{StaticResource DeclineBrush}"
                     Click="BtnDecline_Click"
                     ToolTipService.ToolTip="Decline"
                     AutomationProperties.Name="Decline the call">
-                <FontIcon Glyph="&#xE778;" FontSize="15" />
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="DeclineHoverBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="DeclinePressedBrush" />
+                    <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="DeclineBrush" />
+                    <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="White" />
+                    <SolidColorBrush x:Key="ButtonForegroundPressed" Color="White" />
+                </Button.Resources>
+                <FontIcon Glyph="&#xE778;" FontSize="17" />
             </Button>
-            <Button x:Name="BtnAccept"
-                    Style="{StaticResource AppPrimaryButton}"
-                    Width="40" Height="40" MinHeight="0" Padding="0"
-                    CornerRadius="20"
+            <Button x:Name="BtnAccept" Style="{StaticResource CallButton}"
+                    Background="{StaticResource AnswerBrush}"
                     Click="BtnAccept_Click"
                     ToolTipService.ToolTip="Answer on phone"
                     AutomationProperties.Name="Answer the call on your phone">
-                <FontIcon Glyph="&#xE717;" FontSize="15" />
+                <Button.Resources>
+                    <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="AnswerHoverBrush" />
+                    <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="AnswerPressedBrush" />
+                    <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="AnswerBrush" />
+                    <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="White" />
+                    <SolidColorBrush x:Key="ButtonForegroundPressed" Color="White" />
+                </Button.Resources>
+                <FontIcon Glyph="&#xE717;" FontSize="17" />
             </Button>
         </StackPanel>
     </Grid>
