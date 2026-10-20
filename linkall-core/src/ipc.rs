@@ -1113,9 +1113,11 @@ pub async fn handle_ipc_request(
         IpcRequest::PushTextTo { text, target } => match crate::ipc::parse_uuid(&target) {
             Ok(id) => {
                 let content = crate::protocol::ClipboardContent::Text(text);
-                eng.push_clipboard_to(content, crate::engine::SyncTarget::Device(id))
+                // The report says whether it went out, as the daemon's reply does.
+                let report = eng
+                    .push_clipboard_to(content, crate::engine::SyncTarget::Device(id))
                     .await;
-                IpcResponse::ok_empty()
+                IpcResponse::ok(report)
             }
             Err(_) => IpcResponse::err("invalid target device id"),
         },
