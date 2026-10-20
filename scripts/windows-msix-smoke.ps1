@@ -8,8 +8,11 @@
     - LinkAll.exe keeps running after start-up, and the tray helper is up;
     - the engine answers on its IPC pipe (linkall-cli status);
     - a linkall:// link reaches the app;
+    - notifications register, so pairing toasts' buttons work;
+    - Windows added the package's inbound firewall rules;
     - pairing, a clip each way and a file each way work with a second Link
-      All device (linkall-core's smoke_peer example, on this machine);
+      All device (linkall-core's smoke_peer example, on this machine),
+      which dials the app over IPv4;
     - nothing in the app's trace mentions the Windows AI runtime, which the
       MSIX leaves out.
 
@@ -84,11 +87,23 @@ Check (WaitFor { & $Cli status *> $null; $LASTEXITCODE -eq 0 } 20) "the engine a
 Start-Process "linkall://smoke-test"
 Check (WaitFor { (Trace) -match 'protocol activation' } 20) "a linkall:// link reaches the app"
 
+Check ((Trace) -match 'AppNotificationManager registered successfully') "notifications register (pairing toasts' buttons work)"
+Check ((Trace) -notmatch 'Register FAILED') "no notification registration failure"
+
+$exe = (Join-Path $pkg.InstallLocation 'LinkAll.exe').ToLowerInvariant()
+$ports = Get-NetFirewallApplicationFilter -ErrorAction SilentlyContinue |
+  Where-Object { $_.Program -and $_.Program.ToLowerInvariant() -eq $exe } |
+  Get-NetFirewallRule | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Allow' -and $_.Enabled -eq 'True' } |
+  Get-NetFirewallPortFilter | ForEach-Object { "$($_.Protocol)/$($_.LocalPort)" }
+foreach ($need in 'TCP/47823', 'UDP/47824', 'UDP/5353') {
+  Check ($ports -contains $need) "inbound firewall rule $need for LinkAll.exe"
+}
+
 # A second device: pair, then a clip and a file each way.
 $peerOut = Join-Path $env:TEMP "linkall-smoke-peer.txt"
 $peerErr = Join-Path $env:TEMP "linkall-smoke-peer.err"
 $env:RUST_BACKTRACE = '0'
-$peerProc = Start-Process $Peer -ArgumentList '::1', '47823', '150' -PassThru -NoNewWindow `
+$peerProc = Start-Process $Peer -ArgumentList '127.0.0.1', '47823', '150' -PassThru -NoNewWindow `
   -RedirectStandardOutput $peerOut -RedirectStandardError $peerErr
 function PeerSaid([string]$pattern) { (Test-Path $peerOut) -and ((Get-Content $peerOut -Raw) -match $pattern) }
 

@@ -270,6 +270,14 @@ pub(super) async fn connect_loop_ext(
                 }
                 return Ok(());
             }
+            Err(err) if err.is::<AddressTaken>() => {
+                if let Some(device_id) = expected_device_id {
+                    let _ = shared
+                        .peer_manager
+                        .mark_failed_all(device_id, err.to_string());
+                }
+                return Err(err);
+            }
             Err(err) => {
                 if let Some(device_id) = expected_device_id {
                     let _ =
@@ -436,17 +444,26 @@ pub(super) async fn connect_once(
     )
     .await?;
 
-    if let Some(expected) = expected_device_id {
-        anyhow::ensure!(
-            expected == hs.peer_device_id,
-            "peer identity changed during connect: expected {}, got {}",
-            expected,
-            hs.peer_device_id
-        );
-    }
-
     if hs.peer_device_id == shared.config.device_id {
         anyhow::bail!("aborting outbound connect — cannot connect to self");
+    }
+
+    // Another device answers where `expected` used to, most often the same
+    // phone after a reinstall, which gives it a new identity. Dropping this
+    // connection also ended the session the other side already had with us
+    // (its tie-break replaces that one with this), so a reinstalled phone was
+    // disconnected every reconnect cycle and could never be paired. Keep the
+    // connection as the device that answered, stop dialling `expected` at its
+    // old addresses (they are this host's), and report the move so the caller doesn't retry.
+    let moved_from = expected_device_id.filter(|expected| *expected != hs.peer_device_id);
+    if let Some(expected) = moved_from {
+        info!(
+            expected = %expected,
+            peer_id = %hs.peer_device_id,
+            addr = %endpoint,
+            "a different device answers at this address; keeping its connection"
+        );
+        shared.peer_manager.forget_addresses(expected)?;
     }
 
     // An incoming session accepted while we were handshaking is resolved by
@@ -483,6 +500,7 @@ pub(super) async fn connect_once(
         hs.peer_background_restricted,
     );
 
+    let answered_by = hs.peer_device_id;
     register_session(
         shared,
         stream,
@@ -495,8 +513,38 @@ pub(super) async fn connect_once(
         Some(hs.pin.display()),
         hs.peer_clipboard_at,
         true, // is_outbound
-    )
+    )?;
+
+    match moved_from {
+        Some(expected) => Err(AddressTaken {
+            expected,
+            answered_by,
+        }
+        .into()),
+        None => Ok(()),
+    }
 }
+
+/// `connect_once` reached a different device than the one it dialled for.
+/// The connection was kept as that device; the dialled one isn't reachable
+/// there, so retrying the same address can't help.
+#[derive(Debug)]
+pub(super) struct AddressTaken {
+    pub expected: Uuid,
+    pub answered_by: Uuid,
+}
+
+impl std::fmt::Display for AddressTaken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "a different device ({}) now answers at {}'s address",
+            self.answered_by, self.expected
+        )
+    }
+}
+
+impl std::error::Error for AddressTaken {}
 
 /// Trust is stored per side, so it can drift: one device reinstalls or
 /// forgets the other while the other still remembers it. The session then

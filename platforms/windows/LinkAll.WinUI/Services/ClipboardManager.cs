@@ -291,12 +291,25 @@ namespace LinkAll.WinUI.Services
                         }
                         case NativeCore.PB_EVENT_WARNING:
                         {
-                            var message = NativeCore.PtrToUtf8String(NativeCore.linkall_event_text(ev)) ?? "A device reported an issue";
-                            var device = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_name(ev));
+                            // The engine reports diagnostics here ("network changed from
+                            // [::]:47823 ...", "connection to multiple endpoints failed ..."),
+                            // and the core maps several other events here with no text at
+                            // all. Toasting every one put a stream of technical alerts and
+                            // "A device reported an issue" in front of people, with nothing
+                            // to act on: the Devices page already shows each device's state.
+                            // Like the Mac and Linux apps, only a stopped folder send, which
+                            // the person started, is shown; the rest goes to the trace.
+                            var message = NativeCore.PtrToUtf8String(NativeCore.linkall_event_text(ev));
+                            if (string.IsNullOrEmpty(message)) break;
+                            if (!IsForThePerson(message))
+                            {
+                                TraceLog.Write($"Engine warning: {message}");
+                                break;
+                            }
                             if (ShouldToastWarning(message))
                             {
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                    NotificationHelper.ShowToast(string.IsNullOrEmpty(device) ? "Link All Warning" : $"Warning from {device}", message);
+                                    NotificationHelper.ShowToast("Folder not sent", message);
                                 });
                             }
                             break;
@@ -396,6 +409,10 @@ namespace LinkAll.WinUI.Services
                 return true;
             }
         }
+
+        // folder_ops.rs: "Stopped sending {folder}: {reason}".
+        private static bool IsForThePerson(string message) =>
+            message.StartsWith("Stopped sending ", StringComparison.Ordinal);
 
         private bool ShouldToastWarning(string message)
         {

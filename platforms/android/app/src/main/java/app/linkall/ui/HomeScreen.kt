@@ -91,7 +91,6 @@ import kotlin.math.sin
 @Composable
 fun HomeTab(
     isDark: Boolean,
-    deviceName: String,
     ambientStatus: String,
     peers: List<PeerSnapshot>,
     feed: List<ActivityEntry>,
@@ -116,6 +115,7 @@ fun HomeTab(
     onReplayOnboarding: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
+    onSendPairingRequest: (PeerSnapshot) -> Unit,
     onCancelPairing: (PeerSnapshot) -> Unit,
     healthIssue: HealthIssue? = null,
     onHealthAction: (HealthIssue) -> Unit = {}
@@ -142,7 +142,6 @@ fun HomeTab(
         HomeTopBar(
             c = c,
             isDark = isDark,
-            deviceName = deviceName,
             peers = peers,
             onScanQr = onActionPairMagicLink,
             onManualIp = onManualIp
@@ -232,6 +231,7 @@ fun HomeTab(
                         onSendFolder = { onActionSendFolder(peer.id) },
                         onSpeedTest = { onActionStartSpeedTest(peer.id) },
                         onRespond = { onRespondPairing(peer, it) },
+                        onPair = { onSendPairingRequest(peer) },
                         onForget = { onForgetPeer(peer) }
                     )
                 }
@@ -282,7 +282,6 @@ fun HomeTab(
 private fun HomeTopBar(
     c: DdColors,
     isDark: Boolean,
-    deviceName: String,
     peers: List<PeerSnapshot>,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit
@@ -294,27 +293,25 @@ private fun HomeTopBar(
             value = System.currentTimeMillis()
         }
     }
-    Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Image(
-                painter = painterResource(if (isDark) R.drawable.header_logo_dark else R.drawable.header_logo_light),
-                contentDescription = null,
-                modifier = Modifier.size(30.dp)
-            )
-            Spacer(Modifier.width(10.dp))
-            Text("Link All", style = DdType.title.copy(fontSize = 19.sp), color = c.text, modifier = Modifier.weight(1f))
-            AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
+    // Paired devices only; a device still pairing shows in its own panel below.
+    val linked = peers.filter { it.trusted }
+    val synced = remember(linked, now) {
+        agoLabel(linked.filter { it.isConnected }.mapNotNull { it.lastSyncSecs }.maxOrNull())
+    }
+    Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Image(
+            painter = painterResource(if (isDark) R.drawable.header_logo_dark else R.drawable.header_logo_light),
+            contentDescription = null,
+            modifier = Modifier.size(34.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        // The link state sits under the name; the devices themselves are
+        // listed once, under "Your devices".
+        Column(Modifier.weight(1f)) {
+            Text("Link All", style = DdType.title.copy(fontSize = 19.sp), color = c.text)
+            if (linked.isNotEmpty()) LinkStatusLine(c, linked, synced, Modifier.padding(top = 2.dp))
         }
-        // Paired devices only; a device still pairing shows in its own panel below.
-        val linked = peers.filter { it.trusted }.sortedByDescending { it.isConnected }
-        if (linked.isNotEmpty()) {
-            Spacer(Modifier.height(16.dp))
-            val synced = remember(linked, now) {
-                agoLabel(linked.filter { it.isConnected }.mapNotNull { it.lastSyncSecs }.maxOrNull())
-            }
-            if (linked.size <= LINK_MAP_MAX) LinkMap(c, deviceName, linked, synced)
-            else DeviceChips(c, linked, synced)
-        }
+        AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
     }
 }
 
@@ -600,11 +597,16 @@ internal fun DeviceRow(
     onSendFolder: () -> Unit,
     onSpeedTest: () -> Unit,
     onRespond: (Boolean) -> Unit,
+    onPair: () -> Unit,
     onForget: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     var menuOpen by remember { mutableStateOf(false) }
     val browseFiles = LocalBrowseFiles.current
+    val asksUs = peer.pairingRequested && !peer.trusted
+    val waiting = peer.outgoingPairingWaiting && !peer.trusted
+    // Not paired and nothing in flight: offer Pair right on the row.
+    val canPair = !peer.trusted && !asksUs && !waiting && !peer.isConnecting
     val (status, statusColor) = when {
         speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
         peer.pairingRequested && !peer.trusted -> "Wants to pair" to c.accent
@@ -655,7 +657,13 @@ internal fun DeviceRow(
                     Text(status, style = DdType.small, color = statusColor, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
-            Icon(Icons.Rounded.MoreHoriz, contentDescription = "Options for ${peer.name}", tint = c.textMuted, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(8.dp))
+            when {
+                asksUs -> PillButton(c, "Accept", filled = true, compact = true, onClick = { onRespond(true) })
+                canPair -> PillButton(c, "Pair", filled = true, compact = true, onClick = onPair)
+                waiting -> {}
+                else -> Icon(Icons.Rounded.MoreHoriz, contentDescription = "Options for ${peer.name}", tint = c.textMuted, modifier = Modifier.size(20.dp))
+            }
         }
 
         if (menuOpen) {
@@ -665,10 +673,12 @@ internal fun DeviceRow(
                 title = peer.name,
                 subtitle = status,
                 actions = buildList {
-                    if (peer.pairingRequested && !peer.trusted) {
+                    if (asksUs) {
                         add(SheetAction(Icons.Outlined.Check, "Accept pairing") { onRespond(true) })
                         add(SheetAction(Icons.Outlined.Close, "Decline") { onRespond(false) })
-                    } else if (peer.isConnected) {
+                    } else if (canPair) {
+                        add(SheetAction(Icons.Outlined.Link, "Pair", "Both devices show a code to compare", onClick = onPair))
+                    } else if (peer.isConnected && peer.trusted) {
                         add(SheetAction(Icons.Outlined.FolderOpen, "Browse files", "Get files from ${peer.name}") { browseFiles(peer) })
                         add(SheetAction(Icons.Outlined.UploadFile, "Send files", "Photos, videos, documents, anything", onClick = onSendFiles))
                         add(SheetAction(Icons.Outlined.DriveFolderUpload, "Send a folder", "Everything in it, subfolders included", onClick = onSendFolder))

@@ -91,7 +91,7 @@ pub(super) fn spawn_discovery_supervisor(
 
                     if let Some(peer) = peer_shared.peer_manager.get(device_id) {
                         if !peer.trusted && !peer.remembered {
-                            let _ = peer_shared.peer_manager.forget_device(device_id);
+                            let _ = peer_shared.peer_manager.drop_stranger(device_id);
                         } else {
                             let _ = peer_shared.peer_manager.mark_disconnected(
                                 device_id,

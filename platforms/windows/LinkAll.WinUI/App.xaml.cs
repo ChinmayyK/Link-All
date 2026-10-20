@@ -209,15 +209,6 @@ public partial class App : Application
             // Process initial launch arguments
             ProcessActivationArgs(activatedArgs);
 
-            // Best-effort: add the firewall rules Link All needs for LAN
-            // discovery/transfer if they're missing. May trigger a UAC
-            // prompt on first run - never block startup on it.
-            System.Threading.Tasks.Task.Run(() =>
-            {
-                try { LinkAll.WinUI.FirewallHelper.EnsureRules(); }
-                catch (Exception ex) { App.HandleError(ex); }
-            });
-
             // Initialize the in-process native core FFI
             System.Threading.Tasks.Task.Run(() =>
             {

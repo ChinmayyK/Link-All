@@ -1672,6 +1672,47 @@ fn now_unix() -> u64 {
         .as_secs()
 }
 
+/// Delete `.linkall-part` files under `dir` (and its subfolders, where folder
+/// transfers land) not written to for `older_than`. A transfer's resume state
+/// lives in memory, so once the engine restarts nothing can finish a partial
+/// file: a transfer cut off by the app being killed left its partial file in
+/// Downloads for good (seen on a phone: two of 224 and 268 MB, weeks old). The
+/// age check spares a file another running instance is still writing.
+pub fn remove_orphaned_partials(dir: &std::path::Path, older_than: std::time::Duration) -> usize {
+    fn walk(dir: &std::path::Path, cutoff: std::time::SystemTime, depth: u8, removed: &mut usize) {
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            let path = entry.path();
+            if kind.is_dir() && depth < 6 {
+                walk(&path, cutoff, depth + 1, removed);
+            } else if kind.is_file()
+                && path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with(PARTIAL_FILE_SUFFIX))
+                && entry
+                    .metadata()
+                    .and_then(|m| m.modified())
+                    .is_ok_and(|modified| modified < cutoff)
+                && std::fs::remove_file(&path).is_ok()
+            {
+                *removed += 1;
+            }
+        }
+    }
+    let Some(cutoff) = std::time::SystemTime::now().checked_sub(older_than) else {
+        return 0;
+    };
+    let mut removed = 0;
+    walk(dir, cutoff, 0, &mut removed);
+    removed
+}
+
 /// Default save directory for received files.
 pub fn default_save_dir() -> PathBuf {
     #[cfg(target_os = "android")]
@@ -1757,6 +1798,33 @@ pub fn checksum_file(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn orphaned_partial_files_are_removed_and_others_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let sub = dir.path().join("Holiday photos");
+        std::fs::create_dir_all(&sub).unwrap();
+        let day_ago = std::time::SystemTime::now() - std::time::Duration::from_secs(86_400);
+        let old = |path: &std::path::Path| {
+            let f = std::fs::File::create(path).unwrap();
+            f.set_modified(day_ago).unwrap();
+        };
+        let stale = dir.path().join("Launch-film-4K.mov.linkall-part");
+        let stale_in_folder = sub.join("IMG_0001.jpg.linkall-part");
+        let fresh = dir.path().join("in-progress.bin.linkall-part");
+        let finished = dir.path().join("report.pdf");
+        old(&stale);
+        old(&stale_in_folder);
+        old(&finished);
+        std::fs::File::create(&fresh).unwrap();
+
+        let removed = remove_orphaned_partials(dir.path(), std::time::Duration::from_secs(3600));
+
+        assert_eq!(removed, 2);
+        assert!(!stale.exists() && !stale_in_folder.exists());
+        assert!(fresh.exists(), "a partial file still being written is kept");
+        assert!(finished.exists(), "finished downloads are never touched");
+    }
     use tempfile::TempDir;
 
     #[test]

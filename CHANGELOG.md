@@ -8,6 +8,31 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-10-20
+
+Phones can reach Windows PCs again, pairing works after a reinstall, and the Windows Store app is quieter, smaller and fully working.
+
+### Changed
+- **Windows (Microsoft Store):** The download is 30.5 MB instead of 49.9 MB. The package no longer carries the Windows App SDK's AI runtime, which Link All never used, or its string tables for languages other than English.
+- **Windows:** A new call banner: a round avatar, "INCOMING CALL" (a running timer once you answer), the caller, the number and which phone is ringing, and round Decline and Answer buttons. The old one had window buttons drawn over it and cut off text.
+- **Android:** Home lists your devices once, under Your devices, with the link state under the app's name. A device that isn't paired has a Pair button on its row.
+- **macOS:** The audio menu during a call offers the earpiece and the speaker. Android lets only the phone's dialer choose a Bluetooth device for a call.
+
+### Fixed
+- **Windows:** Phones and other devices can connect to the PC again. Link All listened in a way that Windows limits to IPv6, so every connection to the PC's usual 192.168.x.x address was refused, and the link only came up when the PC dialled the phone. Pairing from the phone, and the phone reconnecting by itself, failed on every Windows PC.
+- **Android:** What you copy on the phone reaches your computers by itself again. Since 1.4 the phone never watched its clipboard, so a copy only went across when sent by hand.
+- **All:** A phone that reinstalled Link All can pair again and stays connected. Reinstalling gives the phone a new identity at the same address. A computer still reconnecting to the old one found the new phone there, closed the connection, and in doing so also ended the link the phone already had with it, every reconnect cycle. Now the computer keeps the connection as the device that answered and stops dialling any of the old one's addresses, so the pairing code no longer changes partway through a request.
+- **All:** Pause stops a transfer within a few MB instead of letting about 64 MB more arrive.
+- **All:** Unfinished downloads left behind when an app was closed mid-transfer are cleared from Downloads.
+- **Windows:** The logo in the sidebar and in notifications follows dark mode.
+- **Android:** Switching a call to the speaker or back to the earpiece from a computer works. The phone used to change audio settings that Android ignores for phone calls; it now presses the Speaker button on the call's notification.
+- **Android:** If Link All's engine fails partway through starting, it is shut down instead of left running alongside the next attempt.
+- **All:** A nearby device that hasn't been paired yet can still connect, and ask to pair, after it briefly drops off the network. Missing one discovery announcement used to mark it as disconnected by the user, which refused every automatic connection from it.
+- **Windows (Microsoft Store):** Accept and Reject on a pairing notification now work. The Store package didn't register the notification activator, or include the runtime file notifications need, so the buttons did nothing.
+- **Windows (Microsoft Store):** Windows Firewall rules for Link All are added at install. Without them, on a network marked Public (as many home Wi-Fi networks are), a dismissed firewall prompt blocked every phone from reaching the PC.
+- **Windows:** No more technical notifications such as "network changed from [::]:47823 …", "connection to multiple endpoints failed after retries …" or "A device reported an issue". Only a folder that stopped sending is shown; the Devices page shows each device's state.
+- **CLI:** `peers` shows each device's address and how many are connected, instead of "?:47823" and counting every known device as connected.
+
 ## [2.0.1] - 2026-10-19
 
 A reliability release: devices stay linked, find each other again by themselves after any drop, and nothing you copy is lost while one is away.

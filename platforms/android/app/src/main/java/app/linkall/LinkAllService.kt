@@ -618,6 +618,9 @@ class LinkAllService : Service() {
 
             Log.i(TAG, "Engine started — $deviceName")
             startEventDrainThread()
+            // Nothing called this since July, so what you copied on the phone
+            // only reached computers when sent by hand.
+            scheduleClipboardWatch()
             acquireContinuousLocks()
             // Cache our own UUID prefix so NSD can filter self-connections.
             myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
@@ -704,6 +707,18 @@ class LinkAllService : Service() {
             ensureEngineStarted(intent)
         } catch (ex: Throwable) {
             Log.e(TAG, "Engine start failed", ex)
+            // The engine may have started before the step that threw. Left
+            // running, the next start launched another one in this process,
+            // on the same port and the same pairing files.
+            engineLock.writeLock().lock()
+            try {
+                if (engineHandle != 0L) {
+                    runCatching { LinkAllJni.stop(engineHandle) }
+                    engineHandle = 0L
+                }
+            } finally {
+                engineLock.writeLock().unlock()
+            }
             engineStarted.set(false)
             setServiceRunning(false)
             false
@@ -2451,10 +2466,17 @@ class LinkAllService : Service() {
 
     // ── Clipboard watch (Kotlin → Rust) ──────────────────────────────────────
 
+    // One watch loop at a time: the engine can restart while the old loop is
+    // still waiting for its next tick.
+    @Volatile private var clipboardWatchRunning = false
+
     private fun scheduleClipboardWatch() {
+        if (clipboardWatchRunning) return
+        clipboardWatchRunning = true
         val interval = clipInterval
         handler.postDelayed(object : Runnable {
             override fun run() {
+                if (engineHandle == 0L) { clipboardWatchRunning = false; return }
                 // Since Android 10 a background app reads an empty clipboard
                 // unless it has focus or an enabled accessibility service, so
                 // polling 2-5 times a second otherwise only kept the CPU awake.
@@ -2465,6 +2487,8 @@ class LinkAllService : Service() {
                 if (canRead) checkClipboard()
                 if (engineHandle != 0L) {
                     handler.postDelayed(this, if (canRead) clipInterval else CLIP_UNREADABLE_MS)
+                } else {
+                    clipboardWatchRunning = false
                 }
             }
         }, interval)
@@ -3409,6 +3433,17 @@ class LinkAllService : Service() {
         }
     }
 
+    /** Whether the call's audio is on the loudspeaker (readable by any app). */
+    private fun callOnSpeaker(): Boolean {
+        val am = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            am.communicationDevice?.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_SPEAKER
+        } else {
+            @Suppress("DEPRECATION")
+            am.isSpeakerphoneOn
+        }
+    }
+
     private fun hasCallPermissions(): Boolean =
         checkSelfPermission(android.Manifest.permission.READ_PHONE_STATE) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -3534,28 +3569,22 @@ class LinkAllService : Service() {
             return
         }
 
+        // Only the default dialer can route a phone call's audio: setting
+        // AudioManager.isSpeakerphoneOn or starting Bluetooth SCO from here was
+        // ignored for the call on Android 12+, so the computer's audio switch
+        // did nothing. The current route can still be read, and the phone
+        // app's ongoing-call notification has a Speaker toggle to press.
         when (action) {
-            "audio_earpiece" -> {
-                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                am?.isSpeakerphoneOn = false
-                am?.stopBluetoothSco()
-                am?.isBluetoothScoOn = false
-                Log.i(TAG, "Remote audio route: Earpiece")
+            "audio_speaker", "audio_earpiece" -> {
+                val wantSpeaker = action == "audio_speaker"
+                if (callOnSpeaker() == wantSpeaker) {
+                    Log.i(TAG, "Remote audio route: already ${if (wantSpeaker) "speaker" else "earpiece"}")
+                } else if (!LinkAllNotificationListener.pressSpeakerToggle()) {
+                    Log.w(TAG, "Remote audio route: no Speaker button on the call notification")
+                }
             }
-            "audio_speaker" -> {
-                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                am?.isSpeakerphoneOn = true
-                am?.stopBluetoothSco()
-                am?.isBluetoothScoOn = false
-                Log.i(TAG, "Remote audio route: Speaker")
-            }
-            "audio_bluetooth" -> {
-                val am = getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-                am?.isSpeakerphoneOn = false
-                am?.startBluetoothSco()
-                am?.isBluetoothScoOn = true
-                Log.i(TAG, "Remote audio route: Bluetooth")
-            }
+            "audio_bluetooth" ->
+                Log.w(TAG, "Remote audio route: Bluetooth can only be chosen on the phone")
             else -> Log.w(TAG, "Unknown remote call action: $action")
         }
     }

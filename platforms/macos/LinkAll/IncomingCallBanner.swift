@@ -334,16 +334,15 @@ private struct CallBannerView: View {
                     }
                     .buttonStyle(CallButtonStyle())
                 } else {
-                    // Ongoing call actions
+                    // Ongoing call actions. The phone presses its call
+                    // notification's Speaker toggle; Android lets no app other
+                    // than the dialer pick a Bluetooth device for a call.
                     Menu {
                         Button(action: { onRouteAudio("earpiece") }) {
                             Label("Phone Earpiece", systemImage: "iphone")
                         }
                         Button(action: { onRouteAudio("speaker") }) {
                             Label("Speakerphone", systemImage: "speaker.wave.3.fill")
-                        }
-                        Button(action: { onRouteAudio("bluetooth") }) {
-                            Label("Bluetooth Device", systemImage: "headphones")
                         }
                     } label: {
                         Image(systemName: "speaker.wave.2.fill")

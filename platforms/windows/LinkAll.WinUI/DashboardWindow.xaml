@@ -321,8 +321,9 @@
             <!-- Brand -->
             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="9"
                         VerticalAlignment="Center" Margin="16,0,0,0">
-                <Image Width="20" Height="20" Stretch="Uniform"
-                       Source="{ThemeResource BrandMarkSource}" />
+                <!-- Source is set in code for the window's theme (UpdateBrandMark):
+                     a ThemeResource image resolves once, before the theme is applied. -->
+                <Image x:Name="BrandMark" Width="20" Height="20" Stretch="Uniform" />
                 <TextBlock Text="Link All" Style="{StaticResource AppSectionTitle}"
                            FontSize="15" VerticalAlignment="Center" />
             </StackPanel>

@@ -32,7 +32,8 @@ namespace LinkAll.WinUI
             _flushTimer = new Timer(_ => Flush(), null, 500, 500);
         }
 
-        public static void Write(string message) => _queue.Enqueue($"[{DateTime.Now:u}] {message}\n");
+        // "u" appends Z, so the time must be UTC to line up with other devices' logs.
+        public static void Write(string message) => _queue.Enqueue($"[{DateTime.UtcNow:u}] {message}\n");
 
         public static void Flush()
         {

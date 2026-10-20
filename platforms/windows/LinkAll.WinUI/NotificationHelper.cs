@@ -37,7 +37,23 @@ namespace LinkAll.WinUI
             try
             {
                 AppNotificationManager.Default.NotificationInvoked += OnNotificationInvoked;
-                AppNotificationManager.Default.Register();
+                if (Services.StartupRegistration.IsPackaged)
+                {
+                    // The Store package's notifications use its manifest logo.
+                    AppNotificationManager.Default.Register();
+                }
+                else
+                {
+                    // Unpackaged, Windows took the exe's icon, the light tile, which
+                    // looked wrong on a dark notification. The mark without its tile
+                    // reads on light and dark alike.
+                    var icon = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets",
+                        "Square44x44Logo.targetsize-256_altform-unplated.png");
+                    if (System.IO.File.Exists(icon))
+                        AppNotificationManager.Default.Register("Link All", new Uri(icon));
+                    else
+                        AppNotificationManager.Default.Register();
+                }
                 Trace("AppNotificationManager registered successfully");
             }
             catch (Exception ex)

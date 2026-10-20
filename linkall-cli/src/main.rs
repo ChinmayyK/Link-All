@@ -399,9 +399,10 @@ async fn cmd_peers() -> Result<()> {
             );
             println!("{}", "─".repeat(100));
             for peer in &peers {
+                // A peer record keeps its known addresses in `ips`.
                 let endpoint = format!(
                     "{}:{}",
-                    peer["ip"].as_str().unwrap_or("?"),
+                    peer["ips"][0].as_str().unwrap_or("?"),
                     peer["port"].as_u64().unwrap_or(0)
                 );
                 println!(
@@ -416,7 +417,12 @@ async fn cmd_peers() -> Result<()> {
                         .unwrap_or_else(|| "—".into())
                 );
             }
-            println!("\n{} peer(s) connected.", peers.len());
+            // The list holds every known device, not only connected ones.
+            let connected = peers
+                .iter()
+                .filter(|p| p["status"].as_str() == Some("connected"))
+                .count();
+            println!("\n{connected} of {} device(s) connected.", peers.len());
         }
         _ => println!("No peer data (daemon not running?)."),
     }

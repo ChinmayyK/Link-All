@@ -201,6 +201,21 @@ impl Engine {
             host_event_tx,
         );
 
+        // Nothing can resume a partial download from before this start.
+        let save_dir = config
+            .file_save_dir
+            .clone()
+            .unwrap_or_else(default_save_dir);
+        tokio::task::spawn_blocking(move || {
+            let removed = crate::file_transfer::remove_orphaned_partials(
+                &save_dir,
+                std::time::Duration::from_secs(3600),
+            );
+            if removed > 0 {
+                info!(removed, dir = %save_dir.display(), "removed unfinished downloads from earlier runs");
+            }
+        });
+
         spawn_listener_supervisor(shared.clone(), listener_rx);
         if let Some((_, discovery_rx)) = discovery_pair {
             spawn_discovery_supervisor(shared.clone(), discovery_rx);

@@ -32,7 +32,6 @@
         <!-- ================================================== LIGHT -->
         <ResourceDictionary x:Key="Light">
             <!-- The brand mark in the title bar: the light logo on the light theme. -->
-            <BitmapImage x:Key="BrandMarkSource" UriSource="ms-appx:///Assets/Square44x44Logo.scale-200.png" />
 
             <!-- System accent ramp. Light-theme accent *fills* resolve to
                  SystemAccentColorDark1, so that entry carries the brand
@@ -155,7 +154,6 @@
 
         <!-- =================================================== DARK -->
         <ResourceDictionary x:Key="Dark">
-            <BitmapImage x:Key="BrandMarkSource" UriSource="ms-appx:///Assets/BrandMarkDark.png" />
 
             <!-- Dark-theme accent *fills* resolve to SystemAccentColorLight2,
                  which is intentionally light: WinUI pairs it with near-black

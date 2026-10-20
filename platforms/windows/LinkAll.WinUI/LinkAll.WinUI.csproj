@@ -7,7 +7,7 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>LinkAll.WinUI</RootNamespace>
     <!-- Set by scripts/bump-version.sh with the other platforms; Settings shows it. -->
-    <Version>2.0.1</Version>
+    <Version>2.0.2</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant())</RuntimeIdentifier>
@@ -35,8 +35,10 @@
     <Content Include="Assets\LockScreenLogo.scale-200.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <Content Include="Assets\Square150x150Logo.scale-200.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <Content Include="Assets\Square44x44Logo.scale-200.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="Assets\Square44x44Logo.targetsize-48_altform-lightunplated.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <!-- The logo without its tile at every size Windows asks for: unplated on a dark
+         taskbar or notification, lightunplated on a light one. With sizes missing,
+         Windows fell back to the white tile in dark mode. -->
+    <Content Include="Assets\Square44x44Logo.targetsize-*.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <Content Include="Assets\StoreLogo.png"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <Content Include="Assets\AppIcon.ico"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
     <Content Include="Assets\AppIconDark.ico"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
@@ -183,6 +185,20 @@
 
   <Target Name="PublishWindowsAppRuntimeInsights" AfterTargets="Publish" DependsOnTargets="_FindWindowsAppRuntimeMsix">
     <Unzip SourceFiles="@(_RuntimeMsix)" DestinationFolder="$(PublishDir)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
+  </Target>
+
+  <!-- The Store package lists its payload itself, so the copy above never
+       reached it, and the Store build's toast buttons had the same
+       0x8007007E failure. Add the file to the package payload too. -->
+  <Target Name="PackageWindowsAppRuntimeInsights" AfterTargets="GetPackagingOutputs" DependsOnTargets="_FindWindowsAppRuntimeMsix" Condition="'$(WindowsPackageType)' == 'MSIX'">
+    <Unzip SourceFiles="@(_RuntimeMsix)" DestinationFolder="$(OutDir)" Include="Microsoft.WindowsAppRuntime.Insights.Resource.dll" SkipUnchangedFiles="true" />
+    <ItemGroup>
+      <PackagingOutputs Include="$(OutDir)Microsoft.WindowsAppRuntime.Insights.Resource.dll">
+        <TargetPath>Microsoft.WindowsAppRuntime.Insights.Resource.dll</TargetPath>
+        <OutputGroup>CustomOutputGroupForPackaging</OutputGroup>
+        <ProjectName>$(ProjectName)</ProjectName>
+      </PackagingOutputs>
+    </ItemGroup>
   </Target>
 
   <!--
