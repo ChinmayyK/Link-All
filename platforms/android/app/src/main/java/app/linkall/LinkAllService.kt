@@ -707,6 +707,18 @@ class LinkAllService : Service() {
             ensureEngineStarted(intent)
         } catch (ex: Throwable) {
             Log.e(TAG, "Engine start failed", ex)
+            // The engine may have started before the step that threw. Left
+            // running, the next start launched another one in this process,
+            // on the same port and the same pairing files.
+            engineLock.writeLock().lock()
+            try {
+                if (engineHandle != 0L) {
+                    runCatching { LinkAllJni.stop(engineHandle) }
+                    engineHandle = 0L
+                }
+            } finally {
+                engineLock.writeLock().unlock()
+            }
             engineStarted.set(false)
             setServiceRunning(false)
             false
