@@ -453,8 +453,8 @@ pub(super) async fn connect_once(
     // connection also ended the session the other side already had with us
     // (its tie-break replaces that one with this), so a reinstalled phone was
     // disconnected every reconnect cycle and could never be paired. Keep the
-    // connection as the device that answered, stop dialling this address for
-    // `expected`, and report the move so the caller doesn't retry.
+    // connection as the device that answered, stop dialling `expected` at its
+    // old addresses (they are this host's), and report the move so the caller doesn't retry.
     let moved_from = expected_device_id.filter(|expected| *expected != hs.peer_device_id);
     if let Some(expected) = moved_from {
         info!(
@@ -463,9 +463,7 @@ pub(super) async fn connect_once(
             addr = %endpoint,
             "a different device answers at this address; keeping its connection"
         );
-        shared
-            .peer_manager
-            .forget_address(expected, endpoint.ip())?;
+        shared.peer_manager.forget_addresses(expected)?;
     }
 
     // An incoming session accepted while we were handshaking is resolved by

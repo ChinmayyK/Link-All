@@ -1123,18 +1123,20 @@ impl PeerManager {
         Ok(removed)
     }
 
-    /// Stop dialling `ip` for this peer: another device answers there now.
-    /// Returns whether anything was removed.
-    pub fn forget_address(&self, device_id: Uuid, ip: IpAddr) -> Result<bool> {
-        let ip = ip.to_canonical();
+    /// Stop dialling this peer at any address it was last seen at: one of
+    /// them now answers as another device, so that host (and its other
+    /// addresses, IPv4 and IPv6 alike) is someone else now, most often the
+    /// same phone after a reinstall. Dropping only the address that answered
+    /// left the others to be redialled one by one, and every redial replaced
+    /// the new device's live session and changed its pairing code mid-request.
+    /// If this peer comes back, discovery records its address again.
+    pub fn forget_addresses(&self, device_id: Uuid) -> Result<bool> {
         let removed = match self.store.get_mut(&device_id) {
             Some(mut entry) => {
-                let before = entry.ips.len() + entry.addr_history.len();
-                entry.ips.retain(|known| known.to_canonical() != ip);
-                entry
-                    .addr_history
-                    .retain(|record| record.addr.ip().to_canonical() != ip);
-                before != entry.ips.len() + entry.addr_history.len()
+                let had = !entry.ips.is_empty() || !entry.addr_history.is_empty();
+                entry.ips.clear();
+                entry.addr_history.clear();
+                had
             }
             None => false,
         };
@@ -1740,6 +1742,34 @@ mod tests {
         let peer = manager.get(id).unwrap();
         assert!(!peer.trusted);
         assert!(!peer.remembered);
+    }
+
+    #[test]
+    fn a_moved_device_is_not_redialled_at_any_of_its_old_addresses() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let old = Uuid::new_v4();
+        for addr in [
+            "192.168.1.21:47823",
+            "[fe80::1]:47823",
+            "[2405:201::1]:47823",
+        ] {
+            manager
+                .upsert_peer(
+                    old,
+                    "Phone".into(),
+                    addr.parse().unwrap(),
+                    true,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+        }
+        assert_eq!(manager.get(old).unwrap().ips.len(), 3);
+
+        assert!(manager.forget_addresses(old).unwrap());
+        let record = manager.get(old).unwrap();
+        assert!(record.ips.is_empty() && record.addr_history.is_empty());
+        assert!(record.trusted, "the pairing itself is kept");
     }
 
     #[test]
