@@ -134,6 +134,7 @@ fun HomeTab(
     var showSendSheet by remember { mutableStateOf(false) }
     var remoteTarget by remember { mutableStateOf<PeerSnapshot?>(null) }
     var showRemotePicker by remember { mutableStateOf(false) }
+    var showScratchpad by remember { mutableStateOf(false) }
     val browseFiles = LocalBrowseFiles.current
 
 
@@ -250,6 +251,15 @@ fun HomeTab(
             }
         }
 
+        SectionHeader(c, "Notes", null)
+        Panel(c) {
+            ActionRow(
+                c, Icons.Outlined.ContentPaste, "Scratchpad", "Notes and links shared with your devices",
+                enabled = true,
+                onClick = { showScratchpad = true }
+            )
+        }
+
         if (activeTransfers.isNotEmpty()) {
             SectionHeader(c, "Transferring", "${activeTransfers.size}")
             Panel(c) {
@@ -291,6 +301,8 @@ fun HomeTab(
         // Clears the floating dock.
         Spacer(Modifier.height(140.dp))
     }
+
+    if (showScratchpad) ScratchpadDialog(c, onDismiss = { showScratchpad = false })
 
     if (showRemotePicker) {
         RemoteDevicePicker(c, connected, onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })

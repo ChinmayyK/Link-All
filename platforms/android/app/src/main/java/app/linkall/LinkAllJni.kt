@@ -53,6 +53,8 @@ object LinkAllJni {
     const val CR_EVENT_FIND_DEVICE_REQUESTED   = 43
     /** A paired computer offered to call a number from this phone; the number is [eventText]. */
     const val CR_EVENT_DIAL_REQUESTED          = 44
+    /** The Scratchpad changed, here or on a paired device. */
+    const val CR_EVENT_SCRATCHPAD_CHANGED      = 45
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)
@@ -72,6 +74,14 @@ object LinkAllJni {
     /** Why [remoteControl] could not send, as a sentence, or null. */
     @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
     @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean
+    // Scratchpad: notes shared between your devices.
+    /** The notes as a JSON array, pinned first; each has id, text, pinned, updated_at_ms. */
+    @JvmStatic external fun scratchpadListJson(handle: Long): String?
+    /** Creates a note ([id] null) or edits one. 0 when saved, -1 when not. */
+    @JvmStatic external fun scratchpadSave(handle: Long, id: String?, text: String, pinned: Boolean): Int
+    @JvmStatic external fun scratchpadDelete(handle: Long, id: String): Int
+    /** Deletes every note that isn't pinned. */
+    @JvmStatic external fun scratchpadClear(handle: Long): Int
     /** Rings or stops a computer; waits for its answer. Null when it will, otherwise why it won't. */
     @JvmStatic external fun sendFindDevice(handle: Long, targetDeviceId: String, ring: Boolean): String?
     // Trackpad and keyboard for a computer. Each returns 0 when sent, -1 when it could not be.
