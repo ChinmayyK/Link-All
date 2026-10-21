@@ -88,6 +88,8 @@ pub fn ring(on: bool) -> Result<(), String> {
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     *current = Some(stop.clone());
     std::thread::spawn(move || {
+        // Only macOS saves something (the volume); elsewhere this is ().
+        #[allow(clippy::let_unit_value)]
         let saved = imp::before_ring();
         let started = std::time::Instant::now();
         while !stop.load(Ordering::Relaxed) && started.elapsed() < RING_LIMIT {
@@ -247,6 +249,7 @@ function key(code) {
 #[cfg(windows)]
 mod imp {
     use super::Action;
+    use windows_sys::Win32::System::Diagnostics::Debug::MessageBeep;
     use windows_sys::Win32::System::Shutdown::LockWorkStation;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_LEFT,
@@ -254,7 +257,7 @@ mod imp {
         VK_VOLUME_MUTE, VK_VOLUME_UP,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        MessageBeep, PostMessageW, HWND_BROADCAST, WM_SYSCOMMAND,
+        PostMessageW, HWND_BROADCAST, WM_SYSCOMMAND,
     };
 
     /// SC_MONITORPOWER: the system command that powers the display on or off.
