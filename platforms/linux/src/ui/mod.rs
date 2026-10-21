@@ -6,6 +6,7 @@ pub mod devices;
 mod files;
 pub mod pairing;
 pub mod palette;
+mod scratchpad;
 pub use devices::add_by_address;
 pub mod send;
 mod settings;
@@ -221,7 +222,7 @@ struct PageSpec {
     icon: &'static str,
 }
 
-const PAGES: [PageSpec; 6] = [
+const PAGES: [PageSpec; 7] = [
     PageSpec {
         id: "devices",
         title: "Devices",
@@ -246,6 +247,11 @@ const PAGES: [PageSpec; 6] = [
         id: "activity",
         title: "Activity",
         icon: "document-open-recent-symbolic",
+    },
+    PageSpec {
+        id: "scratchpad",
+        title: "Scratchpad",
+        icon: "document-edit-symbolic",
     },
     PageSpec {
         id: "settings",
@@ -381,12 +387,13 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
         .hhomogeneous(false)
         .vhomogeneous(false)
         .build();
-    let pages: [gtk::Widget; 6] = [
+    let pages: [gtk::Widget; 7] = [
         devices::page(hub).upcast(),
         clipboard::page(hub, clipboard).upcast(),
         transfers::page(hub).upcast(),
         files::page(hub).upcast(),
         activity::page(hub).upcast(),
+        scratchpad::page().upcast(),
         settings::page(hub).upcast(),
     ];
     for (spec, widget) in PAGES.iter().zip(pages) {
