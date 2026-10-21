@@ -234,6 +234,49 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 })
                 .await;
         }
+        AppMessage::RemoteControl { action } => {
+            ctx.touch_last_seen();
+            let trusted = shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false);
+            if !trusted {
+                return Flow::Continue;
+            }
+            let allowed = shared.settings.lock().unwrap().allow_remote_control;
+            let (success, error) = if !allowed {
+                (
+                    false,
+                    Some("Remote control is off on this computer. Turn it on in Link All's settings.".to_string()),
+                )
+            } else if let Some(action) = crate::remote_control::Action::parse(&action) {
+                match tokio::task::spawn_blocking(move || crate::remote_control::perform(action))
+                    .await
+                {
+                    Ok(Ok(())) => (true, None),
+                    Ok(Err(e)) => (false, Some(e)),
+                    Err(e) => (false, Some(e.to_string())),
+                }
+            } else {
+                (false, Some("That action isn't allowed.".to_string()))
+            };
+            let _ = ctx
+                .outbox_tx
+                .send(AppMessage::RemoteControlAck { success, error })
+                .await;
+        }
+        AppMessage::RemoteControlAck { success, error } => {
+            ctx.touch_last_seen();
+            let _ = shared
+                .event_tx
+                .send(EngineEvent::RemoteControlAckReceived {
+                    from_device: peer_id,
+                    success,
+                    error,
+                })
+                .await;
+        }
         _ => unreachable!("dispatch_inbound routed a non-remote message here"),
     }
     Flow::Continue

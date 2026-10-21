@@ -176,6 +176,49 @@ impl Engine {
         }
     }
 
+    /// Ask a connected, trusted computer to run a remote-control action. Only
+    /// computers that report 2.1.0 or later understand the message, so an
+    /// older one gets an error back instead of a message it can't decode.
+    pub async fn send_remote_control(
+        &self,
+        target_device: Uuid,
+        action: &str,
+    ) -> Result<(), String> {
+        let tx = self.remote_control_sender(target_device)?;
+        tx.send(AppMessage::RemoteControl {
+            action: action.to_string(),
+        })
+        .await
+        .map_err(|_| "That computer isn't connected.".to_string())
+    }
+
+    /// Why a remote-control action could not be sent to `target_device`, or
+    /// `Ok` when it could.
+    pub async fn send_remote_control_check(&self, target_device: Uuid) -> Result<(), String> {
+        self.remote_control_sender(target_device).map(|_| ())
+    }
+
+    fn remote_control_sender(
+        &self,
+        target_device: Uuid,
+    ) -> Result<mpsc::Sender<AppMessage>, String> {
+        let peer = self
+            .shared
+            .peer_manager
+            .get(target_device)
+            .ok_or_else(|| "That computer isn't known.".to_string())?;
+        if !peer_understands_remote_control(peer.app_version.as_deref()) {
+            return Err("Update Link All on that computer to use the remote.".to_string());
+        }
+        self.shared
+            .peer_manager
+            .all_connected_senders()
+            .into_iter()
+            .find(|(id, _)| *id == target_device)
+            .map(|(_, tx)| tx)
+            .ok_or_else(|| "That computer isn't connected.".to_string())
+    }
+
     /// Report back whether we actually managed to open a URL a peer asked
     /// us to open (`requester_device` is whoever sent the original
     /// `OpenUrlOnDevice` — only the platform layer knows if the OS-level
@@ -374,5 +417,34 @@ pub(crate) async fn drain_remote_waiters(shared: &EngineShared, peer_id: Uuid) {
             data: Vec::new(),
             error: Some("Peer disconnected".to_string()),
         });
+    }
+}
+
+/// True for a peer on 2.1.0 or later, the first release with remote control.
+fn peer_understands_remote_control(app_version: Option<&str>) -> bool {
+    let Some(v) = app_version else { return false };
+    let mut parts = v.split(['.', '-', '+']).map(|p| {
+        p.chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse::<u32>()
+            .unwrap_or(0)
+    });
+    let version = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    version >= (2, 1)
+}
+
+#[cfg(test)]
+mod remote_control_tests {
+    use super::peer_understands_remote_control as ok;
+
+    #[test]
+    fn only_2_1_and_later_understand_it() {
+        assert!(ok(Some("2.1.0")));
+        assert!(ok(Some("2.1.3")));
+        assert!(ok(Some("3.0.0")));
+        assert!(!ok(Some("2.0.2")));
+        assert!(!ok(Some("1.3.3")));
+        assert!(!ok(None));
     }
 }

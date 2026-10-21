@@ -267,6 +267,12 @@ pub enum EngineEvent {
         success: bool,
         error: Option<String>,
     },
+    /// A computer answered a remote-control action we sent it.
+    RemoteControlAckReceived {
+        from_device: Uuid,
+        success: bool,
+        error: Option<String>,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,
