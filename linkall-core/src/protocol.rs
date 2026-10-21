@@ -635,6 +635,15 @@ pub enum AppMessage {
     DialNumber {
         number: String,
     },
+    /// One Scratchpad note, sent when it changes and when two devices connect.
+    /// The newest `updated_at_ms` wins; `deleted` leaves an empty marker.
+    ScratchpadNote {
+        id: Uuid,
+        text: String,
+        pinned: bool,
+        updated_at_ms: u64,
+        deleted: bool,
+    },
 }
 
 impl AppMessage {

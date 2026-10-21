@@ -51,6 +51,7 @@ mod health;
 mod listener;
 mod peer_discovery;
 mod remote_ops;
+mod scratchpad_ops;
 mod session;
 mod settings_ops;
 pub(crate) mod telemetry;
@@ -190,6 +191,9 @@ impl Engine {
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
+            scratchpad: Arc::new(std::sync::Mutex::new(crate::scratchpad::Scratchpad::load(
+                &config.data_dir.join("scratchpad.json"),
+            ))),
             started_at: Instant::now(),
             network_hint: Arc::default(),
         };

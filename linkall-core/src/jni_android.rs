@@ -494,6 +494,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         RemoteControlAckReceived { .. } => 42,
         FindDeviceRequested { .. } => 43,
         DialRequested { .. } => 44,
+        ScratchpadChanged => 45,
     }
 }
 
@@ -3129,4 +3130,89 @@ fn send_input(
         Ok(()) => 0,
         Err(_) => -1,
     }
+}
+
+/// The Scratchpad notes as JSON (an array, pinned first), or null on error.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadListJson(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match serde_json::to_string(&h.engine.scratchpad_list()) {
+        Ok(json) => env
+            .new_string(json)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Creates a note (`id` null) or edits one. Returns 0 on success, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadSave(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    id: JString,
+    text: JString,
+    pinned: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let id = if id.is_null() {
+        None
+    } else {
+        match target_uuid(&mut env, &id) {
+            Some(id) => Some(id),
+            None => return -1,
+        }
+    };
+    let Ok(text) = env.get_string(&text).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.scratchpad_save(id, &text, pinned != 0)) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// Deletes a note. Returns 0 on success, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadDelete(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    id: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(id) = target_uuid(&mut env, &id) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.scratchpad_delete(id));
+    0
+}
+
+/// Deletes every note that isn't pinned.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadClear(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.scratchpad_clear());
+    0
 }

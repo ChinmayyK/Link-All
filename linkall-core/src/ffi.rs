@@ -415,7 +415,8 @@ pub unsafe extern "C" fn linkall_event_type(event: *const PbEvent) -> c_int {
         // Only phones send remote control; desktop apps never receive the answer.
         EngineEvent::RemoteControlAckReceived { .. }
         | EngineEvent::FindDeviceRequested { .. }
-        | EngineEvent::DialRequested { .. } => PB_EVENT_NONE,
+        | EngineEvent::DialRequested { .. }
+        | EngineEvent::ScratchpadChanged => PB_EVENT_NONE,
         EngineEvent::RemoteFilesResponseReceived { .. } => PB_EVENT_REMOTE_FILES_RESPONSE,
         EngineEvent::RemoteThumbnailResponseReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_RESPONSE,
         EngineEvent::SpeedTestProgress { .. } => PB_EVENT_SPEED_TEST_PROGRESS,

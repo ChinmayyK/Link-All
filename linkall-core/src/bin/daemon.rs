@@ -694,6 +694,30 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
+        IpcRequest::ScratchpadList => Ok(IpcResponse::ok(state.engine.scratchpad_list())),
+        IpcRequest::ScratchpadSave { id, text, pinned } => {
+            let id = match id.as_deref().map(uuid::Uuid::parse_str).transpose() {
+                Ok(id) => id,
+                Err(_) => return Ok(IpcResponse::error("unknown note".to_string())),
+            };
+            Ok(
+                match state.engine.scratchpad_save(id, &text, pinned).await {
+                    Ok(note) => IpcResponse::ok(note),
+                    Err(e) => IpcResponse::error(e),
+                },
+            )
+        }
+        IpcRequest::ScratchpadDelete { id } => Ok(match uuid::Uuid::parse_str(&id) {
+            Ok(id) => {
+                state.engine.scratchpad_delete(id).await;
+                IpcResponse::ok(json!({}))
+            }
+            Err(_) => IpcResponse::error("unknown note".to_string()),
+        }),
+        IpcRequest::ScratchpadClear => {
+            state.engine.scratchpad_clear().await;
+            Ok(IpcResponse::ok(json!({})))
+        }
         IpcRequest::DialNumber { target, number } => Ok(match uuid::Uuid::parse_str(&target) {
             Ok(id) => match state.engine.send_dial_number(id, &number).await {
                 Ok(()) => IpcResponse::ok(json!({})),

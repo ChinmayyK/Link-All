@@ -11,6 +11,7 @@ mod device;
 mod link;
 mod pairing;
 mod remote;
+mod scratchpad;
 mod speed_test;
 mod transfers;
 
@@ -120,6 +121,7 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::RemoteTypeText { .. }
         | M::RemoteKeyPress { .. }
         | M::DialNumber { .. }) => remote::handle(ctx, m).await,
+        m @ M::ScratchpadNote { .. } => scratchpad::handle(ctx, m).await,
         // Handshake messages; once the session is up they carry nothing.
         M::Hello { .. } | M::HelloAck { .. } => Flow::Continue,
         // Sent only by older builds that had the camera stream.
@@ -243,6 +245,10 @@ pub(super) fn register_session(
     // an old session would block broadcasts to it forever. Reset here; a
     // peer that has sharing off re-announces it right below.
     let _ = shared.peer_manager.set_remote_sync_enabled(peer_id, true);
+
+    if trusted {
+        super::scratchpad_ops::send_all_to(&shared, outbox_tx.clone());
+    }
 
     // Push local battery and network status to the newly connected peer if trusted.
     if trusted {

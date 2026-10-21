@@ -63,6 +63,7 @@ pub mod protocol;
 pub mod remote_control;
 pub mod remote_input;
 pub mod retry;
+pub mod scratchpad;
 pub mod settings;
 pub mod sim;
 pub mod speed_test;

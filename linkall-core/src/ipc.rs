@@ -136,86 +136,178 @@ pub enum IpcRequest {
         last_used: Option<String>,
     },
     /// Make a paired phone ring (`ring` true) or stop ringing.
-    FindDevice { target: String, ring: bool },
+    FindDevice {
+        target: String,
+        ring: bool,
+    },
     /// Offer a paired phone a call to `number`.
-    DialNumber { target: String, number: String },
+    DialNumber {
+        target: String,
+        number: String,
+    },
+    /// The Scratchpad notes, pinned first.
+    ScratchpadList,
+    /// Create a note (`id` absent) or edit one.
+    ScratchpadSave {
+        #[serde(default)]
+        id: Option<String>,
+        text: String,
+        #[serde(default)]
+        pinned: bool,
+    },
+    ScratchpadDelete {
+        id: String,
+    },
+    /// Delete every note that isn't pinned.
+    ScratchpadClear,
     /// List connected peers with stats.
     Peers,
     /// List trusted devices from the store.
     TrustedDevices,
     /// Connect to a peer manually by IP and port.
-    ConnectPeer { ip: String, port: u16 },
+    ConnectPeer {
+        ip: String,
+        port: u16,
+    },
     /// Disconnect from a peer explicitly.
-    DisconnectPeer { device_id: String },
+    DisconnectPeer {
+        device_id: String,
+    },
     /// Mark a peer as trusted.
-    TrustPeer { device_id: String },
+    TrustPeer {
+        device_id: String,
+    },
     /// Reject a peer without trusting it.
-    RejectPeer { device_id: String },
+    RejectPeer {
+        device_id: String,
+    },
     /// Request to pair with an untrusted device.
-    SendPairingRequest { device_id: String },
+    SendPairingRequest {
+        device_id: String,
+    },
     /// Cancel an outgoing pairing request.
-    CancelPairingRequest { device_id: String },
+    CancelPairingRequest {
+        device_id: String,
+    },
     /// Respond to a pairing request from a device.
-    RespondToPairing { device_id: String, accepted: bool },
+    RespondToPairing {
+        device_id: String,
+        accepted: bool,
+    },
     /// Revoke a trusted device by UUID.
-    RevokeTrustedDevice { device_id: String },
+    RevokeTrustedDevice {
+        device_id: String,
+    },
     /// Generate a short-lived QR authentication token for this device.
     GenerateQrToken,
     /// Trust a device using a scanned QR code token.
-    TrustPeerFromQr { device_id: String, token: String },
+    TrustPeerFromQr {
+        device_id: String,
+        token: String,
+    },
     /// Push clipboard text to all peers.
-    PushText { text: String },
+    PushText {
+        text: String,
+    },
     /// Push clipboard text to one peer.
-    PushTextTo { text: String, target: String },
+    PushTextTo {
+        text: String,
+        target: String,
+    },
     /// Push clipboard image bytes to all peers.
-    PushImage { mime: String, data_base64: String },
+    PushImage {
+        mime: String,
+        data_base64: String,
+    },
     /// Push clipboard file bytes to all peers.
-    PushFile { name: String, data_base64: String },
+    PushFile {
+        name: String,
+        data_base64: String,
+    },
     /// Record local clipboard text in history without syncing.
-    RememberText { text: String },
+    RememberText {
+        text: String,
+    },
     /// Get recent history entries.
-    History { last: usize },
+    History {
+        last: usize,
+    },
     /// Search history.
-    HistorySearch { query: String, limit: usize },
+    HistorySearch {
+        query: String,
+        limit: usize,
+    },
     /// Scored fuzzy search across history (powers Cmd+Shift+V command palette).
-    HistorySearchFuzzy { query: String, limit: usize },
+    HistorySearchFuzzy {
+        query: String,
+        limit: usize,
+    },
     /// Re-push a history item, optionally to one peer.
-    HistoryRepush { id: u64, target: Option<String> },
+    HistoryRepush {
+        id: u64,
+        target: Option<String>,
+    },
     /// Pin or unpin a history item.
-    HistoryPin { id: u64, pinned: bool },
+    HistoryPin {
+        id: u64,
+        pinned: bool,
+    },
     /// Delete one history item.
-    HistoryDelete { id: u64 },
+    HistoryDelete {
+        id: u64,
+    },
     /// Clear all history.
     HistoryClear,
     /// Export full history as CSV text.
     HistoryExportCsv,
     /// Read recent feedback events.
-    Feedback { last: usize },
+    Feedback {
+        last: usize,
+    },
     /// Fetch one incoming clipboard payload by daemon-assigned ID.
-    IncomingClipboard { id: u64 },
+    IncomingClipboard {
+        id: u64,
+    },
     /// Show details for one trusted device.
-    DeviceDetails { device_id: String },
+    DeviceDetails {
+        device_id: String,
+    },
     /// Assign a friendly display name to a trusted device.
     RenameTrustedDevice {
         device_id: String,
         display_name: String,
     },
     /// Pause clipboard sync for a device (keeps connection alive).
-    PauseSyncPeer { device_id: String },
+    PauseSyncPeer {
+        device_id: String,
+    },
     /// Resume clipboard sync for a device.
-    ResumeSyncPeer { device_id: String },
+    ResumeSyncPeer {
+        device_id: String,
+    },
     /// Forget a device pairing (removes from remembered peers, keeps trust).
-    ForgetDevice { device_id: String },
+    ForgetDevice {
+        device_id: String,
+    },
     /// Set auto-connect for a device.
-    SetAutoConnect { device_id: String, enabled: bool },
+    SetAutoConnect {
+        device_id: String,
+        enabled: bool,
+    },
     /// Get recent activity feed entries.
-    ActivityRecent { limit: usize },
+    ActivityRecent {
+        limit: usize,
+    },
     /// Get activity feed entries since a given entry ID.
-    ActivitySince { since_id: u64 },
+    ActivitySince {
+        since_id: u64,
+    },
     /// Get pending remote clipboard items not yet applied locally.
     PendingRemoteClipboards,
     /// Explicitly apply a remote clipboard item by its content hash.
-    ApplyClipboard { content_hash: String },
+    ApplyClipboard {
+        content_hash: String,
+    },
     /// Send a file to a specific peer or all peers.
     SendFile {
         name: String,
@@ -242,32 +334,53 @@ pub enum IpcRequest {
         target_device: Option<String>,
     },
     /// Stop a folder transfer, in either direction, by batch id.
-    CancelFolder { batch_id: String },
+    CancelFolder {
+        batch_id: String,
+    },
     /// Accept an incoming file transfer.
-    AcceptFileTransfer { transfer_id: String },
+    AcceptFileTransfer {
+        transfer_id: String,
+    },
     /// Reject an incoming file transfer.
-    RejectFileTransfer { transfer_id: String, reason: String },
+    RejectFileTransfer {
+        transfer_id: String,
+        reason: String,
+    },
     /// Cancel an active file transfer.
-    CancelFileTransfer { transfer_id: String },
+    CancelFileTransfer {
+        transfer_id: String,
+    },
     /// Pause an active file transfer.
-    PauseFileTransfer { transfer_id: String },
+    PauseFileTransfer {
+        transfer_id: String,
+    },
     /// Resume a paused file transfer.
-    ResumeFileTransfer { transfer_id: String },
+    ResumeFileTransfer {
+        transfer_id: String,
+    },
     /// Start a network speed test with a peer.
     StartSpeedTest {
         device_id: String,
         duration_secs: u32,
     },
     /// Update timeline-first clipboard mode.
-    SetTimelineFirstMode { enabled: bool },
+    SetTimelineFirstMode {
+        enabled: bool,
+    },
     /// Update auto-apply remote clipboard setting.
-    SetAutoApplyClipboard { enabled: bool },
+    SetAutoApplyClipboard {
+        enabled: bool,
+    },
     /// Get current settings.
     GetSettings,
     /// Apply a partial JSON patch to settings.
-    PatchSettings { patch: String },
+    PatchSettings {
+        patch: String,
+    },
     /// Enable / disable sync.
-    SetSyncEnabled { enabled: bool },
+    SetSyncEnabled {
+        enabled: bool,
+    },
     /// Gracefully stop the daemon.
     Shutdown,
     /// Ping — check if daemon is alive.
@@ -277,9 +390,15 @@ pub enum IpcRequest {
 
     // ── History tag management ────────────────────────────────────────────────
     /// Add a tag to a history entry.
-    HistoryTag { id: u64, tag: String },
+    HistoryTag {
+        id: u64,
+        tag: String,
+    },
     /// Remove a tag from a history entry.
-    HistoryUntag { id: u64, tag: String },
+    HistoryUntag {
+        id: u64,
+        tag: String,
+    },
 
     // ── History stats & export ────────────────────────────────────────────────
     /// Return aggregated statistics over the history buffer.
@@ -321,13 +440,20 @@ pub enum IpcRequest {
         description: String,
     },
     /// Remove a clipboard template by name.
-    TemplateRemove { name: String },
+    TemplateRemove {
+        name: String,
+    },
 
     // ── Per-peer settings ─────────────────────────────────────────────────────
     /// Get per-peer settings for a specific device.
-    GetPeerSettings { device_id: String },
+    GetPeerSettings {
+        device_id: String,
+    },
     /// Patch per-peer settings for a specific device (partial JSON).
-    PatchPeerSettings { device_id: String, patch: String },
+    PatchPeerSettings {
+        device_id: String,
+        patch: String,
+    },
     /// Re-trigger mDNS/NSD discovery — called by Mac "Scan" button.
     RescanPeers,
     /// Connect to a peer by hostname:port (with DNS resolution).
@@ -339,7 +465,9 @@ pub enum IpcRequest {
         port: Option<u16>,
     },
     /// Reconnect to a peer by its ID using all known historical network addresses.
-    ReconnectPeer { device_id: String },
+    ReconnectPeer {
+        device_id: String,
+    },
     /// Re-push a previously-received clipboard item identified by its content hash.
     /// Optionally restrict to one target device.
     PushClipboardHash {
@@ -462,7 +590,10 @@ pub enum IpcRequest {
         size_px: u32,
     },
     /// Request the remote peer to send a file to us over normal file transfer.
-    RemoteFilePullRequest { target_device: String, file_id: u64 },
+    RemoteFilePullRequest {
+        target_device: String,
+        file_id: u64,
+    },
     /// Perform an action (rename/delete) on a remote file.
     RemoteFileActionRequest {
         target_device: String,
@@ -471,7 +602,10 @@ pub enum IpcRequest {
         new_name: Option<String>,
     },
     /// Ask a trusted, connected peer to open a URL immediately.
-    OpenUrlOnDevice { target_device: String, url: String },
+    OpenUrlOnDevice {
+        target_device: String,
+        url: String,
+    },
     /// Report whether we actually managed to open a URL a peer asked us to
     /// open (called by the platform layer after its OS-level open attempt).
     AckOpenUrlOnDevice {
@@ -813,6 +947,28 @@ pub async fn handle_ipc_request(
             },
             Err(_) => IpcResponse::err("unknown device".to_string()),
         },
+        IpcRequest::ScratchpadList => IpcResponse::ok(eng.scratchpad_list()),
+        IpcRequest::ScratchpadSave { id, text, pinned } => {
+            let id = match id.as_deref().map(uuid::Uuid::parse_str).transpose() {
+                Ok(id) => id,
+                Err(_) => return IpcResponse::err("unknown note".to_string()),
+            };
+            match eng.scratchpad_save(id, &text, pinned).await {
+                Ok(note) => IpcResponse::ok(note),
+                Err(e) => IpcResponse::err(e),
+            }
+        }
+        IpcRequest::ScratchpadDelete { id } => match uuid::Uuid::parse_str(&id) {
+            Ok(id) => {
+                eng.scratchpad_delete(id).await;
+                IpcResponse::ok(serde_json::json!({}))
+            }
+            Err(_) => IpcResponse::err("unknown note".to_string()),
+        },
+        IpcRequest::ScratchpadClear => {
+            eng.scratchpad_clear().await;
+            IpcResponse::ok(serde_json::json!({}))
+        }
         IpcRequest::DialNumber { target, number } => match uuid::Uuid::parse_str(&target) {
             Ok(id) => match eng.send_dial_number(id, &number).await {
                 Ok(()) => IpcResponse::ok(serde_json::json!({})),

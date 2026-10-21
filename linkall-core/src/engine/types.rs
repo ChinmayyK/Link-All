@@ -278,6 +278,8 @@ pub enum EngineEvent {
         from_device: Uuid,
         ring: bool,
     },
+    /// The Scratchpad changed, here or on a paired device.
+    ScratchpadChanged,
     /// A paired computer offered to call a number from this phone.
     DialRequested {
         from_device: Uuid,
@@ -514,6 +516,8 @@ pub struct QrAuthToken {
 #[derive(Clone)]
 pub(crate) struct EngineShared {
     pub(crate) config: EngineConfig,
+    /// Notes shared between your own devices.
+    pub(crate) scratchpad: Arc<std::sync::Mutex<crate::scratchpad::Scratchpad>>,
     pub(crate) trust: Arc<Mutex<TrustStore>>,
     pub(crate) peer_manager: Arc<PeerManager>,
     pub(crate) event_tx: mpsc::Sender<EngineEvent>,

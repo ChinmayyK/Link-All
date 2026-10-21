@@ -61,6 +61,24 @@ async fn run() -> Result<()> {
         ["find", "stop", id] => cmd_find(id, false).await,
         ["find", id] => cmd_find(id, true).await,
         ["call", id, number] => cmd_call(id, number).await,
+        ["scratch"] | ["scratch", "list"] => cmd_scratch_list().await,
+        ["scratch", "add", words @ ..] if !words.is_empty() => {
+            cmd_scratch_save(None, &words.join(" ")).await
+        }
+        ["scratch", "rm", id] => {
+            cmd_scratch_simple(
+                IpcRequest::ScratchpadDelete { id: id.to_string() },
+                "Deleted",
+            )
+            .await
+        }
+        ["scratch", "clear"] => {
+            cmd_scratch_simple(
+                IpcRequest::ScratchpadClear,
+                "Cleared the notes that aren't pinned",
+            )
+            .await
+        }
         ["devices", "choose", purpose] => cmd_devices_choose(purpose, None).await,
         ["devices", "choose", purpose, last] => cmd_devices_choose(purpose, Some(last)).await,
         ["devices", "show", id] => cmd_devices_show(id).await,
@@ -265,6 +283,57 @@ async fn cmd_push(text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+/// Lists the Scratchpad notes, pinned first.
+async fn cmd_scratch_list() -> Result<()> {
+    match ipc(&IpcRequest::ScratchpadList).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            let notes = data.as_array().cloned().unwrap_or_default();
+            if notes.is_empty() {
+                println!("No notes");
+            }
+            for note in notes {
+                let pin = if note["pinned"].as_bool().unwrap_or(false) {
+                    "*"
+                } else {
+                    " "
+                };
+                let text = note["text"].as_str().unwrap_or("").replace('\n', " ");
+                println!("{pin} {}  {}", note["id"].as_str().unwrap_or("?"), text);
+            }
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => Ok(()),
+    }
+}
+
+/// Adds a note (`id` None) or replaces the text of one.
+async fn cmd_scratch_save(id: Option<String>, text: &str) -> Result<()> {
+    match ipc(&IpcRequest::ScratchpadSave {
+        id,
+        text: text.to_string(),
+        pinned: false,
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Saved");
+            Ok(())
+        }
+    }
+}
+
+async fn cmd_scratch_simple(request: IpcRequest, done: &str) -> Result<()> {
+    match ipc(&request).await? {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("{done}");
+            Ok(())
+        }
+    }
 }
 
 /// Offers a paired phone a call to `number`: it shows a notification, and
@@ -1363,6 +1432,7 @@ DAEMON CONTROL
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
   find [stop] <uuid>              Make a paired phone ring (or stop) so you can find it
   call <uuid> <number>            Offer a paired phone a call (it opens the dialer when tapped)
+  scratch [add <text> | rm <id> | clear]  Notes shared between your devices
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it
   pause <transfer-id>             Pause a file transfer
