@@ -2,7 +2,7 @@
     Link All design tokens.
 
     Shared visual language with the Android app: one cobalt accent (the
-    Mac app's brand blue, #0055CC), neutral surfaces, lists grouped by
+    Mac app's brand blue, #2F5BFF), neutral surfaces, lists grouped by
     hairlines, and pill-shaped buttons. The retired violet/cyan accents now
     resolve to the single accent so nothing introduces a second hue.
 
@@ -36,26 +36,26 @@
             <!-- System accent ramp. Light-theme accent *fills* resolve to
                  SystemAccentColorDark1, so that entry carries the brand
                  colour and the Light* entries are the tint ramp. -->
-            <Color x:Key="SystemAccentColor">#0055CC</Color>
-            <Color x:Key="SystemAccentColorDark1">#0055CC</Color>
-            <Color x:Key="SystemAccentColorDark2">#0048B0</Color>
-            <Color x:Key="SystemAccentColorDark3">#003D96</Color>
-            <Color x:Key="SystemAccentColorLight1">#3377D9</Color>
+            <Color x:Key="SystemAccentColor">#2F5BFF</Color>
+            <Color x:Key="SystemAccentColorDark1">#2F5BFF</Color>
+            <Color x:Key="SystemAccentColorDark2">#2449D9</Color>
+            <Color x:Key="SystemAccentColorDark3">#1D3BB5</Color>
+            <Color x:Key="SystemAccentColorLight1">#6F8CFF</Color>
             <Color x:Key="SystemAccentColorLight2">#6699E3</Color>
             <Color x:Key="SystemAccentColorLight3">#99BBEE</Color>
 
             <!-- Brand accent -->
-            <Color x:Key="AppAccentColor">#0055CC</Color>
-            <SolidColorBrush x:Key="AppAccentBrush" Color="#0055CC" />
-            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#0048B0" />
-            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#003D96" />
-            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#140055CC" />
-            <SolidColorBrush x:Key="AppAccentSubtleHoverBrush" Color="#220055CC" />
-            <SolidColorBrush x:Key="AppAccentBorderBrush" Color="#400055CC" />
+            <Color x:Key="AppAccentColor">#2F5BFF</Color>
+            <SolidColorBrush x:Key="AppAccentBrush" Color="#2F5BFF" />
+            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#2449D9" />
+            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#1D3BB5" />
+            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#142F5BFF" />
+            <SolidColorBrush x:Key="AppAccentSubtleHoverBrush" Color="#222F5BFF" />
+            <SolidColorBrush x:Key="AppAccentBorderBrush" Color="#402F5BFF" />
             <!-- Legacy alias: was a second, competing purple accent. Now a
                  tint of the single brand accent so old surfaces stop
                  introducing a rogue hue. -->
-            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#3377D9" />
+            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#6F8CFF" />
 
             <!-- Text/iconography that sits on top of a saturated fill -->
             <SolidColorBrush x:Key="AppOnAccentBrush" Color="#FFFFFF" />
@@ -63,25 +63,25 @@
             <!-- Status. One muted-but-legible value per state; these are
                  also mirrored as literal hex in LinkAllStore's *Color
                  view-model properties, which are theme-independent. -->
-            <SolidColorBrush x:Key="AppSuccessBrush" Color="#14935A" />
-            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#1414935A" />
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#16A34A" />
+            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#1416A34A" />
             <SolidColorBrush x:Key="AppWarningBrush" Color="#B7791F" />
             <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#16B7791F" />
             <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#40B7791F" />
-            <SolidColorBrush x:Key="AppDangerBrush" Color="#C62828" />
-            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#A82020" />
-            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#14C62828" />
-            <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#24C62828" />
-            <SolidColorBrush x:Key="AppNeutralBrush" Color="#5F6068" />
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#DC2626" />
+            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#B91C1C" />
+            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#14DC2626" />
+            <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#24DC2626" />
+            <SolidColorBrush x:Key="AppNeutralBrush" Color="#6B665E" />
 
             <!-- Retired secondary accents. Kept so legacy surfaces still
                  resolve, retuned so they read as quiet neighbours of the
                  brand accent rather than competing hues. -->
-            <SolidColorBrush x:Key="AppVioletBrush" Color="#0055CC" />
-            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#140055CC" />
-            <Color x:Key="AppCyanColor">#0055CC</Color>
-            <SolidColorBrush x:Key="AppCyanBrush" Color="#0055CC" />
-            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#140055CC" />
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#2F5BFF" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#142F5BFF" />
+            <Color x:Key="AppCyanColor">#2F5BFF</Color>
+            <SolidColorBrush x:Key="AppCyanBrush" Color="#2F5BFF" />
+            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#142F5BFF" />
 
             <!--
                 Surface ladder, background -> foreground:
@@ -92,29 +92,29 @@
                   Elevated    flyouts, dialogs, popups
                   Subtle      recessed fills (track backgrounds, chips)
             -->
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#F5F6FA" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#FAF8F5" />
             <SolidColorBrush x:Key="AppSurfaceBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#FFFFFF" />
             <!-- Every ContentDialog: the app's raised surface and a quiet footer. -->
             <SolidColorBrush x:Key="ContentDialogBackground" Color="#FFFFFF" />
             <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#E4E5EA" />
-            <SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#00000000" />
-            <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#F1F2F5" />
-            <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0A000000" />
-            <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#14000000" />
-            <SolidColorBrush x:Key="AppSurfaceSelectedBrush" Color="#0F0055CC" />
+            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#E7E2DA" />
+            <SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#001B1A17" />
+            <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#F2EFEA" />
+            <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0A1B1A17" />
+            <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#141B1A17" />
+            <SolidColorBrush x:Key="AppSurfaceSelectedBrush" Color="#0F2F5BFF" />
 
             <!-- Opaque control fills. Buttons and chips sit on an opaque
                  card, so their hover/press states have to be real colours -
                  a translucent black overlay would read as a smudge. -->
             <SolidColorBrush x:Key="AppControlFillBrush" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="AppControlFillHoverBrush" Color="#F1F2F5" />
-            <SolidColorBrush x:Key="AppControlFillPressedBrush" Color="#E4E5EA" />
+            <SolidColorBrush x:Key="AppControlFillHoverBrush" Color="#F2EFEA" />
+            <SolidColorBrush x:Key="AppControlFillPressedBrush" Color="#E7E2DA" />
 
-            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#E4E5EA" />
-            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#D2D4DB" />
-            <SolidColorBrush x:Key="AppDividerBrush" Color="#E4E5EA" />
+            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#E7E2DA" />
+            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#D8D2C8" />
+            <SolidColorBrush x:Key="AppDividerBrush" Color="#E7E2DA" />
 
             <!-- The pane reads as Mica; keep it transparent rather than
                  painting a near-white slab over the backdrop. -->
@@ -126,15 +126,15 @@
                  of the control without retemplating it. -->
             <!-- Sidebar selection: an accent-tinted fill with accent text and
                  icon, no stock indicator bar. -->
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#140055CC" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#1C0055CC" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#240055CC" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#0055CC" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#0055CC" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#0055CC" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#142F5BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#1C2F5BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#242F5BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#2F5BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#2F5BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#2F5BFF" />
             <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="Transparent" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0A000000" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#14000000" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0A1B1A17" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#141B1A17" />
             <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
             <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
             <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
@@ -142,14 +142,14 @@
             <SolidColorBrush x:Key="TextControlBackground" Color="#FFFFFF" />
             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFFFFF" />
             <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#D2D4DB" />
-            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#B8BBC4" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#D8D2C8" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#BDB6AA" />
 
-            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#08000000" />
-            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#12000000" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#081B1A17" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#121B1A17" />
 
             <SolidColorBrush x:Key="ToolTipBackground" Color="#FFFFFF" />
-            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#22000000" />
+            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#221B1A17" />
         </ResourceDictionary>
 
         <!-- =================================================== DARK -->
@@ -165,89 +165,89 @@
             <Color x:Key="SystemAccentColorDark2">#2858B8</Color>
             <Color x:Key="SystemAccentColorDark3">#204794</Color>
             <Color x:Key="SystemAccentColorLight1">#4A88F7</Color>
-            <Color x:Key="SystemAccentColorLight2">#5C95FF</Color>
-            <Color x:Key="SystemAccentColorLight3">#8DB5FF</Color>
+            <Color x:Key="SystemAccentColorLight2">#7C9BFF</Color>
+            <Color x:Key="SystemAccentColorLight3">#A8BEFF</Color>
 
-            <Color x:Key="AppAccentColor">#5C95FF</Color>
-            <SolidColorBrush x:Key="AppAccentBrush" Color="#5C95FF" />
-            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#74A6FF" />
-            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#4A82EA" />
-            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#245C95FF" />
-            <SolidColorBrush x:Key="AppAccentSubtleHoverBrush" Color="#345C95FF" />
-            <SolidColorBrush x:Key="AppAccentBorderBrush" Color="#555C95FF" />
-            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#8DB5FF" />
+            <Color x:Key="AppAccentColor">#7C9BFF</Color>
+            <SolidColorBrush x:Key="AppAccentBrush" Color="#7C9BFF" />
+            <SolidColorBrush x:Key="AppAccentHoverBrush" Color="#93AEFF" />
+            <SolidColorBrush x:Key="AppAccentPressedBrush" Color="#6385F0" />
+            <SolidColorBrush x:Key="AppAccentSubtleBrush" Color="#247C9BFF" />
+            <SolidColorBrush x:Key="AppAccentSubtleHoverBrush" Color="#347C9BFF" />
+            <SolidColorBrush x:Key="AppAccentBorderBrush" Color="#557C9BFF" />
+            <SolidColorBrush x:Key="AppAccentLightBrush" Color="#A8BEFF" />
 
-            <SolidColorBrush x:Key="AppOnAccentBrush" Color="#06122A" />
+            <SolidColorBrush x:Key="AppOnAccentBrush" Color="#0B1022" />
 
-            <SolidColorBrush x:Key="AppSuccessBrush" Color="#3DD68C" />
-            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#243DD68C" />
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#34D399" />
+            <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#2434D399" />
             <!-- Desaturated toward the app's cool dark palette (was #EAB055,
                  a bright warm gold that read as an unrelated yellow "sticker"
                  against the surrounding blue/graphite dark theme, most
                  visible on the pairing-request card which uses this color
                  across its left stripe, icon, and border all at once). -->
-            <SolidColorBrush x:Key="AppWarningBrush" Color="#F2B544" />
-            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#24F2B544" />
-            <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#4DF2B544" />
-            <SolidColorBrush x:Key="AppDangerBrush" Color="#FF6B6B" />
-            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#FF8585" />
-            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#24FF6B6B" />
-            <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#36FF6B6B" />
-            <SolidColorBrush x:Key="AppNeutralBrush" Color="#9D9DA6" />
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#FBBF24" />
+            <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#24FBBF24" />
+            <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#4DFBBF24" />
+            <SolidColorBrush x:Key="AppDangerBrush" Color="#F87171" />
+            <SolidColorBrush x:Key="AppDangerHoverBrush" Color="#FCA5A5" />
+            <SolidColorBrush x:Key="AppDangerSubtleBrush" Color="#24F87171" />
+            <SolidColorBrush x:Key="AppDangerSubtleHoverBrush" Color="#36F87171" />
+            <SolidColorBrush x:Key="AppNeutralBrush" Color="#A19D95" />
 
-            <SolidColorBrush x:Key="AppVioletBrush" Color="#5C95FF" />
-            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#245C95FF" />
-            <Color x:Key="AppCyanColor">#5C95FF</Color>
-            <SolidColorBrush x:Key="AppCyanBrush" Color="#5C95FF" />
-            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#245C95FF" />
+            <SolidColorBrush x:Key="AppVioletBrush" Color="#7C9BFF" />
+            <SolidColorBrush x:Key="AppVioletSubtleBrush" Color="#247C9BFF" />
+            <Color x:Key="AppCyanColor">#7C9BFF</Color>
+            <SolidColorBrush x:Key="AppCyanBrush" Color="#7C9BFF" />
+            <SolidColorBrush x:Key="AppCyanSubtleBrush" Color="#247C9BFF" />
 
-            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0E0E11" />
-            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#16161A" />
-            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#1E1E23" />
-            <SolidColorBrush x:Key="ContentDialogBackground" Color="#131316" />
-            <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#131316" />
-            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#26262C" />
-            <SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#00000000" />
-            <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#1C1C21" />
-            <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0FFFFFFF" />
-            <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#1AFFFFFF" />
-            <SolidColorBrush x:Key="AppSurfaceSelectedBrush" Color="#225C95FF" />
+            <SolidColorBrush x:Key="AppBackgroundBrush" Color="#0F1012" />
+            <SolidColorBrush x:Key="AppSurfaceBrush" Color="#17181B" />
+            <SolidColorBrush x:Key="AppSurfaceElevatedBrush" Color="#1D1E22" />
+            <SolidColorBrush x:Key="ContentDialogBackground" Color="#141517" />
+            <SolidColorBrush x:Key="ContentDialogTopOverlay" Color="#141517" />
+            <SolidColorBrush x:Key="ContentDialogBorderBrush" Color="#2A2B30" />
+            <SolidColorBrush x:Key="ContentDialogSeparatorBorderBrush" Color="#001B1A17" />
+            <SolidColorBrush x:Key="AppSurfaceSubtleBrush" Color="#1D1E22" />
+            <SolidColorBrush x:Key="AppSurfaceHoverBrush" Color="#0FF1EFEA" />
+            <SolidColorBrush x:Key="AppSurfacePressedBrush" Color="#1AF1EFEA" />
+            <SolidColorBrush x:Key="AppSurfaceSelectedBrush" Color="#227C9BFF" />
 
-            <SolidColorBrush x:Key="AppControlFillBrush" Color="#1C1C21" />
-            <SolidColorBrush x:Key="AppControlFillHoverBrush" Color="#24242A" />
-            <SolidColorBrush x:Key="AppControlFillPressedBrush" Color="#2C2C33" />
+            <SolidColorBrush x:Key="AppControlFillBrush" Color="#1D1E22" />
+            <SolidColorBrush x:Key="AppControlFillHoverBrush" Color="#26272B" />
+            <SolidColorBrush x:Key="AppControlFillPressedBrush" Color="#303137" />
 
-            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#26262C" />
-            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#34343C" />
-            <SolidColorBrush x:Key="AppDividerBrush" Color="#26262C" />
+            <SolidColorBrush x:Key="AppBorderSubtleBrush" Color="#2A2B30" />
+            <SolidColorBrush x:Key="AppBorderStrongBrush" Color="#3A3B41" />
+            <SolidColorBrush x:Key="AppDividerBrush" Color="#2A2B30" />
 
             <SolidColorBrush x:Key="SidebarAcrylicBrush" Color="Transparent" />
-            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#1E1E23" />
+            <SolidColorBrush x:Key="ModalAcrylicBrush" Color="#1D1E22" />
 
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#265C95FF" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#305C95FF" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#3A5C95FF" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#5C95FF" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#5C95FF" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#5C95FF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#267C9BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#307C9BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#3A7C9BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#7C9BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPointerOver" Color="#7C9BFF" />
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelectedPressed" Color="#7C9BFF" />
             <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="Transparent" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0FFFFFFF" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#1AFFFFFF" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0FF1EFEA" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#1AF1EFEA" />
             <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent" />
             <SolidColorBrush x:Key="NavigationViewContentGridBorderBrush" Color="Transparent" />
             <SolidColorBrush x:Key="NavigationViewExpandedPaneBackground" Color="Transparent" />
 
-            <SolidColorBrush x:Key="TextControlBackground" Color="#131316" />
-            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#16161A" />
-            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#1C1C21" />
-            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#26FFFFFF" />
-            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#38FFFFFF" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="#141517" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#17181B" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#1D1E22" />
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#26F1EFEA" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#38F1EFEA" />
 
-            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#0BFFFFFF" />
-            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#16FFFFFF" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#0BF1EFEA" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPressed" Color="#16F1EFEA" />
 
-            <SolidColorBrush x:Key="ToolTipBackground" Color="#1E1E23" />
-            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#26FFFFFF" />
+            <SolidColorBrush x:Key="ToolTipBackground" Color="#1D1E22" />
+            <SolidColorBrush x:Key="ToolTipBorderBrush" Color="#26F1EFEA" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -258,11 +258,11 @@
          content rather than app content. These stay dark-glass in both
          themes on purpose - they have to read against whatever is behind
          the window, not against our own canvas. -->
-    <SolidColorBrush x:Key="AppScrimBrush" Color="#40000000" />
-    <SolidColorBrush x:Key="AppScrimStrongBrush" Color="#80000000" />
-    <SolidColorBrush x:Key="AppScrimBorderBrush" Color="#40FFFFFF" />
-    <SolidColorBrush x:Key="AppScrimSubtleBrush" Color="#1AFFFFFF" />
-    <SolidColorBrush x:Key="AppScrimTextSecondaryBrush" Color="#8CFFFFFF" />
+    <SolidColorBrush x:Key="AppScrimBrush" Color="#401B1A17" />
+    <SolidColorBrush x:Key="AppScrimStrongBrush" Color="#801B1A17" />
+    <SolidColorBrush x:Key="AppScrimBorderBrush" Color="#40F1EFEA" />
+    <SolidColorBrush x:Key="AppScrimSubtleBrush" Color="#1AF1EFEA" />
+    <SolidColorBrush x:Key="AppScrimTextSecondaryBrush" Color="#8CF1EFEA" />
 
     <!-- Typography. Segoe UI Variable is the Windows 11 system family;
          Display is optically sized for headings, Text for body copy. Both
