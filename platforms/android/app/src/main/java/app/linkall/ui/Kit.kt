@@ -68,8 +68,8 @@ internal class DdColors(val isDark: Boolean) {
     val accent = if (isDark) Color(0xFF5C95FF) else Color(0xFF0055CC)
     val onAccent = if (isDark) Color(0xFF06122A) else Color.White
     val accentSoft = if (isDark) Color(0xFF5C95FF).copy(alpha = 0.14f) else Color(0xFF0055CC).copy(alpha = 0.08f)
-    val live = if (isDark) Color(0xFF3DD68C) else Color(0xFF14935A)
-    val warn = if (isDark) Color(0xFFF2B544) else Color(0xFFB7791F)
+    val live = if (isDark) Color(0xFF3DD68C) else Color(0xFF0F7A4A)
+    val warn = if (isDark) Color(0xFFF2B544) else Color(0xFF95600F)
     val danger = if (isDark) Color(0xFFFF6B6B) else Color(0xFFC62828)
 }
 
