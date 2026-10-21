@@ -224,7 +224,7 @@ private fun FileRow(c: DdColors, entry: ActivityEntry, onOpen: (() -> Unit)?) {
     )
 }
 
-private fun canOpen(entry: ActivityEntry) =
+internal fun canOpen(entry: ActivityEntry) =
     entry.destPath.isNotBlank() &&
         (entry.kind == ActivityKind.FILE_RECEIVED || entry.kind == ActivityKind.FILE_TRANSFER_COMPLETE)
 
@@ -232,7 +232,7 @@ private fun canOpen(entry: ActivityEntry) =
  * Opens a received file in whatever app handles it. It was saved either to
  * Downloads (a content URI) or to a path the file provider shares.
  */
-private fun openReceivedFile(context: Context, entry: ActivityEntry) {
+internal fun openReceivedFile(context: Context, entry: ActivityEntry) {
     val path = entry.destPath
     val uri = if (path.startsWith("content://")) Uri.parse(path) else runCatching {
         FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))

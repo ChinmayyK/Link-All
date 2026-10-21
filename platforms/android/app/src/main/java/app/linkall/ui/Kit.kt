@@ -471,8 +471,12 @@ internal fun ActivityRow(
     showClockTime: Boolean = false
 ) {
     val haptic = LocalHapticFeedback.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var menuOpen by remember { mutableStateOf(false) }
     val isLink = entry.preview.startsWith("http")
+    // A received file opens; copying its name to the clipboard helped nobody.
+    val openFile = canOpen(entry)
+    val apply = if (openFile) ({ openReceivedFile(context, entry) }) else onApply
     val (icon, title) = when (entry.kind) {
         ActivityKind.FILE_SENT -> Icons.Outlined.NorthEast to "Sent to ${entry.deviceName}"
         ActivityKind.FILE_RECEIVED, ActivityKind.FILE_TRANSFER_COMPLETE -> Icons.Outlined.SouthWest to "From ${entry.deviceName}"
@@ -495,7 +499,7 @@ internal fun ActivityRow(
                 .combinedClickable(
                     onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onApply()
+                        apply()
                     },
                     onLongClick = if (hasMenu) ({
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -540,7 +544,11 @@ internal fun ActivityRow(
                 title = entry.deviceName,
                 subtitle = entry.preview.trim().replace('\n', ' ').take(80),
                 actions = buildList {
-                    add(SheetAction(Icons.Outlined.ContentCopy, if (isLink) "Open link" else "Copy again", onClick = onApply))
+                    when {
+                        openFile -> add(SheetAction(Icons.Outlined.FolderOpen, "Open", onClick = apply))
+                        entry.kind.name.startsWith("FILE_") -> add(SheetAction(Icons.Outlined.ContentCopy, "Copy file name", onClick = onApply))
+                        else -> add(SheetAction(Icons.Outlined.ContentCopy, if (isLink) "Open link" else "Copy again", onClick = onApply))
+                    }
                     if (onTogglePin != null) add(
                         if (entry.isPinned) SheetAction(Icons.Outlined.PushPin, "Unpin", "Let it age out with the rest", onClick = onTogglePin)
                         else SheetAction(Icons.Outlined.PushPin, "Pin to the top", "Kept above everything else, never cleared", onClick = onTogglePin)
