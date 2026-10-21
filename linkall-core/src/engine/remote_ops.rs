@@ -212,6 +212,16 @@ impl Engine {
         .map_err(|_| "That computer isn't connected.".to_string())
     }
 
+    /// Ask a connected, trusted phone on 2.1.0 or later to ring (`ring`) or
+    /// stop. The phone answers with whether it will, and only rings while its
+    /// own setting allows it.
+    pub async fn send_find_device(&self, target_device: Uuid, ring: bool) -> Result<(), String> {
+        let tx = self.remote_control_sender(target_device)?;
+        tx.send(AppMessage::FindDevice { ring })
+            .await
+            .map_err(|_| "That phone isn't connected.".to_string())
+    }
+
     /// Why a remote-control action could not be sent to `target_device`, or
     /// `Ok` when it could.
     pub async fn send_remote_control_check(&self, target_device: Uuid) -> Result<(), String> {

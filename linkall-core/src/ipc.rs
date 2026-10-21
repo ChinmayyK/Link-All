@@ -78,6 +78,7 @@ pub struct PartialSettings {
     pub ignore_patterns: Option<Vec<String>>,
     pub allow_file_browsing: Option<bool>,
     pub allow_remote_control: Option<bool>,
+    pub allow_find_device: Option<bool>,
 }
 
 fn default_remote_files_limit() -> u32 {
@@ -125,12 +126,14 @@ pub enum IpcRequest {
         header: String,
     },
     /// The devices an action can go to, best first, with why the others can't.
-    /// `purpose` is "send", "remote", "browse" or "sync_target".
+    /// `purpose` is "send", "remote", "browse", "sync_target" or "find".
     DeviceChoices {
         purpose: String,
         #[serde(default)]
         last_used: Option<String>,
     },
+    /// Make a paired phone ring (`ring` true) or stop ringing.
+    FindDevice { target: String, ring: bool },
     /// List connected peers with stats.
     Peers,
     /// List trusted devices from the store.
@@ -387,6 +390,8 @@ pub enum IpcRequest {
         allow_file_browsing: Option<bool>,
         #[serde(default)]
         allow_remote_control: Option<bool>,
+        #[serde(default)]
+        allow_find_device: Option<bool>,
     },
 
     // ── Call continuity ───────────────────────────────────────────────────────
@@ -792,6 +797,13 @@ pub async fn handle_ipc_request(
                 Err(e) => IpcResponse::err(e),
             }
         }
+        IpcRequest::FindDevice { target, ring } => match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match eng.send_find_device(id, ring).await {
+                Ok(()) => IpcResponse::ok(serde_json::json!({})),
+                Err(e) => IpcResponse::err(e),
+            },
+            Err(_) => IpcResponse::err("unknown device".to_string()),
+        },
         IpcRequest::Peers => IpcResponse::ok(eng.status_snapshot().await.peers),
         IpcRequest::PushStorageStatus {
             images_bytes,
@@ -1368,6 +1380,7 @@ pub async fn handle_ipc_request(
             ignore_patterns,
             allow_file_browsing,
             allow_remote_control,
+            allow_find_device,
         } => {
             match eng
                 .save_settings_partial(crate::ipc::PartialSettings {
@@ -1391,6 +1404,7 @@ pub async fn handle_ipc_request(
                     ignore_patterns,
                     allow_file_browsing,
                     allow_remote_control,
+                    allow_find_device,
                 })
                 .await
             {

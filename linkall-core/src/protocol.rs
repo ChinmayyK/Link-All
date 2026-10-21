@@ -594,6 +594,16 @@ pub enum AppMessage {
         success: bool,
         error: Option<String>,
     },
+    /// Computer -> phone: start (`ring`) or stop ringing so its owner can find
+    /// it. The phone only obeys while its "find this phone" setting is on.
+    FindDevice {
+        ring: bool,
+    },
+    /// Answer to `FindDevice`: whether the phone will ring (or has stopped).
+    FindDeviceAck {
+        success: bool,
+        error: Option<String>,
+    },
 }
 
 impl AppMessage {

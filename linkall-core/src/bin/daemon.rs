@@ -687,6 +687,13 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
                 Err(e) => IpcResponse::error(e),
             },
         ),
+        IpcRequest::FindDevice { target, ring } => Ok(match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match state.engine.send_find_device(id, ring).await {
+                Ok(()) => IpcResponse::ok(json!({})),
+                Err(e) => IpcResponse::error(e),
+            },
+            Err(_) => IpcResponse::error("unknown device".to_string()),
+        }),
         IpcRequest::Peers => {
             let snapshot = state.engine.status_snapshot().await;
             Ok(IpcResponse::ok(snapshot.peers))
@@ -1042,6 +1049,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             ignore_patterns,
             allow_file_browsing,
             allow_remote_control,
+            allow_find_device,
         } => {
             let mut patch = serde_json::Map::new();
             macro_rules! maybe {
@@ -1074,6 +1082,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             maybe!("ignore_patterns", ignore_patterns);
             maybe!("allow_file_browsing", allow_file_browsing);
             maybe!("allow_remote_control", allow_remote_control);
+            maybe!("allow_find_device", allow_find_device);
 
             let patch_str = serde_json::to_string(&patch)?;
             let updated = {

@@ -492,6 +492,8 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         OpenUrlOnDeviceRequested { .. } => 38,
         OpenUrlOnDeviceAckReceived { .. } => 39,
         RemoteControlAckReceived { .. } => 42,
+        FindDeviceRequested { .. } => 43,
+        FindDeviceAckReceived { .. } => 44,
     }
 }
 
@@ -665,6 +667,8 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceId(
         OpenUrlOnDeviceRequested { from_device, .. } => Some(*from_device),
         OpenUrlOnDeviceAckReceived { from_device, .. } => Some(*from_device),
         RemoteControlAckReceived { from_device, .. } => Some(*from_device),
+        FindDeviceRequested { from_device, .. } => Some(*from_device),
+        FindDeviceAckReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -2479,6 +2483,23 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventRemoteControlSuccess(
     let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
     match ev {
         crate::engine::EngineEvent::RemoteControlAckReceived { success, .. } => u8::from(*success),
+        _ => 0,
+    }
+}
+
+/// 1 when a FindDevice request says to start ringing, 0 when it says to stop.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_eventFindRing(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jboolean {
+    if event == 0 {
+        return 0;
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        crate::engine::EngineEvent::FindDeviceRequested { ring, .. } => u8::from(*ring),
         _ => 0,
     }
 }

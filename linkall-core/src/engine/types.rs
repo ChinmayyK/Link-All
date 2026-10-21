@@ -273,6 +273,17 @@ pub enum EngineEvent {
         success: bool,
         error: Option<String>,
     },
+    /// A paired computer asked this phone to start (`ring`) or stop ringing.
+    FindDeviceRequested {
+        from_device: Uuid,
+        ring: bool,
+    },
+    /// A phone answered a find request we sent it.
+    FindDeviceAckReceived {
+        from_device: Uuid,
+        success: bool,
+        error: Option<String>,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,

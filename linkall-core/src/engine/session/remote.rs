@@ -277,6 +277,52 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 })
                 .await;
         }
+        AppMessage::FindDevice { ring } => {
+            ctx.touch_last_seen();
+            let trusted = shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false);
+            if !trusted {
+                return Flow::Continue;
+            }
+            let (success, error) = if !cfg!(target_os = "android") {
+                (false, Some("Only a phone can ring.".to_string()))
+            } else if !shared.settings.lock().unwrap().allow_find_device {
+                (
+                    false,
+                    Some(
+                        "Finding is off on this phone. Turn it on in Link All's settings."
+                            .to_string(),
+                    ),
+                )
+            } else {
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::FindDeviceRequested {
+                        from_device: peer_id,
+                        ring,
+                    })
+                    .await;
+                (true, None)
+            };
+            let _ = ctx
+                .outbox_tx
+                .send(AppMessage::FindDeviceAck { success, error })
+                .await;
+        }
+        AppMessage::FindDeviceAck { success, error } => {
+            ctx.touch_last_seen();
+            let _ = shared
+                .event_tx
+                .send(EngineEvent::FindDeviceAckReceived {
+                    from_device: peer_id,
+                    success,
+                    error,
+                })
+                .await;
+        }
         _ => unreachable!("dispatch_inbound routed a non-remote message here"),
     }
     Flow::Continue
