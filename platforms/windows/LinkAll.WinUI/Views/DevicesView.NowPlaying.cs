@@ -23,8 +23,14 @@ namespace LinkAll.WinUI.Views
             this.Unloaded += (s, e) => _nowPlayingTimer.Stop();
         }
 
+        private bool _nowPlayingRefreshing;
+
         private async Task RefreshNowPlayingAsync()
         {
+            // The timer and opening a device's page can both ask; one at a time
+            // keeps the cover cache, filled off the UI thread, consistent.
+            if (_nowPlayingRefreshing) return;
+            _nowPlayingRefreshing = true;
             try
             {
                 // On a device's page, what that device plays; on Home, the first.
@@ -62,6 +68,7 @@ namespace LinkAll.WinUI.Views
                 if (item != null) host.Children.Add(NowPlayingCard(item.Value));
             }
             catch (Exception ex) { App.HandleError(ex); }
+            finally { _nowPlayingRefreshing = false; }
         }
 
         private string? _coverKey;
