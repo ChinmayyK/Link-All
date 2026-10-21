@@ -302,6 +302,8 @@ struct CRSearchField: View {
                         .foregroundStyle(hovered ? CRTheme.ink : CRTheme.inkSoft)
                 }
                 .buttonStyle(.plain)
+                .help("Clear")
+                .accessibilityLabel("Clear")
                 .transition(.scale(scale: 0.75).combined(with: .opacity))
             }
         }

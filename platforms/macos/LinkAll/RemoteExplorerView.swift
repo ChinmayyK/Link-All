@@ -270,6 +270,8 @@ private struct RemoteExplorerPane: View {
                         .foregroundStyle(CRTheme.ink)
                 }
                 .buttonStyle(.plain)
+                .help("Back")
+                .accessibilityLabel("Back")
                 
                 deviceSwitcher
             }
@@ -297,6 +299,8 @@ private struct RemoteExplorerPane: View {
                             .foregroundStyle(CRTheme.inkSubtle)
                     }
                     .buttonStyle(.plain)
+                    .help("Clear search")
+                    .accessibilityLabel("Clear search")
                 }
             }
             .frame(width: 320, height: 32)
@@ -328,6 +332,8 @@ private struct RemoteExplorerPane: View {
                             .clipShape(RoundedRectangle(cornerRadius: 6))
                     }
                     .buttonStyle(.plain)
+                    .help("Refresh")
+                    .accessibilityLabel("Refresh")
                     .padding(.trailing, 8)
                     
                     ForEach(ExplorerViewMode.allCases, id: \.self) { mode in
@@ -994,6 +1000,8 @@ struct SidebarRowView: View {
                         .foregroundStyle(CRTheme.inkSubtle)
                 }
                 .buttonStyle(.plain)
+                .help("Close details")
+                .accessibilityLabel("Close details")
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
