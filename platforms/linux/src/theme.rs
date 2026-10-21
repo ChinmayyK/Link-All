@@ -6,33 +6,33 @@ use gtk::gdk;
 
 const SHEET: &str = include_str!("style.css");
 
-/// The same palette as the Android app (ui/Kit.kt): warm paper and one ink blue.
+/// The same palette as the Android app (ui/Kit.kt).
 fn palette(dark: bool) -> String {
     let c = if dark {
         [
-            ("blue", "#7c9bff"),
-            ("red", "#f87171"),
+            ("blue", "#5c95ff"),
+            ("red", "#ff5d73"),
             ("violet", "#9d8bff"),
             ("teal", "#3cc6d8"),
-            ("live", "#34d399"),
-            ("warn", "#fbbf24"),
-            ("muted", "#a19d95"),
-            ("surface", "#17181b"),
-            ("sunk", "#1d1e22"),
-            ("line", "#2a2b30"),
+            ("live", "#3dd68c"),
+            ("warn", "#f2b544"),
+            ("muted", "#9d9da6"),
+            ("surface", "#18181c"),
+            ("sunk", "#232329"),
+            ("line", "#2a2a31"),
         ]
     } else {
         [
-            ("blue", "#2f5bff"),
-            ("red", "#dc2626"),
+            ("blue", "#0055cc"),
+            ("red", "#d93a52"),
             ("violet", "#6a52e8"),
             ("teal", "#0f8fa3"),
-            ("live", "#16a34a"),
-            ("warn", "#b45309"),
-            ("muted", "#6b665e"),
+            ("live", "#14935a"),
+            ("warn", "#b7791f"),
+            ("muted", "#5f6068"),
             ("surface", "#ffffff"),
-            ("sunk", "#f2efea"),
-            ("line", "#e7e2da"),
+            ("sunk", "#f1f2f5"),
+            ("line", "#e4e5ea"),
         ]
     };
     let mut s: String = c
@@ -40,11 +40,11 @@ fn palette(dark: bool) -> String {
         .map(|(k, v)| format!("@define-color la_{k} {v};\n"))
         .collect();
     // libadwaita's own accent follows the brand blue.
-    s += &format!("@define-color accent_bg_color {};\n@define-color accent_color {};\n@define-color accent_fg_color {};\n", if dark { "#5f82ff" } else { "#2f5bff" }, c[0].1, if dark { "#0b1022" } else { "white" });
+    s += &format!("@define-color accent_bg_color {};\n@define-color accent_color {};\n@define-color accent_fg_color white;\n", if dark { "#3d7bff" } else { "#0055cc" }, c[0].1);
     if dark {
-        s += "@define-color window_bg_color #0f1012;\n@define-color view_bg_color #0f1012;\n@define-color sidebar_bg_color #141517;\n@define-color headerbar_bg_color #0f1012;\n@define-color card_bg_color #17181b;\n@define-color dialog_bg_color #17181b;\n@define-color popover_bg_color #1d1e22;\n@define-color window_fg_color #f1efea;\n@define-color view_fg_color #f1efea;\n@define-color card_fg_color #f1efea;\n";
+        s += "@define-color window_bg_color #0e0e11;\n@define-color view_bg_color #0e0e11;\n@define-color sidebar_bg_color #131316;\n@define-color headerbar_bg_color #0e0e11;\n@define-color card_bg_color #18181c;\n@define-color dialog_bg_color #18181c;\n@define-color popover_bg_color #1c1c21;\n";
     } else {
-        s += "@define-color window_bg_color #faf8f5;\n@define-color view_bg_color #faf8f5;\n@define-color headerbar_bg_color #faf8f5;\n@define-color window_fg_color #1b1a17;\n@define-color view_fg_color #1b1a17;\n@define-color card_fg_color #1b1a17;\n";
+        s += "@define-color window_bg_color #f5f6fa;\n@define-color view_bg_color #f5f6fa;\n@define-color headerbar_bg_color #f5f6fa;\n";
     }
     s
 }
