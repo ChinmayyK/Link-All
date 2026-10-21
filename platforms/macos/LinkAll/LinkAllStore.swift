@@ -766,15 +766,19 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
-    /// Send files when the caller has no specific device in mind. With one
-    /// connected device they go straight to it; with several, the send
-    /// modal asks (all devices unless one is picked). `completion` says
-    /// whether anything was sent. Returns false when nothing can be sent.
+    /// Send files when the caller has no specific device in mind. They go
+    /// straight to a device only when it is the one device this Mac is paired
+    /// with, and the toast says which. Otherwise the send modal asks, even when
+    /// just one is connected: a phone that dropped off for a moment must not
+    /// silently turn "send to my phone" into "send to whatever is still
+    /// connected". `completion` says whether anything was sent. Returns false
+    /// when nothing can be sent.
     @discardableResult
     func sendFilesChoosingTarget(urls: [URL], completion: ((Bool) -> Void)? = nil) -> Bool {
         guard !urls.isEmpty else { completion?(false); return false }
         let connected = connectedDevices
-        guard connected.count > 1 else {
+        let pairedCount = devices.filter { $0.trustState == .trusted }.count
+        guard connected.count > 1 || pairedCount > 1 else {
             guard let only = connected.first else {
                 // Every drop target lands here; say why nothing was sent.
                 showToast(title: "No Devices Connected", body: "Connect a device to send files or folders.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
@@ -782,6 +786,11 @@ final class LinkAllStore: ObservableObject {
                 return false
             }
             sendFiles(urls: urls, to: only)
+            showToast(
+                title: "Sending to \(only.name)",
+                body: urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) items",
+                tint: CRTheme.brandElectric, systemImage: "paperplane.fill", ttl: 2.5
+            )
             completion?(true)
             return true
         }
