@@ -1,0 +1,55 @@
+<Page
+    x:Class="LinkAll.WinUI.Views.ScratchpadView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:LinkAll.WinUI.UI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        Notes, links and snippets shared with your own devices. They are kept
+        on each device and sent only to paired ones. The rows are built in
+        code, because there is one per note and each has its own buttons.
+    -->
+    <ui:PageColumn MaxContentWidth="860">
+        <Grid Padding="{StaticResource PagePadding}" RowSpacing="16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Scratchpad" Style="{StaticResource AppDisplayText}" />
+                    <TextBlock x:Name="CountText" Style="{StaticResource AppSecondary}"
+                               Text="Shared with your paired devices, nowhere else" />
+                </StackPanel>
+                <Button x:Name="ClearButton" Grid.Column="1" Content="Clear all" VerticalAlignment="Top"
+                        Visibility="Collapsed" Click="OnClearAll"
+                        AutomationProperties.Name="Clear all notes" />
+            </Grid>
+
+            <Grid Grid.Row="1" ColumnSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="Draft" AcceptsReturn="True" TextWrapping="Wrap" MaxHeight="120"
+                         PlaceholderText="A link, a command, a thought…"
+                         AutomationProperties.Name="New note" />
+                <Button Grid.Column="1" Content="Add" VerticalAlignment="Top"
+                        Style="{StaticResource AccentButtonStyle}" Click="OnAdd" />
+            </Grid>
+
+            <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="NotesPanel" Spacing="10" />
+            </ScrollViewer>
+        </Grid>
+    </ui:PageColumn>
+</Page>

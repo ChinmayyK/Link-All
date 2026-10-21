@@ -91,6 +91,14 @@
                         <FontIcon Glyph="&#xE81C;" FontSize="16" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
+
+                <NavigationViewItem Tag="Scratchpad" Content="Scratchpad" x:Name="NavScratchpad"
+                                    Style="{StaticResource AppNavItem}"
+                                    AutomationProperties.Name="Scratchpad">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE70F;" FontSize="16" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>

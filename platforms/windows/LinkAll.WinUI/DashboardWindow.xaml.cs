@@ -230,6 +230,7 @@ namespace LinkAll.WinUI
                         "Transfers" => typeof(TransfersView),
                         "Settings" => typeof(SettingsView),
                         "Activity" => typeof(ActivityView),
+                        "Scratchpad" => typeof(ScratchpadView),
                         _ => typeof(DevicesView)
                     };
 
@@ -281,6 +282,7 @@ namespace LinkAll.WinUI
                 "Clipboard" => "Clipboard",
                 "Transfers" => "Transfers",
                 "Activity" => "Activity",
+                "Scratchpad" => "Scratchpad",
                 "Settings" => "Settings",
                 _ => "Devices",
             };
