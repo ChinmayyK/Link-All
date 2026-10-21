@@ -199,6 +199,12 @@ struct IpcDeviceChoices: Codable {
 
 struct IpcEmpty: Codable {}
 
+struct IpcGuestSession: Codable {
+    let url: String
+    let pin: String
+    let expires_in_secs: Int
+}
+
 struct IpcDiagnosticReport: Codable {
     let text: String
 }
@@ -561,6 +567,19 @@ final class LinkAllIPCClient {
         let raw = try await send(cmd: ["cmd": "capture_request", "target": target, "mode": mode])
         let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    /// Starts a Guest Drop session: a link and PIN for someone who isn't paired.
+    func guestDropStart() async throws -> IpcGuestSession {
+        let raw = try await send(cmd: ["cmd": "guest_drop_start"])
+        let resp = try await decode(IpcResponse<IpcGuestSession>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        guard let data = resp.data else { throw LinkAllIPCError.noData }
+        return data
+    }
+
+    func guestDropStop() async {
+        _ = try? await send(cmd: ["cmd": "guest_drop_stop"])
     }
 
     /// The daemon's redacted problem report; `header` is what only the app knows.

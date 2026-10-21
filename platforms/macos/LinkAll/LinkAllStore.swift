@@ -897,6 +897,25 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
+    /// "Receive from Guest": a link, QR code and PIN that someone who isn't paired
+    /// can use to send a file to this Mac. It ends after five minutes.
+    func receiveFromGuest() {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                let session = try await self.ipc.guestDropStart()
+                LinkAllModal.shared.present { [weak self] dismiss in
+                    GuestDropCard(session: session) {
+                        dismiss()
+                        Task { await self?.ipc.guestDropStop() }
+                    }
+                }
+            } catch {
+                self.showToast(title: "Can't start Guest Drop", body: error.localizedDescription, tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 6.0)
+            }
+        }
+    }
+
     private func askForPicture(_ phone: IpcDeviceChoice, mode: String) {
         Task { [weak self] in
             guard let self else { return }

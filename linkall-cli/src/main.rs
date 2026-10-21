@@ -61,6 +61,8 @@ async fn run() -> Result<()> {
         ["find", "stop", id] => cmd_find(id, false).await,
         ["find", id] => cmd_find(id, true).await,
         ["call", id, number] => cmd_call(id, number).await,
+        ["guest"] => cmd_guest(true).await,
+        ["guest", "stop"] => cmd_guest(false).await,
         ["capture", id] => cmd_capture(id, "photo").await,
         ["capture", id, mode] => cmd_capture(id, mode).await,
         ["scratch"] | ["scratch", "list"] => cmd_scratch_list().await,
@@ -285,6 +287,34 @@ async fn cmd_push(text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+/// Starts a Guest Drop session (a link and PIN for someone who isn't paired), or stops it.
+async fn cmd_guest(start: bool) -> Result<()> {
+    if !start {
+        ipc(&IpcRequest::GuestDropStop).await?;
+        println!("Guest Drop stopped");
+        return Ok(());
+    }
+    match ipc(&IpcRequest::GuestDropStart).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            println!(
+                "Open this on the other device:  {}",
+                data["url"].as_str().unwrap_or("?")
+            );
+            println!(
+                "PIN:                            {}",
+                data["pin"].as_str().unwrap_or("?")
+            );
+            println!(
+                "It works for {} minutes.",
+                data["expires_in_secs"].as_u64().unwrap_or(300) / 60
+            );
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => Ok(()),
+    }
 }
 
 /// Asks a paired phone to take a picture ("photo" or "document") and send it back.
@@ -1451,6 +1481,7 @@ DAEMON CONTROL
   find [stop] <uuid>              Make a paired phone ring (or stop) so you can find it
   call <uuid> <number>            Offer a paired phone a call (it opens the dialer when tapped)
   capture <uuid> [document]       Ask a paired phone to take a picture and send it back
+  guest [stop]                    Take a file from someone who isn't paired (link + PIN)
   scratch [add <text> | rm <id> | clear]  Notes shared between your devices
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it

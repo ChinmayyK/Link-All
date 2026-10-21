@@ -48,6 +48,7 @@ pub mod engine_support;
 pub mod ffi;
 pub mod file_transfer;
 pub mod filter;
+pub mod guest_drop;
 pub mod history;
 pub mod identity;
 pub mod ipc;

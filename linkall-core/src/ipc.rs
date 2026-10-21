@@ -145,6 +145,9 @@ pub enum IpcRequest {
         target: String,
         number: String,
     },
+    /// Start a Guest Drop session: a link and PIN for someone who isn't paired.
+    GuestDropStart,
+    GuestDropStop,
     /// Ask a paired phone to take a picture ("photo" or "document") and send it back.
     CaptureRequest {
         target: String,
@@ -952,6 +955,14 @@ pub async fn handle_ipc_request(
             },
             Err(_) => IpcResponse::err("unknown device".to_string()),
         },
+        IpcRequest::GuestDropStart => match eng.guest_drop_start().await {
+            Ok(session) => IpcResponse::ok(session),
+            Err(e) => IpcResponse::err(e),
+        },
+        IpcRequest::GuestDropStop => {
+            eng.guest_drop_stop();
+            IpcResponse::ok(serde_json::json!({}))
+        }
         IpcRequest::CaptureRequest { target, mode } => match uuid::Uuid::parse_str(&target) {
             Ok(id) => match eng.send_capture_request(id, &mode).await {
                 Ok(()) => IpcResponse::ok(serde_json::json!({})),

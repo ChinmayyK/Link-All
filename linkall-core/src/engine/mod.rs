@@ -47,6 +47,7 @@ mod diagnostics;
 mod drop_folder;
 pub(crate) mod file_ops;
 mod folder_ops;
+mod guest_ops;
 mod health;
 mod listener;
 mod peer_discovery;
@@ -191,6 +192,7 @@ impl Engine {
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
+            guest: Arc::default(),
             scratchpad: Arc::new(std::sync::Mutex::new(crate::scratchpad::Scratchpad::load(
                 &config.data_dir.join("scratchpad.json"),
             ))),

@@ -522,6 +522,8 @@ pub struct QrAuthToken {
 #[derive(Clone)]
 pub(crate) struct EngineShared {
     pub(crate) config: EngineConfig,
+    /// The running Guest Drop session, if any.
+    pub(crate) guest: Arc<std::sync::Mutex<Option<crate::guest_drop::GuestHandle>>>,
     /// Notes shared between your own devices.
     pub(crate) scratchpad: Arc<std::sync::Mutex<crate::scratchpad::Scratchpad>>,
     pub(crate) trust: Arc<Mutex<TrustStore>>,

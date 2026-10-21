@@ -354,6 +354,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let scratchpad = windowMenu.addItem(withTitle: "Scratchpad", action: #selector(openScratchpad), keyEquivalent: "n")
         scratchpad.keyEquivalentModifierMask = [.command, .shift]
         scratchpad.target = self
+        let guest = windowMenu.addItem(withTitle: "Receive from Guest", action: #selector(receiveFromGuest), keyEquivalent: "g")
+        guest.keyEquivalentModifierMask = [.command, .shift]
+        guest.target = self
         let insert = windowMenu.addItem(withTitle: "Insert Photo from Phone", action: #selector(insertPhotoFromPhone), keyEquivalent: "i")
         insert.keyEquivalentModifierMask = [.command, .shift]
         insert.target = self
@@ -872,6 +875,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    @objc private func receiveFromGuest() { store.receiveFromGuest() }
     @objc private func insertPhotoFromPhone() { store.captureFromPhone(mode: "photo") }
     @objc private func scanDocumentWithPhone() { store.captureFromPhone(mode: "document") }
 

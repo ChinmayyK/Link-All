@@ -694,6 +694,14 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
+        IpcRequest::GuestDropStart => Ok(match state.engine.guest_drop_start().await {
+            Ok(session) => IpcResponse::ok(session),
+            Err(e) => IpcResponse::error(e),
+        }),
+        IpcRequest::GuestDropStop => {
+            state.engine.guest_drop_stop();
+            Ok(IpcResponse::ok(json!({})))
+        }
         IpcRequest::CaptureRequest { target, mode } => Ok(match uuid::Uuid::parse_str(&target) {
             Ok(id) => match state.engine.send_capture_request(id, &mode).await {
                 Ok(()) => IpcResponse::ok(json!({})),
