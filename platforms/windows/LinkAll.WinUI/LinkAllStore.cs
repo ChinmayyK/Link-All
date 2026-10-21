@@ -746,7 +746,7 @@ namespace LinkAll.WinUI
             "failed" => "RotateCcw",
             _ => "ShieldCheck"
         };
-        public string PrimaryBackground => status == "incoming" ? "#1FA66A" : (status == "paused" ? "#2F5BFF" : "#0D000000");
+        public string PrimaryBackground => status == "incoming" ? "#1FA66A" : (status == "paused" ? "#0055CC" : "#0D000000");
         public string PrimaryForeground => status == "incoming" || status == "paused" ? "White" : "#D9000000";
         public bool PrimaryVisible => true;
 
@@ -908,7 +908,7 @@ namespace LinkAll.WinUI
             }
         }
         public string IconKind => is_dir ? "Folder" : "File";
-        public string IconColor => is_dir ? "#2F5BFF" : "#555555";
+        public string IconColor => is_dir ? "#0055CC" : "#555555";
 
         // Thumbnail preview support (mirrors the macOS RemoteExplorerView:
         // only image/video files are previewable, fetched on demand from the
