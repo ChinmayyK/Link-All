@@ -604,6 +604,31 @@ pub enum AppMessage {
         success: bool,
         error: Option<String>,
     },
+    /// Phone -> computer, streamed while a finger is on the trackpad: move the
+    /// pointer by this much. Needs "Remote control" on at the computer; sent
+    /// only to computers that report 2.1.0 or later.
+    RemotePointerMove {
+        dx: i16,
+        dy: i16,
+    },
+    /// Press (`down`) or release a mouse button: 0 left, 1 right, 2 middle.
+    RemotePointerButton {
+        button: u8,
+        down: bool,
+    },
+    /// Scroll by this much (pixel-like units).
+    RemotePointerScroll {
+        dx: i16,
+        dy: i16,
+    },
+    /// Type these characters.
+    RemoteTypeText {
+        text: String,
+    },
+    /// Press one key from a fixed list (see `remote_input::Key`).
+    RemoteKeyPress {
+        key: String,
+    },
 }
 
 impl AppMessage {

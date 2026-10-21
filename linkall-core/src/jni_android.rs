@@ -14,7 +14,7 @@ use jni::sys::{jboolean, jbyteArray, jint, jlong, jstring};
 use jni::JNIEnv;
 
 use crate::engine::{Engine, EngineConfig};
-use crate::protocol::ClipboardContent;
+use crate::protocol::{AppMessage, ClipboardContent};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
@@ -2979,4 +2979,145 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_pullRemoteFile(
         file_id as u64,
     ));
     0
+}
+
+/// Reads a device id passed from Kotlin; None when it isn't one.
+fn target_uuid(env: &mut JNIEnv, id: &JString) -> Option<uuid::Uuid> {
+    let id = env.get_string(id).map(String::from).ok()?;
+    uuid::Uuid::parse_str(&id).ok()
+}
+
+/// Rings (`ring` != 0) or stops a computer so its owner can find it. Waits for
+/// the answer; returns null when it will, otherwise why it won't.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendFindDevice(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    ring: jboolean,
+) -> jstring {
+    let say = |env: &mut JNIEnv, message: &str| {
+        env.new_string(message)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    };
+    if handle == 0 {
+        return say(&mut env, "Link All isn't running.");
+    }
+    let Some(target) = target_uuid(&mut env, &target_device_id) else {
+        return say(&mut env, "That device isn't known.");
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_find_device(target, ring != 0)) {
+        Ok(()) => std::ptr::null_mut(),
+        Err(message) => say(&mut env, &message),
+    }
+}
+
+/// Moves a computer's pointer by (dx, dy). Returns 0 when sent, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendPointerMove(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    dx: jint,
+    dy: jint,
+) -> jint {
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemotePointerMove {
+            dx: dx.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+            dy: dy.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+        }
+    })
+}
+
+/// Presses or releases a computer's mouse button (0 left, 1 right, 2 middle).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendPointerButton(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    button: jint,
+    down: jboolean,
+) -> jint {
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemotePointerButton {
+            button: button.clamp(0, 255) as u8,
+            down: down != 0,
+        }
+    })
+}
+
+/// Scrolls a computer by (dx, dy).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendPointerScroll(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    dx: jint,
+    dy: jint,
+) -> jint {
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemotePointerScroll {
+            dx: dx.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+            dy: dy.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+        }
+    })
+}
+
+/// Types text on a computer.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendTypeText(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    text: JString,
+) -> jint {
+    let Ok(text) = env.get_string(&text).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteTypeText { text }
+    })
+}
+
+/// Presses a named key (backspace, enter, escape, tab, left, right, up, down).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendKeyPress(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    key: JString,
+) -> jint {
+    let Ok(key) = env.get_string(&key).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteKeyPress { key }
+    })
+}
+
+fn send_input(
+    env: &mut JNIEnv,
+    handle: jlong,
+    target_device_id: &JString,
+    message: impl FnOnce() -> AppMessage,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(target) = target_uuid(env, target_device_id) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match h.engine.send_remote_input(target, message()) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
 }

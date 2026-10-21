@@ -1,5 +1,5 @@
-//! What a paired phone may ask this computer to do: media keys, volume and
-//! slide keys. Nothing else is reachable: the action is checked against a
+//! What a paired phone may ask this computer to do: media keys, volume,
+//! slide keys, lock the screen, turn the display off and ring. Nothing else is reachable: the action is checked against a
 //! fixed list, no shell is involved, and the setting that allows it is off
 //! until the user turns it on.
 
@@ -14,10 +14,14 @@ pub enum Action {
     Mute,
     SlideNext,
     SlidePrevious,
+    /// Lock the screen (the session stays running).
+    LockScreen,
+    /// Turn the display off; the computer keeps running.
+    SleepDisplay,
 }
 
 impl Action {
-    pub const ALL: [Action; 8] = [
+    pub const ALL: [Action; 10] = [
         Action::PlayPause,
         Action::NextTrack,
         Action::PreviousTrack,
@@ -26,6 +30,8 @@ impl Action {
         Action::Mute,
         Action::SlideNext,
         Action::SlidePrevious,
+        Action::LockScreen,
+        Action::SleepDisplay,
     ];
 
     /// The name that travels in the message.
@@ -39,6 +45,8 @@ impl Action {
             Action::Mute => "mute",
             Action::SlideNext => "slide_next",
             Action::SlidePrevious => "slide_previous",
+            Action::LockScreen => "lock_screen",
+            Action::SleepDisplay => "sleep_display",
         }
     }
 
@@ -51,6 +59,38 @@ impl Action {
 /// blocking thread.
 pub fn perform(action: Action) -> Result<(), String> {
     imp::perform(action)
+}
+
+/// How long a computer keeps ringing if nobody stops it.
+const RING_LIMIT: std::time::Duration = std::time::Duration::from_secs(30);
+
+static RINGING: std::sync::Mutex<Option<std::sync::Arc<std::sync::atomic::AtomicBool>>> =
+    std::sync::Mutex::new(None);
+
+/// Starts (`on`) or stops this computer ringing so its owner can find it. A
+/// new ring replaces one already going; it stops by itself after 30 seconds.
+pub fn ring(on: bool) -> Result<(), String> {
+    use std::sync::atomic::Ordering;
+    let mut current = RINGING.lock().unwrap();
+    if let Some(stop) = current.take() {
+        stop.store(true, Ordering::Relaxed);
+    }
+    if !on {
+        return Ok(());
+    }
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    *current = Some(stop.clone());
+    std::thread::spawn(move || {
+        let saved = imp::before_ring();
+        let started = std::time::Instant::now();
+        while !stop.load(Ordering::Relaxed) && started.elapsed() < RING_LIMIT {
+            if imp::chime().is_err() {
+                break;
+            }
+        }
+        imp::after_ring(saved);
+    });
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]
@@ -116,6 +156,45 @@ function key(code) {
         ])
     }
 
+    /// The volume to put back after ringing, as osascript prints it ("40, false").
+    pub fn before_ring() -> Option<String> {
+        let out = Command::new("/usr/bin/osascript")
+            .args(["-e", "set s to get volume settings\n(output volume of s as string) & \",\" & (output muted of s as string)"])
+            .output()
+            .ok()?;
+        let saved = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        let _ = run(&[
+            "-e",
+            "set volume output volume 100\nset volume output muted false",
+        ]);
+        Some(saved)
+    }
+
+    pub fn chime() -> Result<(), String> {
+        let status = Command::new("/usr/bin/afplay")
+            .arg("/System/Library/Sounds/Sosumi.aiff")
+            .status()
+            .map_err(|e| format!("couldn't play the sound: {e}"))?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err("the sound didn't play".into())
+        }
+    }
+
+    pub fn after_ring(saved: Option<String>) {
+        let Some(saved) = saved else { return };
+        let mut parts = saved.split(',');
+        let volume = parts.next().and_then(|v| v.trim().parse::<u32>().ok());
+        let muted = parts.next().is_some_and(|m| m.trim() == "true");
+        if let Some(v) = volume {
+            let _ = run(&["-e", &format!("set volume output volume {v}")]);
+        }
+        if muted {
+            let _ = run(&["-e", "set volume output muted true"]);
+        }
+    }
+
     pub fn perform(action: Action) -> Result<(), String> {
         match action {
             Action::PlayPause => media(16),
@@ -129,6 +208,22 @@ function key(code) {
             ]),
             Action::SlideNext => arrow(124),
             Action::SlidePrevious => arrow(123),
+            // Control-Command-Q is the system's lock shortcut.
+            Action::LockScreen => run(&[
+                "-e",
+                "tell application \"System Events\" to keystroke \"q\" using {control down, command down}",
+            ]),
+            Action::SleepDisplay => {
+                let out = Command::new("/usr/bin/pmset")
+                    .arg("displaysleepnow")
+                    .output()
+                    .map_err(|e| format!("couldn't run pmset: {e}"))?;
+                if out.status.success() {
+                    Ok(())
+                } else {
+                    Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+                }
+            }
         }
     }
 }
@@ -136,11 +231,18 @@ function key(code) {
 #[cfg(windows)]
 mod imp {
     use super::Action;
+    use windows_sys::Win32::System::Shutdown::LockWorkStation;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_LEFT,
         VK_MEDIA_NEXT_TRACK, VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK, VK_RIGHT, VK_VOLUME_DOWN,
         VK_VOLUME_MUTE, VK_VOLUME_UP,
     };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        MessageBeep, PostMessageW, HWND_BROADCAST, WM_SYSCOMMAND,
+    };
+
+    /// SC_MONITORPOWER: the system command that powers the display on or off.
+    const SC_MONITORPOWER: usize = 0xF170;
 
     fn press(vk: u16) -> Result<(), String> {
         let key = |flags| INPUT {
@@ -164,7 +266,38 @@ mod imp {
         }
     }
 
+    pub fn before_ring() {}
+
+    pub fn chime() -> Result<(), String> {
+        // MB_ICONEXCLAMATION
+        unsafe { MessageBeep(0x30) };
+        std::thread::sleep(std::time::Duration::from_millis(900));
+        Ok(())
+    }
+
+    pub fn after_ring(_: ()) {}
+
     pub fn perform(action: Action) -> Result<(), String> {
+        match action {
+            Action::LockScreen => {
+                return if unsafe { LockWorkStation() } != 0 {
+                    Ok(())
+                } else {
+                    Err("Windows didn't lock the screen".to_string())
+                };
+            }
+            Action::SleepDisplay => {
+                // 2 means off.
+                return if unsafe { PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, 2) }
+                    != 0
+                {
+                    Ok(())
+                } else {
+                    Err("Windows didn't turn the display off".to_string())
+                };
+            }
+            _ => {}
+        }
         press(match action {
             Action::PlayPause => VK_MEDIA_PLAY_PAUSE,
             Action::NextTrack => VK_MEDIA_NEXT_TRACK,
@@ -174,6 +307,7 @@ mod imp {
             Action::Mute => VK_VOLUME_MUTE,
             Action::SlideNext => VK_RIGHT,
             Action::SlidePrevious => VK_LEFT,
+            Action::LockScreen | Action::SleepDisplay => unreachable!("handled above"),
         })
     }
 }
@@ -200,6 +334,20 @@ mod imp {
         }
         Err(format!("needs one of: {}", missing.join(", ")))
     }
+
+    pub fn before_ring() {}
+
+    pub fn chime() -> Result<(), String> {
+        const SOUND: &str = "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga";
+        first_that_works(&[
+            &["paplay", SOUND],
+            &["pw-play", SOUND],
+            &["canberra-gtk-play", "-i", "alarm-clock-elapsed"],
+            &["aplay", "-q", "/usr/share/sounds/alsa/Front_Center.wav"],
+        ])
+    }
+
+    pub fn after_ring(_: ()) {}
 
     pub fn perform(action: Action) -> Result<(), String> {
         match action {
@@ -231,6 +379,23 @@ mod imp {
             Action::SlidePrevious => {
                 first_that_works(&[&["xdotool", "key", "Left"], &["wtype", "-k", "Left"]])
             }
+            Action::LockScreen => {
+                first_that_works(&[&["loginctl", "lock-session"], &["xdg-screensaver", "lock"]])
+            }
+            Action::SleepDisplay => first_that_works(&[
+                &["xset", "dpms", "force", "off"],
+                &[
+                    "busctl",
+                    "--user",
+                    "call",
+                    "org.gnome.Shell",
+                    "/org/gnome/ScreenSaver",
+                    "org.gnome.ScreenSaver",
+                    "SetActive",
+                    "b",
+                    "true",
+                ],
+            ]),
         }
     }
 }
@@ -242,6 +407,14 @@ mod imp {
     pub fn perform(_action: Action) -> Result<(), String> {
         Err("this device can't be controlled".to_string())
     }
+
+    pub fn before_ring() {}
+
+    pub fn chime() -> Result<(), String> {
+        Err("this device can't be controlled".to_string())
+    }
+
+    pub fn after_ring(_: ()) {}
 }
 
 #[cfg(test)]
@@ -262,7 +435,8 @@ mod tests {
             "shutdown",
             "play_pause; rm -rf /",
             "PLAY_PAUSE",
-            "lock_screen",
+            "shutdown_now",
+            "lock",
         ] {
             assert_eq!(Action::parse(bad), None, "{bad}");
         }

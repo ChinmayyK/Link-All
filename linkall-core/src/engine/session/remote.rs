@@ -287,25 +287,36 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             if !trusted {
                 return Flow::Continue;
             }
-            let (success, error) = if !cfg!(target_os = "android") {
-                (false, Some("Only a phone can ring.".to_string()))
-            } else if !shared.settings.lock().unwrap().allow_find_device {
+            let (success, error) = if cfg!(target_os = "android") {
+                if !shared.settings.lock().unwrap().allow_find_device {
+                    (
+                        false,
+                        Some(
+                            "Finding is off on this phone. Turn it on in Link All's settings."
+                                .to_string(),
+                        ),
+                    )
+                } else {
+                    let _ = shared
+                        .event_tx
+                        .send(EngineEvent::FindDeviceRequested {
+                            from_device: peer_id,
+                            ring,
+                        })
+                        .await;
+                    (true, None)
+                }
+            } else if !shared.settings.lock().unwrap().allow_remote_control {
                 (
                     false,
-                    Some(
-                        "Finding is off on this phone. Turn it on in Link All's settings."
-                            .to_string(),
-                    ),
+                    Some("Remote control is off on this computer. Turn it on in Link All's settings.".to_string()),
                 )
             } else {
-                let _ = shared
-                    .event_tx
-                    .send(EngineEvent::FindDeviceRequested {
-                        from_device: peer_id,
-                        ring,
-                    })
-                    .await;
-                (true, None)
+                match tokio::task::spawn_blocking(move || crate::remote_control::ring(ring)).await {
+                    Ok(Ok(())) => (true, None),
+                    Ok(Err(e)) => (false, Some(e)),
+                    Err(e) => (false, Some(e.to_string())),
+                }
             };
             let _ = ctx
                 .outbox_tx
@@ -318,11 +329,89 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 let _ = waiter.send(if success {
                     Ok(())
                 } else {
-                    Err(error.unwrap_or_else(|| "The phone didn't ring.".into()))
+                    Err(error.unwrap_or_else(|| "It didn't ring.".into()))
                 });
             }
         }
+        AppMessage::RemotePointerMove { dx, dy } => {
+            input(ctx, move || {
+                crate::remote_input::pointer_move(dx.into(), dy.into())
+            })
+            .await;
+        }
+        AppMessage::RemotePointerButton { button, down } => {
+            match crate::remote_input::Button::from_wire(button) {
+                Some(button) => {
+                    input(ctx, move || {
+                        crate::remote_input::pointer_button(button, down)
+                    })
+                    .await
+                }
+                None => tracing::debug!(button, "ignoring an unknown mouse button"),
+            }
+        }
+        AppMessage::RemotePointerScroll { dx, dy } => {
+            input(ctx, move || {
+                crate::remote_input::scroll(dx.into(), dy.into())
+            })
+            .await;
+        }
+        AppMessage::RemoteTypeText { text } => {
+            input(ctx, move || crate::remote_input::type_text(&text)).await;
+        }
+        AppMessage::RemoteKeyPress { key } => match crate::remote_input::Key::parse(&key) {
+            Some(key) => input(ctx, move || crate::remote_input::press_key(key)).await,
+            None => tracing::debug!("ignoring a key that isn't on the list"),
+        },
         _ => unreachable!("dispatch_inbound routed a non-remote message here"),
     }
     Flow::Continue
+}
+
+/// Carries out one mouse or keyboard message from a paired phone, if this
+/// computer allows remote control. A refusal or failure is reported back at
+/// most once every two seconds, because these messages stream.
+async fn input(ctx: &InboundCtx, run: impl FnOnce() -> Result<(), String> + Send + 'static) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static LAST_REPORT_MS: AtomicU64 = AtomicU64::new(0);
+
+    ctx.touch_last_seen();
+    let shared = &ctx.shared;
+    let trusted = shared
+        .peer_manager
+        .get(ctx.peer_id)
+        .map(|p| p.trusted)
+        .unwrap_or(false);
+    if !trusted {
+        return;
+    }
+    let problem = if !shared.settings.lock().unwrap().allow_remote_control {
+        Some(
+            "Remote control is off on this computer. Turn it on in Link All's settings."
+                .to_string(),
+        )
+    } else {
+        match tokio::task::spawn_blocking(run).await {
+            Ok(Ok(())) => None,
+            Ok(Err(e)) => Some(e),
+            Err(e) => Some(e.to_string()),
+        }
+    };
+    let Some(error) = problem else { return };
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let last = LAST_REPORT_MS.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < 2000 {
+        return;
+    }
+    LAST_REPORT_MS.store(now, Ordering::Relaxed);
+    let _ = ctx
+        .outbox_tx
+        .send(AppMessage::RemoteControlAck {
+            success: false,
+            error: Some(error),
+        })
+        .await;
 }

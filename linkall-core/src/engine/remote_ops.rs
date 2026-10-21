@@ -226,11 +226,11 @@ impl Engine {
             .insert(target_device, answer);
         let sent = tx.send(AppMessage::FindDevice { ring }).await;
         let result = match sent {
-            Err(_) => Err("That phone isn't connected.".to_string()),
+            Err(_) => Err("That device isn't connected.".to_string()),
             Ok(()) => match tokio::time::timeout(std::time::Duration::from_secs(5), answered).await
             {
                 Ok(Ok(answer)) => answer,
-                _ => Err("The phone didn't answer.".to_string()),
+                _ => Err("That device didn't answer.".to_string()),
             },
         };
         self.shared
@@ -240,6 +240,36 @@ impl Engine {
             .await
             .remove(&target_device);
         result
+    }
+
+    /// Send one mouse or keyboard message from the phone's trackpad to a
+    /// connected, trusted computer on 2.1.0 or later. Doesn't wait for an
+    /// answer, and drops the message when the link is backed up: a pointer
+    /// move that arrives late is worse than one that never does. Anything
+    /// that isn't a trackpad message is refused.
+    pub fn send_remote_input(
+        &self,
+        target_device: Uuid,
+        message: AppMessage,
+    ) -> Result<(), String> {
+        if !matches!(
+            message,
+            AppMessage::RemotePointerMove { .. }
+                | AppMessage::RemotePointerButton { .. }
+                | AppMessage::RemotePointerScroll { .. }
+                | AppMessage::RemoteTypeText { .. }
+                | AppMessage::RemoteKeyPress { .. }
+        ) {
+            return Err("That isn't a trackpad message.".to_string());
+        }
+        let tx = self.remote_control_sender(target_device)?;
+        match tx.try_send(message) {
+            Ok(()) => Ok(()),
+            Err(mpsc::error::TrySendError::Full(_)) => Ok(()),
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err("That computer isn't connected.".to_string())
+            }
+        }
     }
 
     /// Why a remote-control action could not be sent to `target_device`, or
