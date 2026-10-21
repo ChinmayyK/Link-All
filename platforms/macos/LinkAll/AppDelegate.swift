@@ -783,6 +783,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
 
         case "remote_notification":
+            // A one-time code from the phone's texts gets its own popup, whether or
+            // not ordinary notifications are mirrored.
+            if let code = Self.verificationCode(title: entry.file_name ?? "", text: entry.text_preview ?? "") {
+                let from = (entry.file_name ?? "")
+                    .replacingOccurrences(of: "Verification code", with: "")
+                    .replacingOccurrences(of: " from ", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                store.showToast(
+                    title: "Verification code: \(code)",
+                    body: from.isEmpty ? "From \(entry.device_name)" : "\(from) · \(entry.device_name)",
+                    tint: CRTheme.accentBlue,
+                    systemImage: "number.square.fill",
+                    ttl: 45.0,
+                    primaryAction: ToastAction(title: "Copy Code", role: .primary) { [weak self] in
+                        self?.copyCode(code)
+                    },
+                    secondaryAction: ToastAction(title: "Paste", role: .secondary) { [weak self] in
+                        self?.pasteCode(code)
+                    }
+                )
+                sendSystemNotification(title: "Verification code: \(code)", body: from.isEmpty ? entry.device_name : from)
+                return
+            }
             // Respect the user's toggle for Android Notification Mirroring
             let mirrorEnabled = UserDefaults.standard.object(forKey: "mirrorAndroidNotifications") as? Bool ?? true
             guard mirrorEnabled else { return }
@@ -801,6 +824,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+
+    /// The code in a phone notification Link All sent for a verification code: the
+    /// title starts "Verification code" and the text is just 4 to 8 digits.
+    static func verificationCode(title: String, text: String) -> String? {
+        let code = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.hasPrefix("Verification code"),
+              (4...8).contains(code.count),
+              code.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return code
+    }
+
+    private func copyCode(_ code: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+    }
+
+    /// Puts the code on the clipboard and presses Command-V in the app that has focus.
+    /// Pressing keys needs Accessibility; without it the code is only copied.
+    private func pasteCode(_ code: String) {
+        copyCode(code)
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else {
+            store.showToast(title: "Code copied", body: "Allow Link All in Privacy & Security › Accessibility to paste it for you.", tint: CRTheme.inkSoft, systemImage: "doc.on.clipboard", ttl: 6.0)
+            return
+        }
+        // Let the popup give focus back first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: down)
+                event?.flags = .maskCommand
+                event?.post(tap: .cghidEventTap)
+            }
+        }
+    }
 
     @objc private func handleSystemWake() {
         Task { @MainActor [weak self] in

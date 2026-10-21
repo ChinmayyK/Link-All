@@ -111,7 +111,7 @@ fn to_png(img: &arboard::ImageData) -> Option<Vec<u8>> {
 
 /// Reacts to activity and calls with clipboard writes and notifications.
 pub fn start(app: &adw::Application, hub: &Hub, clipboard: ClipboardTx) {
-    install_actions(app, hub);
+    install_actions(app, hub, &clipboard);
     watch_incoming_files(app, hub);
     watch_speed_tests(hub);
     report_power_and_storage();
@@ -165,6 +165,33 @@ pub fn start(app: &adw::Application, hub: &Hub, clipboard: ClipboardTx) {
             "remote_notification" => {
                 let title = entry["file_name"].as_str().unwrap_or(&device).to_string();
                 let text = entry["text_preview"].as_str().unwrap_or_default();
+                // A one-time code from the phone's texts gets a popup of its own.
+                if let Some(code) = linkall_core::remote_input::verification_code(&title, text) {
+                    let n = gio::Notification::new(&format!("Verification code: {code}"));
+                    n.set_body(Some(&format!(
+                        "{}\n{device}",
+                        title
+                            .trim_start_matches("Verification code")
+                            .trim_start_matches(" from ")
+                    )));
+                    n.set_priority(gio::NotificationPriority::Urgent);
+                    n.add_button_with_target_value(
+                        "Copy Code",
+                        "app.copy-code",
+                        Some(&code.to_variant()),
+                    );
+                    n.add_button_with_target_value(
+                        "Paste",
+                        "app.paste-code",
+                        Some(&code.to_variant()),
+                    );
+                    n.set_default_action_and_target_value(
+                        "app.copy-code",
+                        Some(&code.to_variant()),
+                    );
+                    app_ref.send_notification(Some(&format!("code-{id}")), &n);
+                    return;
+                }
                 let n = gio::Notification::new(&title);
                 n.set_body(Some(&format!("{}\n{device}", preview(text))));
                 n.set_default_action("app.show");
@@ -250,7 +277,28 @@ fn preview(text: &str) -> String {
 }
 
 /// Actions notification buttons point at.
-fn install_actions(app: &adw::Application, hub: &Hub) {
+fn install_actions(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) {
+    // Verification codes: "Copy Code" puts just the code on the clipboard, and
+    // "Paste" also presses Control-V in the app that has focus.
+    for (name, paste) in [("copy-code", false), ("paste-code", true)] {
+        let action = gio::SimpleAction::new(name, Some(glib::VariantTy::STRING));
+        let clipboard = clipboard.clone();
+        action.connect_activate(move |_, code| {
+            let Some(code) = code.and_then(|c| c.str()) else {
+                return;
+            };
+            let _ = clipboard.send(Incoming::Text(code.to_string()));
+            if paste {
+                // Give the clipboard a moment to take the code first.
+                std::thread::spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    let _ = linkall_core::remote_input::paste();
+                });
+            }
+        });
+        app.add_action(&action);
+    }
+
     let open = gio::SimpleAction::new("open-path", Some(glib::VariantTy::STRING));
     open.connect_activate(|_, path| {
         if let Some(path) = path.and_then(|p| p.str()) {

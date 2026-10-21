@@ -101,8 +101,9 @@ class LinkAllNotificationListener : NotificationListenerService() {
         if (getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE).getBoolean("share_verification_codes", false)) {
             VerificationCode.find("$title $text")?.let { code ->
                 relay(Intent(this, LinkAllService::class.java).apply {
-                    action = LinkAllService.ACTION_PUSH_CLIPBOARD
-                    putExtra(LinkAllService.EXTRA_CLIPBOARD_TEXT, code)
+                    action = LinkAllService.ACTION_PUSH_VERIFICATION_CODE
+                    putExtra(LinkAllService.EXTRA_VERIFICATION_CODE, code)
+                    putExtra(LinkAllService.EXTRA_VERIFICATION_FROM, title.trim().take(40))
                 })
             }
         }

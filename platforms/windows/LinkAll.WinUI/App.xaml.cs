@@ -380,6 +380,15 @@ public partial class App : Application
             return;
         }
 
+        // The buttons on a verification-code popup (see NotificationHelper.ShowCodeToast).
+        if (uri.Host == "copy-code" || uri.Host == "paste-code")
+        {
+            var code = uri.AbsolutePath.Trim('/');
+            if (NotificationHelper.IsVerificationCode(code))
+                NotificationHelper.CopyCode(code, paste: uri.Host == "paste-code");
+            return;
+        }
+
         if (uri.Host != "accept" && uri.Host != "reject") return;
 
         var transferId = uri.AbsolutePath.Trim('/');

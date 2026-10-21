@@ -134,6 +134,10 @@ class LinkAllService : Service() {
         const val ACTION_SETTINGS_CHANGED   = "app.linkall.SETTINGS_CHANGED"  // re-read prefs live
         const val ACTION_PUSH_CLIPBOARD     = "app.linkall.PUSH_CLIPBOARD"    // send Android clipboard to peers
         const val ACTION_PUSH_NOTIFICATION  = "app.linkall.PUSH_NOTIFICATION"
+        /** A one-time code from a text, for the computers to offer to copy or paste. */
+        const val ACTION_PUSH_VERIFICATION_CODE = "app.linkall.PUSH_VERIFICATION_CODE"
+        const val EXTRA_VERIFICATION_CODE   = "verification_code"
+        const val EXTRA_VERIFICATION_FROM   = "verification_from"
         const val ACTION_APPLY_CLIPBOARD    = "app.linkall.APPLY_CLIPBOARD"
         const val ACTION_ACCEPT_FILE_TRANSFER = "app.linkall.ACCEPT_FILE_TRANSFER"
         const val ACTION_REJECT_FILE_TRANSFER = "app.linkall.REJECT_FILE_TRANSFER"
@@ -1023,7 +1027,7 @@ class LinkAllService : Service() {
                 return START_STICKY
             }
             // Handled after the engine start below.
-            ACTION_PUSH_TEXT, ACTION_PUSH_SHARED_URI, ACTION_PUSH_NOTIFICATION -> Unit
+            ACTION_PUSH_TEXT, ACTION_PUSH_SHARED_URI, ACTION_PUSH_NOTIFICATION, ACTION_PUSH_VERIFICATION_CODE -> Unit
             else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
@@ -1066,6 +1070,26 @@ class LinkAllService : Service() {
                     intent.getStringExtra(EXTRA_NOTIFICATION_TITLE) ?: "",
                     intent.getStringExtra(EXTRA_NOTIFICATION_TEXT) ?: "",
                 ) }
+            }
+
+            // The computers show a popup with Copy and Paste buttons for this; it is
+            // a notification whose title starts "Verification code" and whose text is
+            // just the digits, which an older computer shows as a plain notification.
+            if (intent?.action == ACTION_PUSH_VERIFICATION_CODE &&
+                prefs().getBoolean("share_verification_codes", false) &&
+                engineHandle != 0L && hasConnectedPeers()
+            ) {
+                val code = intent.getStringExtra(EXTRA_VERIFICATION_CODE).orEmpty()
+                val from = intent.getStringExtra(EXTRA_VERIFICATION_FROM).orEmpty()
+                if (code.isNotBlank()) {
+                    withEngine { live -> LinkAllJni.pushNotification(
+                        live,
+                        "otp-${System.currentTimeMillis()}",
+                        "app.linkall.verification_code",
+                        if (from.isBlank()) "Verification code" else "Verification code from $from",
+                        code,
+                    ) }
+                }
             }
 
             if (intent?.action == ACTION_PUSH_FOLDER) {

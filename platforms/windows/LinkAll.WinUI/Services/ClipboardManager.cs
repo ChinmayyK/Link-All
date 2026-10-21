@@ -279,6 +279,15 @@ namespace LinkAll.WinUI.Services
                             var title = NativeCore.PtrToUtf8String(NativeCore.linkall_event_notification_title(ev)) ?? "";
                             var body = NativeCore.PtrToUtf8String(NativeCore.linkall_event_text(ev)) ?? "";
                             var device = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_name(ev)) ?? "your phone";
+                            // A one-time code from the phone's texts gets its own popup, whether or
+                            // not ordinary notifications are mirrored.
+                            var code = NotificationHelper.VerificationCodeOf(title, body);
+                            if (code != null)
+                            {
+                                var from = title.Replace("Verification code", "").Replace(" from ", "").Trim();
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => NotificationHelper.ShowCodeToast(code, from, device));
+                                break;
+                            }
                             if ((title.Length > 0 || body.Length > 0) && App.PhoneNotificationMirroringEnabled)
                             {
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {

@@ -130,6 +130,21 @@ pub fn press_key(key: Key) -> Result<(), String> {
     imp::press_key(key)
 }
 
+/// Pastes what is on the clipboard into the focused app (Command-V, or
+/// Control-V). Used by "Paste" on a verification-code popup.
+pub fn paste() -> Result<(), String> {
+    imp::paste()
+}
+
+/// The one-time code in a phone notification that Link All sent for a
+/// verification code: the title starts "Verification code" and the text is
+/// just 4 to 8 digits. Anything else is an ordinary notification.
+pub fn verification_code(title: &str, text: &str) -> Option<String> {
+    let code = text.trim();
+    let digits = (4..=8).contains(&code.len()) && code.chars().all(|c| c.is_ascii_digit());
+    (title.starts_with("Verification code") && digits).then(|| code.to_string())
+}
+
 #[cfg(target_os = "macos")]
 mod imp {
     use super::{Button, Key};
@@ -168,6 +183,7 @@ mod imp {
         fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> *mut c_void;
         fn CGEventKeyboardSetUnicodeString(event: *mut c_void, len: usize, chars: *const u16);
         fn CGEventSetIntegerValueField(event: *mut c_void, field: u32, value: i64);
+        fn CGEventSetFlags(event: *mut c_void, flags: u64);
         fn CGEventPost(tap: u32, event: *mut c_void);
     }
 
@@ -290,6 +306,19 @@ mod imp {
         Ok(())
     }
 
+    pub fn paste() -> Result<(), String> {
+        const COMMAND: u64 = 0x0010_0000;
+        for down in [true, false] {
+            // 9 is the V key.
+            let event = unsafe { CGEventCreateKeyboardEvent(std::ptr::null(), 9, down) };
+            if !event.is_null() {
+                unsafe { CGEventSetFlags(event, COMMAND) };
+            }
+            post(event)?;
+        }
+        Ok(())
+    }
+
     pub fn press_key(key: Key) -> Result<(), String> {
         let code: u16 = match key {
             Key::Backspace => 51,
@@ -315,8 +344,8 @@ mod imp {
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
         KEYEVENTF_UNICODE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
         MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
-        MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_BACK, VK_DOWN, VK_ESCAPE, VK_LEFT,
-        VK_RETURN, VK_RIGHT, VK_TAB, VK_UP,
+        MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_BACK, VK_CONTROL, VK_DOWN,
+        VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_TAB, VK_UP,
     };
 
     fn send(inputs: &[INPUT]) -> Result<(), String> {
@@ -403,6 +432,16 @@ mod imp {
             inputs.push(key(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
         }
         send(&inputs)
+    }
+
+    pub fn paste() -> Result<(), String> {
+        const V: u16 = 0x56;
+        send(&[
+            key(VK_CONTROL, 0, 0),
+            key(V, 0, 0),
+            key(V, 0, KEYEVENTF_KEYUP),
+            key(VK_CONTROL, 0, KEYEVENTF_KEYUP),
+        ])
     }
 
     pub fn press_key(k: Key) -> Result<(), String> {
@@ -631,6 +670,20 @@ mod imp {
         ])
     }
 
+    pub fn paste() -> Result<(), String> {
+        first_that_works(&[
+            vec!["xdotool".into(), "key".into(), "ctrl+v".into()],
+            vec![
+                "wtype".into(),
+                "-M".into(),
+                "ctrl".into(),
+                "v".into(),
+                "-m".into(),
+                "ctrl".into(),
+            ],
+        ])
+    }
+
     pub fn press_key(key: Key) -> Result<(), String> {
         let (xdo, wtype) = match key {
             Key::Backspace => ("BackSpace", "BackSpace"),
@@ -668,6 +721,9 @@ mod imp {
         Err(NO.into())
     }
     pub fn press_key(_: Key) -> Result<(), String> {
+        Err(NO.into())
+    }
+    pub fn paste() -> Result<(), String> {
         Err(NO.into())
     }
 }
@@ -718,6 +774,25 @@ mod tests {
         assert_eq!(
             clean_phone_number("  555 0100 ").as_deref(),
             Some("555 0100")
+        );
+    }
+
+    #[test]
+    fn a_verification_code_notification_is_recognised() {
+        assert_eq!(
+            verification_code("Verification code from GitHub", " 482910 ").as_deref(),
+            Some("482910")
+        );
+        assert_eq!(
+            verification_code("Verification code", "1234").as_deref(),
+            Some("1234")
+        );
+        assert_eq!(verification_code("Verification code", "123"), None);
+        assert_eq!(verification_code("Verification code", "12345678 9"), None);
+        assert_eq!(verification_code("Mom", "482910"), None);
+        assert_eq!(
+            verification_code("Verification code from X", "see 482910"),
+            None
         );
     }
 
