@@ -13,6 +13,9 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.animation.togetherWith
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,174 +98,241 @@ fun SettingsTab(
         runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = PageGutter, end = PageGutter, bottom = 140.dp)
-    ) {
-        item {
-            Column {
-                PageTitle(c, "Settings")
-                Spacer(Modifier.height(20.dp))
-                Panel(c) {
-                    ListRow(
-                        c, osIcon(DeviceOs.Android), deviceName.ifBlank { "This phone" },
-                        detail = when {
-                            !isServiceRunning -> "Service stopped"
-                            !isSyncEnabled -> "Sync paused · $ip"
-                            else -> "Active · $ip"
-                        },
-                        detailColor = if (isServiceRunning && isSyncEnabled) c.live else c.warn,
-                        iconTint = c.accent,
-                        iconBackground = c.accentSoft
-                    )
-                }
-            }
-        }
+    // One short list of categories; each opens its own page. Back returns to the list.
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    androidx.activity.compose.BackHandler(enabled = page != null) { page = null }
+    val prefs = remember { context.getSharedPreferences(LinkAllService.PREFS_NAME, android.content.Context.MODE_PRIVATE) }
+    var checkForUpdates by remember { mutableStateOf(UpdateChecker.isEnabled(prefs)) }
 
-        item { SetupSection(c, setupItems, onSetupFix) }
-
-        item {
-            Column {
-                SectionHeader(c, "Sync", null)
-                Panel(c) {
-                    SwitchRow(c, Icons.Outlined.Sync, "Sync", "Turn off to pause everything", isSyncEnabled, onSyncEnabledChange)
-                    if (isSyncEnabled) {
-                        Hairline(c)
-                        SwitchRow(c, Icons.Outlined.TextFields, "Text", null, syncText, onSyncTextChange)
-                        Hairline(c)
-                        SwitchRow(c, Icons.Outlined.Image, "Images", null, syncImages, onSyncImagesChange)
-                        Hairline(c)
-                        SwitchRow(c, Icons.Outlined.FilePresent, "Files", "Saved to Downloads", syncFiles, onSyncFilesChange)
+    androidx.compose.animation.AnimatedContent(
+        targetState = page,
+        transitionSpec = {
+            val forward = targetState != null
+            (androidx.compose.animation.slideInHorizontally { if (forward) it / 4 else -it / 4 } + androidx.compose.animation.fadeIn())
+                .togetherWith(androidx.compose.animation.slideOutHorizontally { if (forward) -it / 4 else it / 4 } + androidx.compose.animation.fadeOut())
+        },
+        label = "settingsPage",
+    ) { current ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = PageGutter, end = PageGutter, bottom = 140.dp)
+        ) {
+            if (current == null) {
+                item {
+                    Column {
+                        PageTitle(c, "Settings")
+                        Spacer(Modifier.height(20.dp))
+                        Panel(c) {
+                            ListRow(
+                                c, osIcon(DeviceOs.Android), deviceName.ifBlank { "This phone" },
+                                detail = when {
+                                    !isServiceRunning -> "Service stopped"
+                                    !isSyncEnabled -> "Sync paused · $ip"
+                                    else -> "Active · $ip"
+                                },
+                                detailColor = if (isServiceRunning && isSyncEnabled) c.live else c.warn,
+                                iconTint = c.accent,
+                                iconBackground = c.accentSoft
+                            )
+                        }
                     }
                 }
-            }
-        }
 
-        item {
-            Column {
-                SectionHeader(c, "Continuity", null)
-                Panel(c) {
-                    // The Play build may not read SMS, or all photos in the
-                    // background (see src/play/AndroidManifest.xml).
-                    if (app.linkall.BuildConfig.FULL_PERMISSIONS) {
-                        SwitchRow(c, Icons.Outlined.Sms, "SMS codes", "Copy one-time codes to your computer", autoForwardSms, onAutoForwardSmsChange)
-                        Hairline(c)
-                        SwitchRow(c, Icons.Outlined.Screenshot, "Screenshots", "Send new screenshots automatically", autoForwardScreenshots, onAutoForwardScreenshotsChange)
-                        Hairline(c)
+                item { SetupSection(c, setupItems, onSetupFix) }
+
+                item {
+                    Column {
+                        GroupLabel(c, "Preferences")
+                        Panel(c) {
+                            CategoryRow(
+                                c, Icons.Outlined.Sync, Tone.Blue, "Sync",
+                                if (!isSyncEnabled) "Paused" else listOfNotNull(
+                                    "Text".takeIf { syncText }, "images".takeIf { syncImages }, "files".takeIf { syncFiles }
+                                ).joinToString(", ").replaceFirstChar { it.uppercase() }.ifBlank { "Nothing is synced" }
+                            ) { page = "sync" }
+                            Hairline(c)
+                            CategoryRow(
+                                c, Icons.Outlined.Devices, Tone.Violet, "Continuity",
+                                listOfNotNull(
+                                    "Calls".takeIf { callContinuityEnabled },
+                                    "notifications".takeIf { notificationMirroringEnabled },
+                                    "find my phone".takeIf { findPhoneEnabled },
+                                    "codes".takeIf { shareCodesEnabled },
+                                ).joinToString(", ").replaceFirstChar { it.uppercase() }.ifBlank { "Off" }
+                            ) { page = "continuity" }
+                            Hairline(c)
+                            CategoryRow(c, Icons.Outlined.Folder, Tone.Green, "Folders", "Shared folders and folder sync") { page = "folders" }
+                            Hairline(c)
+                            CategoryRow(
+                                c, Icons.Outlined.Palette, Tone.Teal, "Appearance",
+                                when (themeMode) { "light" -> "Light"; "dark" -> "Dark"; else -> "Match system" }
+                            ) { page = "appearance" }
+                        }
                     }
-                    SwitchRow(
-                        c, Icons.Outlined.Call, "Calls",
-                        if (app.linkall.BuildConfig.FULL_PERMISSIONS) "Needs Phone, Contacts and Call log access"
-                        else "Show incoming calls on your computer. Needs Phone access",
-                        callContinuityEnabled, onCallContinuityChange
-                    )
-                    Hairline(c)
-                    SwitchRow(c, Icons.Outlined.Notifications, "Notifications", "Mirror phone notifications", notificationMirroringEnabled, onNotificationMirroringChange)
-                    Hairline(c)
-                    SwitchRow(c, Icons.Outlined.NotificationsActive, "Find my phone", "Let your computers make this phone ring, even on silent", findPhoneEnabled, onFindPhoneChange)
-                    Hairline(c)
-                    SwitchRow(c, Icons.Outlined.Notifications, "Verification codes", "Send the code from a text to your computers' clipboard. Needs notification access", shareCodesEnabled, onShareCodesChange)
                 }
-            }
-        }
 
-        // The Play build can't read all files, so computers browse only the folders picked here.
-        if (!app.linkall.BuildConfig.FULL_PERMISSIONS) {
-            item { SharedFoldersSection(c) }
-        }
+                item {
+                    Column {
+                        GroupLabel(c, "System")
+                        Panel(c) {
+                            CategoryRow(c, Icons.Outlined.BatteryChargingFull, Tone.Amber, "Battery & permissions", "Keep Link All running in the background") { page = "permissions" }
+                            Hairline(c)
+                            CategoryRow(c, Icons.Outlined.Tune, Tone.Neutral, "Advanced", "Scan, disconnect all, diagnostics, stop") { page = "advanced" }
+                        }
+                    }
+                }
 
-        item { FolderSyncSection(c) }
-
-        item {
-            Column {
-                SectionHeader(c, "Appearance", null)
-                Panel(c) {
-                    Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
-                        Text("Theme", style = DdType.label, color = c.text)
-                        Spacer(Modifier.height(10.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("system" to "Match system", "light" to "Light", "dark" to "Dark").forEach { (mode, label) ->
-                                FilterChip(c, label, selected = themeMode == mode) { onThemeModeChange(mode) }
+                item {
+                    Column(Modifier.fillMaxWidth().padding(top = 28.dp, start = 4.dp)) {
+                        Text("Link All ${version}".trim(), style = DdType.label, color = c.text)
+                        Text("No cloud, no account, no telemetry.", style = DdType.small, color = c.textMuted)
+                        if (deviceId.isNotBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(deviceId, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            } else {
+                item { SubpageTitle(c, settingsTitle(current)) { page = null } }
+                when (current) {
+                    "sync" -> item {
+                        Panel(c) {
+                            SwitchRow(c, Icons.Outlined.Sync, "Sync", "Turn off to pause everything", isSyncEnabled, onSyncEnabledChange)
+                            if (isSyncEnabled) {
+                                Hairline(c)
+                                SwitchRow(c, Icons.Outlined.TextFields, "Text", null, syncText, onSyncTextChange)
+                                Hairline(c)
+                                SwitchRow(c, Icons.Outlined.Image, "Images", null, syncImages, onSyncImagesChange)
+                                Hairline(c)
+                                SwitchRow(c, Icons.Outlined.FilePresent, "Files", "Saved to Downloads", syncFiles, onSyncFilesChange)
+                            }
+                        }
+                    }
+                    "continuity" -> item {
+                        Panel(c) {
+                            // The Play build may not read SMS, or all photos in the
+                            // background (see src/play/AndroidManifest.xml).
+                            if (app.linkall.BuildConfig.FULL_PERMISSIONS) {
+                                SwitchRow(c, Icons.Outlined.Sms, "SMS codes", "Copy one-time codes to your computer", autoForwardSms, onAutoForwardSmsChange)
+                                Hairline(c)
+                                SwitchRow(c, Icons.Outlined.Screenshot, "Screenshots", "Send new screenshots automatically", autoForwardScreenshots, onAutoForwardScreenshotsChange)
+                                Hairline(c)
+                            }
+                            SwitchRow(
+                                c, Icons.Outlined.Call, "Calls",
+                                if (app.linkall.BuildConfig.FULL_PERMISSIONS) "Needs Phone, Contacts and Call log access"
+                                else "Show incoming calls on your computer. Needs Phone access",
+                                callContinuityEnabled, onCallContinuityChange
+                            )
+                            Hairline(c)
+                            SwitchRow(c, Icons.Outlined.Notifications, "Notifications", "Mirror phone notifications", notificationMirroringEnabled, onNotificationMirroringChange)
+                            Hairline(c)
+                            SwitchRow(c, Icons.Outlined.NotificationsActive, "Find my phone", "Let your computers make this phone ring, even on silent", findPhoneEnabled, onFindPhoneChange)
+                            Hairline(c)
+                            SwitchRow(c, Icons.Outlined.Pin, "Verification codes", "A code from a text pops up on your computers with Copy and Paste. Needs notification access", shareCodesEnabled, onShareCodesChange)
+                        }
+                    }
+                    "folders" -> {
+                        // The Play build can't read all files, so computers browse only the folders picked here.
+                        if (!app.linkall.BuildConfig.FULL_PERMISSIONS) {
+                            item { SharedFoldersSection(c) }
+                        }
+                        item { FolderSyncSection(c) }
+                    }
+                    "appearance" -> item {
+                        Panel(c) {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                                Text("Theme", style = DdType.label, color = c.text)
+                                Spacer(Modifier.height(10.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    listOf("system" to "Match system", "light" to "Light", "dark" to "Dark").forEach { (mode, label) ->
+                                        FilterChip(c, label, selected = themeMode == mode) { onThemeModeChange(mode) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    "permissions" -> item {
+                        Panel(c) {
+                            ListRow(c, Icons.Outlined.BatteryChargingFull, "Battery", "Allow background use so clips arrive instantly", onClick = onBatterySettingsClicked)
+                            Hairline(c)
+                            // The Play build has no all-files access to ask for.
+                            if (app.linkall.BuildConfig.FULL_PERMISSIONS) {
+                                ListRow(c, Icons.Outlined.Folder, "All files access", "Lets your computer browse this phone's files", onClick = onStorageSettingsClicked)
+                                Hairline(c)
+                            }
+                            ListRow(c, Icons.Outlined.NotificationsOff, "Hide the Link All notification", "Turn off \"Link All\" here. Sync keeps running", onClick = onNotificationSettingsClicked)
+                        }
+                    }
+                    "advanced" -> {
+                        item {
+                            Panel(c) {
+                                if (!isServiceRunning) {
+                                    ListRow(c, Icons.Outlined.PlayCircleOutline, "Start service", onClick = onStartSync)
+                                    Hairline(c)
+                                }
+                                ListRow(c, Icons.Outlined.Radar, "Scan for devices", onClick = onScanNow)
+                                Hairline(c)
+                                ListRow(c, Icons.Outlined.LinkOff, "Disconnect all", onClick = onActionDisconnectAll)
+                                Hairline(c)
+                                ListRow(c, Icons.Outlined.MonitorHeart, "Diagnostics", onClick = onOpenDiagnostics)
+                                Hairline(c)
+                                ListRow(
+                                    c, Icons.Outlined.PowerSettingsNew, "Stop service",
+                                    detail = "Link All stops until you open it again",
+                                    iconTint = c.danger,
+                                    titleColor = c.danger,
+                                    onClick = onActionStopService
+                                )
+                            }
+                        }
+                        if (UpdateChecker.supported) {
+                            item {
+                                Column(Modifier.padding(top = 20.dp)) {
+                                    Panel(c) {
+                                        SwitchRow(
+                                            c, Icons.Outlined.Sync, "Check for updates",
+                                            "Asks GitHub once a day if a newer version exists. Never installs.",
+                                            checkForUpdates
+                                        ) {
+                                            checkForUpdates = it
+                                            UpdateChecker.setEnabled(prefs, it)
+                                            if (it) UpdateChecker.checkIfDue(context)
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
             }
         }
+    }
+}
 
-        item {
-            Column {
-                SectionHeader(c, "Permissions", null)
-                Panel(c) {
-                    ListRow(c, Icons.Outlined.BatteryChargingFull, "Battery", "Allow background use so clips arrive instantly", onClick = onBatterySettingsClicked)
-                    Hairline(c)
-                    // The Play build has no all-files access to ask for.
-                    if (app.linkall.BuildConfig.FULL_PERMISSIONS) {
-                        ListRow(c, Icons.Outlined.Folder, "All files access", "Lets your computer browse this phone's files", onClick = onStorageSettingsClicked)
-                        Hairline(c)
-                    }
-                    ListRow(c, Icons.Outlined.NotificationsOff, "Hide the Link All notification", "Turn off \"Link All\" here. Sync keeps running", onClick = onNotificationSettingsClicked)
-                }
-            }
-        }
+private fun settingsTitle(page: String) = when (page) {
+    "sync" -> "Sync"
+    "continuity" -> "Continuity"
+    "folders" -> "Folders"
+    "appearance" -> "Appearance"
+    "permissions" -> "Battery & permissions"
+    else -> "Advanced"
+}
 
-        // Rarely needed; pausing is the Sync switch above, and devices are
-        // forgotten from the Devices tab.
-        item {
-            Column {
-                SectionHeader(c, "Advanced", null)
-                Panel(c) {
-                    if (!isServiceRunning) {
-                        ListRow(c, Icons.Outlined.PlayCircleOutline, "Start service", onClick = onStartSync)
-                        Hairline(c)
-                    }
-                    ListRow(c, Icons.Outlined.Radar, "Scan for devices", onClick = onScanNow)
-                    Hairline(c)
-                    ListRow(c, Icons.Outlined.LinkOff, "Disconnect all", onClick = onActionDisconnectAll)
-                    Hairline(c)
-                    ListRow(c, Icons.Outlined.MonitorHeart, "Diagnostics", onClick = onOpenDiagnostics)
-                    Hairline(c)
-                    ListRow(
-                        c, Icons.Outlined.PowerSettingsNew, "Stop service",
-                        detail = "Link All stops until you open it again",
-                        iconTint = c.danger,
-                        titleColor = c.danger,
-                        onClick = onActionStopService
-                    )
-                }
-            }
-        }
+/** A settings category: tinted icon, name, what's on now, and its page on a tap. */
+@Composable
+private fun CategoryRow(c: DdColors, icon: androidx.compose.ui.graphics.vector.ImageVector, tone: Tone, title: String, summary: String, onClick: () -> Unit) {
+    val (fg, bg) = c.tone(tone)
+    ListRow(c, icon, title, detail = summary, iconTint = fg, iconBackground = bg, onClick = onClick)
+}
 
-        if (UpdateChecker.supported) {
-            item {
-                val prefs = remember { context.getSharedPreferences(LinkAllService.PREFS_NAME, android.content.Context.MODE_PRIVATE) }
-                var checkForUpdates by remember { mutableStateOf(UpdateChecker.isEnabled(prefs)) }
-                Column(Modifier.padding(top = 20.dp)) {
-                    Panel(c) {
-                        SwitchRow(
-                            c, Icons.Outlined.Sync, "Check for updates",
-                            "Asks GitHub once a day if a newer version exists. Never installs.",
-                            checkForUpdates
-                        ) {
-                            checkForUpdates = it
-                            UpdateChecker.setEnabled(prefs, it)
-                            if (it) UpdateChecker.checkIfDue(context)
-                        }
-                    }
-                }
-            }
-        }
-
-        item {
-            Column(Modifier.fillMaxWidth().padding(top = 28.dp, start = 4.dp)) {
-                Text("Link All ${version}".trim(), style = DdType.label, color = c.text)
-                Text("No cloud, no account, no telemetry.", style = DdType.small, color = c.textMuted)
-                if (deviceId.isNotBlank()) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(deviceId, style = DdType.mono, color = c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-        }
+/** A sub-page's title with the way back to the list. */
+@Composable
+private fun SubpageTitle(c: DdColors, title: String, onBack: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 20.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        TopIconButton(c, Icons.AutoMirrored.Outlined.ArrowBack, "Back", onClick = onBack)
+        Spacer(Modifier.width(14.dp))
+        Text(title, style = DdType.pageTitle, color = c.text)
     }
 }
 
