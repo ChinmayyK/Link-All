@@ -214,6 +214,7 @@ struct IpcSettings: Codable {
     let smart_sync_debounce_ms: UInt64
     // Optional so an older daemon's reply still decodes.
     let allow_file_browsing: Bool?
+    let allow_remote_control: Bool?
 }
 
 struct IpcResponse<T: Codable>: Codable {
@@ -706,7 +707,8 @@ extension LinkAllIPCClient {
             smartSyncDuplicateWindowMs: s.smart_sync_duplicate_window_ms,
             smartSyncDebounceMs: s.smart_sync_debounce_ms,
             startOnLogin: false,
-            allowFileBrowsing: s.allow_file_browsing ?? false
+            allowFileBrowsing: s.allow_file_browsing ?? false,
+            allowRemoteControl: s.allow_remote_control ?? false
         )
     }
 
@@ -733,6 +735,7 @@ extension LinkAllIPCClient {
             "show_receive_notification":        snapshot.showReceiveNotification,
             "ignore_patterns":                  snapshot.ignorePatterns,
             "allow_file_browsing":              snapshot.allowFileBrowsing,
+            "allow_remote_control":             snapshot.allowRemoteControl,
         ]
         _ = try await send(cmd: cmd)
     }

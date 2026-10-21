@@ -212,6 +212,7 @@ struct LinkAllSettingsSnapshot: Equatable {
     var smartSyncDebounceMs: UInt64
     var startOnLogin: Bool
     var allowFileBrowsing: Bool
+    var allowRemoteControl: Bool = false
 }
 
 // MARK: - Sync Mode

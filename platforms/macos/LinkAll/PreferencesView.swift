@@ -354,6 +354,13 @@ private struct GeneralPane: View {
             }
         }
 
+        PrefsSection(title: "Remote Control", icon: "dial.medium.fill", tint: CRTheme.accentPurple) {
+            PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Let phones control this Mac",
+                     description: "Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides.") {
+                Toggle("", isOn: $copy.allowRemoteControl).labelsHidden()
+            }
+        }
+
         PrefsSection(title: "Ambient Continuity", icon: "star.fill", tint: CRTheme.accentYellow) {
             PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
                      description: "Instantly sends Mac screenshots to connected Android devices.") {
