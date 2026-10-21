@@ -694,6 +694,13 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
+        IpcRequest::DialNumber { target, number } => Ok(match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match state.engine.send_dial_number(id, &number).await {
+                Ok(()) => IpcResponse::ok(json!({})),
+                Err(e) => IpcResponse::error(e),
+            },
+            Err(_) => IpcResponse::error("unknown device".to_string()),
+        }),
         IpcRequest::Peers => {
             let snapshot = state.engine.status_snapshot().await;
             Ok(IpcResponse::ok(snapshot.peers))

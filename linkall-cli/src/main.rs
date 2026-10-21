@@ -60,6 +60,7 @@ async fn run() -> Result<()> {
         ["devices"] | ["devices", "list"] => cmd_devices_list(),
         ["find", "stop", id] => cmd_find(id, false).await,
         ["find", id] => cmd_find(id, true).await,
+        ["call", id, number] => cmd_call(id, number).await,
         ["devices", "choose", purpose] => cmd_devices_choose(purpose, None).await,
         ["devices", "choose", purpose, last] => cmd_devices_choose(purpose, Some(last)).await,
         ["devices", "show", id] => cmd_devices_show(id).await,
@@ -264,6 +265,23 @@ async fn cmd_push(text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+/// Offers a paired phone a call to `number`: it shows a notification, and
+/// the dialer opens when its owner taps it.
+async fn cmd_call(id: &str, number: &str) -> Result<()> {
+    match ipc(&IpcRequest::DialNumber {
+        target: id.to_string(),
+        number: number.to_string(),
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Offered the call to the phone");
+            Ok(())
+        }
+    }
 }
 
 /// Makes a paired phone ring, or stop ringing. `id` is its full device ID
@@ -1344,6 +1362,7 @@ DAEMON CONTROL
   push "<text>"                   Push text to all connected peers
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
   find [stop] <uuid>              Make a paired phone ring (or stop) so you can find it
+  call <uuid> <number>            Offer a paired phone a call (it opens the dialer when tapped)
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it
   pause <transfer-id>             Pause a file transfer

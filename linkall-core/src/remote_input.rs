@@ -78,6 +78,28 @@ fn clamp_step(v: i32) -> i32 {
     v.clamp(-MAX_STEP, MAX_STEP)
 }
 
+/// A phone number a computer asked the phone to call, or None when it isn't
+/// one: digits and the usual `+ - ( ) . * #` and spaces, 3 to 32 characters.
+/// Whatever else it holds, it is never handed to anything that runs it.
+pub fn clean_phone_number(raw: &str) -> Option<String> {
+    let number = raw.trim();
+    let count = number.chars().count();
+    if !(3..=32).contains(&count) {
+        return None;
+    }
+    if !number.chars().any(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    if number
+        .chars()
+        .all(|c| c.is_ascii_digit() || matches!(c, '+' | '-' | '(' | ')' | '.' | '*' | '#' | ' '))
+    {
+        Some(number.to_string())
+    } else {
+        None
+    }
+}
+
 /// Moves the pointer by (`dx`, `dy`) from where it is.
 pub fn pointer_move(dx: i32, dy: i32) -> Result<(), String> {
     imp::pointer_move(clamp_step(dx), clamp_step(dy))
@@ -674,6 +696,29 @@ mod tests {
         assert_eq!(Button::from_wire(1), Some(Button::Right));
         assert_eq!(Button::from_wire(2), Some(Button::Middle));
         assert_eq!(Button::from_wire(3), None);
+    }
+
+    #[test]
+    fn phone_numbers_are_checked() {
+        for ok in ["+1 234-567-8900", "(020) 7946 0958", "*#06#", "112"] {
+            assert_eq!(clean_phone_number(ok).as_deref(), Some(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "ab",
+            "12",
+            "tel:123",
+            "123;rm",
+            "1234\n5678",
+            "+++",
+            &"1".repeat(40),
+        ] {
+            assert_eq!(clean_phone_number(bad), None, "{bad:?}");
+        }
+        assert_eq!(
+            clean_phone_number("  555 0100 ").as_deref(),
+            Some("555 0100")
+        );
     }
 
     #[test]

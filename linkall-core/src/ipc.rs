@@ -137,6 +137,8 @@ pub enum IpcRequest {
     },
     /// Make a paired phone ring (`ring` true) or stop ringing.
     FindDevice { target: String, ring: bool },
+    /// Offer a paired phone a call to `number`.
+    DialNumber { target: String, number: String },
     /// List connected peers with stats.
     Peers,
     /// List trusted devices from the store.
@@ -806,6 +808,13 @@ pub async fn handle_ipc_request(
         }
         IpcRequest::FindDevice { target, ring } => match uuid::Uuid::parse_str(&target) {
             Ok(id) => match eng.send_find_device(id, ring).await {
+                Ok(()) => IpcResponse::ok(serde_json::json!({})),
+                Err(e) => IpcResponse::err(e),
+            },
+            Err(_) => IpcResponse::err("unknown device".to_string()),
+        },
+        IpcRequest::DialNumber { target, number } => match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match eng.send_dial_number(id, &number).await {
                 Ok(()) => IpcResponse::ok(serde_json::json!({})),
                 Err(e) => IpcResponse::err(e),
             },

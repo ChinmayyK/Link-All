@@ -363,6 +363,28 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             Some(key) => input(ctx, move || crate::remote_input::press_key(key)).await,
             None => tracing::debug!("ignoring a key that isn't on the list"),
         },
+        AppMessage::DialNumber { number } => {
+            ctx.touch_last_seen();
+            let trusted = shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false);
+            // Only a phone can be asked to call, and only with a number that
+            // is a number.
+            if trusted && cfg!(target_os = "android") {
+                if let Some(number) = crate::remote_input::clean_phone_number(&number) {
+                    let _ = shared
+                        .event_tx
+                        .send(EngineEvent::DialRequested {
+                            from_device: peer_id,
+                            from_name: peer_name.clone(),
+                            number,
+                        })
+                        .await;
+                }
+            }
+        }
         _ => unreachable!("dispatch_inbound routed a non-remote message here"),
     }
     Flow::Continue

@@ -272,6 +272,17 @@ impl Engine {
         }
     }
 
+    /// Offer a connected, trusted phone on 2.1.0 or later a call to `number`.
+    /// The phone only opens its dialer when its owner taps the notification.
+    pub async fn send_dial_number(&self, target_device: Uuid, number: &str) -> Result<(), String> {
+        let number = crate::remote_input::clean_phone_number(number)
+            .ok_or_else(|| "That doesn't look like a phone number.".to_string())?;
+        let tx = self.remote_control_sender(target_device)?;
+        tx.send(AppMessage::DialNumber { number })
+            .await
+            .map_err(|_| "That phone isn't connected.".to_string())
+    }
+
     /// Why a remote-control action could not be sent to `target_device`, or
     /// `Ok` when it could.
     pub async fn send_remote_control_check(&self, target_device: Uuid) -> Result<(), String> {

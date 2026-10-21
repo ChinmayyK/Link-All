@@ -629,6 +629,12 @@ pub enum AppMessage {
     RemoteKeyPress {
         key: String,
     },
+    /// Computer -> phone: offer to call this number. The phone shows a
+    /// notification, and the dialer opens with the number filled in only
+    /// when its owner taps it; nothing is dialled on its own.
+    DialNumber {
+        number: String,
+    },
 }
 
 impl AppMessage {

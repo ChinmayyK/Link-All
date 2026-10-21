@@ -278,6 +278,12 @@ pub enum EngineEvent {
         from_device: Uuid,
         ring: bool,
     },
+    /// A paired computer offered to call a number from this phone.
+    DialRequested {
+        from_device: Uuid,
+        from_name: String,
+        number: String,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,

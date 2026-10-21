@@ -493,6 +493,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         OpenUrlOnDeviceAckReceived { .. } => 39,
         RemoteControlAckReceived { .. } => 42,
         FindDeviceRequested { .. } => 43,
+        DialRequested { .. } => 44,
     }
 }
 
@@ -537,6 +538,12 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventText(
         crate::engine::EngineEvent::RemoteFileActionRequestReceived { action, .. } => {
             return env
                 .new_string(action)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::DialRequested { number, .. } => {
+            return env
+                .new_string(number)
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
@@ -618,6 +625,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceName(
         PeerConnected { device_name, .. } => Some(device_name.as_str()),
         PeerDisconnected { device_name, .. } => device_name.as_deref(),
         OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.as_str()),
+        DialRequested { from_name, .. } => Some(from_name.as_str()),
         FolderTransferComplete { peer_name, .. } => Some(peer_name.as_str()),
         _ => None,
     };
@@ -667,6 +675,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceId(
         OpenUrlOnDeviceAckReceived { from_device, .. } => Some(*from_device),
         RemoteControlAckReceived { from_device, .. } => Some(*from_device),
         FindDeviceRequested { from_device, .. } => Some(*from_device),
+        DialRequested { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
