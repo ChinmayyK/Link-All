@@ -327,40 +327,6 @@ pub(crate) fn qr_texture(text: &str) -> Option<gdk::MemoryTexture> {
     ))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pairing_url_escapes_every_value() {
-        let url = pairing_url(&[
-            ("id", "abc"),
-            ("name", "Chinmay's PC & laptop"),
-            ("token", "a+b/c="),
-        ]);
-        assert!(url.starts_with("linkall://pair?id=abc&name="));
-        assert!(!url.contains(' ') && !url.contains("& ") && !url.contains("+b"));
-        let name = url
-            .split("name=")
-            .nth(1)
-            .unwrap()
-            .split('&')
-            .next()
-            .unwrap();
-        assert_eq!(
-            glib::Uri::unescape_string(name, None::<&str>).unwrap(),
-            "Chinmay's PC & laptop"
-        );
-    }
-
-    #[test]
-    fn qr_code_is_square_with_a_quiet_zone() {
-        let texture = qr_texture("linkall://pair?id=x&token=y").expect("QR");
-        assert_eq!(texture.width(), texture.height());
-        assert!(texture.width() >= (21 + 8) * 8);
-    }
-}
-
 /// Connects to a device by IP address or host name, for networks where discovery is blocked.
 pub fn add_by_address(hub: &Hub) {
     let entry = adw::EntryRow::builder()
@@ -399,4 +365,38 @@ pub fn add_by_address(hub: &Hub) {
         );
     });
     dialog.present(window().as_ref());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pairing_url_escapes_every_value() {
+        let url = pairing_url(&[
+            ("id", "abc"),
+            ("name", "Chinmay's PC & laptop"),
+            ("token", "a+b/c="),
+        ]);
+        assert!(url.starts_with("linkall://pair?id=abc&name="));
+        assert!(!url.contains(' ') && !url.contains("& ") && !url.contains("+b"));
+        let name = url
+            .split("name=")
+            .nth(1)
+            .unwrap()
+            .split('&')
+            .next()
+            .unwrap();
+        assert_eq!(
+            glib::Uri::unescape_string(name, None::<&str>).unwrap(),
+            "Chinmay's PC & laptop"
+        );
+    }
+
+    #[test]
+    fn qr_code_is_square_with_a_quiet_zone() {
+        let texture = qr_texture("linkall://pair?id=x&token=y").expect("QR");
+        assert_eq!(texture.width(), texture.height());
+        assert!(texture.width() >= (21 + 8) * 8);
+    }
 }
