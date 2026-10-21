@@ -35,6 +35,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Code
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -173,7 +175,8 @@ private fun matches(note: ScratchNote, filter: Filter): Boolean = when (filter) 
  * a tap, code is shown as code, and the filters sort it all.
  */
 @Composable
-internal fun NotesTab(isDark: Boolean) {
+internal fun NotesScreen(isDark: Boolean, onBack: () -> Unit) {
+    BackHandler(onBack = onBack)
     val c = rememberDdColors(isDark)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -235,19 +238,20 @@ internal fun NotesTab(isDark: Boolean) {
         }
     }
 
-        // The tab sits above the navigation bar; with the keyboard open the
-        // bar hides and the box to type in rides on the keyboard.
+        // Covers the tabs and the dock; the box to type in rides on the keyboard.
         Column(
             Modifier
                 .fillMaxSize()
-                .imePadding()
-                .padding(bottom = LocalDockInset.current),
+                .background(c.page)
+                .imePadding(),
         ) {
             // ── Header ──────────────────────────────────────────────────────
             Row(
-                Modifier.fillMaxWidth().padding(start = PageGutter, end = 8.dp, top = 20.dp),
+                Modifier.fillMaxWidth().padding(start = 12.dp, end = 8.dp, top = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                HeaderIcon(c, Icons.AutoMirrored.Outlined.ArrowBack, "Back", onBack)
+                Spacer(Modifier.width(4.dp))
                 Column(Modifier.weight(1f)) {
                     Text("Notes", style = DdType.pageTitle, color = c.text)
                     Text(

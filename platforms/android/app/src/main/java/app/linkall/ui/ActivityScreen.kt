@@ -34,7 +34,7 @@ import app.linkall.ActivityEntry
 import app.linkall.ActivityKind
 import java.util.Calendar
 
-private enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>?) {
+internal enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>?) {
     All("All", null),
     Clipboard("Clipboard", setOf(ActivityKind.CLIPBOARD_TEXT, ActivityKind.CLIPBOARD_IMAGE)),
     Files("Files", setOf(
@@ -46,9 +46,12 @@ private enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind
 
 /** Everything that crossed between devices, grouped by day. */
 @Composable
-fun ActivityTab(
+internal fun ActivityTab(
     isDark: Boolean,
     feed: List<ActivityEntry>,
+    // Held by the caller, so "See all" on Files opens this filtered to files.
+    filter: ActivityFilter,
+    onFilterChange: (ActivityFilter) -> Unit,
     onApply: (ActivityEntry) -> Unit,
     onResend: (ActivityEntry) -> Unit,
     onDelete: (ActivityEntry) -> Unit,
@@ -56,7 +59,6 @@ fun ActivityTab(
     onClearAll: () -> Unit = {}
 ) {
     val c = rememberDdColors(isDark)
-    var filter by rememberSaveable { mutableStateOf(ActivityFilter.All) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     val groups = remember(feed, filter, query) {
@@ -102,7 +104,7 @@ fun ActivityTab(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ActivityFilter.values().forEach { f ->
-                        FilterChip(c, f.label, selected = f == filter) { filter = f }
+                        FilterChip(c, f.label, selected = f == filter) { onFilterChange(f) }
                     }
                 }
             }

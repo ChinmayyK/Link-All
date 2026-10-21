@@ -34,7 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.StickyNote2
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
@@ -101,10 +101,7 @@ val CRTheme.accentGreen get() = Color(0xFF10B981)
 val CRTheme.accentRed get() = Color(0xFFEF4444)
 val CRTheme.accentAmber get() = Color(0xFFF59E0B)
 
-enum class AppTab { Home, Notes, Activity, Settings }
-
-/** How much of the bottom the floating dock covers, for a tab whose content sits at the bottom. */
-internal val LocalDockInset = staticCompositionLocalOf { 0.dp }
+enum class AppTab { Home, Files, Activity, Settings }
 
 /** Opens a device's page, from wherever a device is shown. */
 internal val LocalOpenDevice = staticCompositionLocalOf<(PeerSnapshot) -> Unit> { {} }
@@ -198,12 +195,21 @@ fun MainScreen(
 
     var browsingPeerId by rememberSaveable { mutableStateOf<String?>(null) }
     var devicePageId by rememberSaveable { mutableStateOf<String?>(null) }
-    // The keyboard covers the bar anyway; hiding it gives the Notes box the room.
+    var notesOpen by rememberSaveable { mutableStateOf(false) }
+    var activityFilter by rememberSaveable { mutableStateOf(ActivityFilter.All) }
+    // The keyboard covers the dock anyway; hiding it while typing keeps it off the search boxes.
     val keyboardOpen = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+    fun goTo(tab: AppTab) {
+        scope.launch {
+            pagerState.animateScrollToPage(
+                tabs.indexOf(tab),
+                animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+            )
+        }
+    }
     CompositionLocalProvider(
         LocalBrowseFiles provides { peer: PeerSnapshot -> browsingPeerId = peer.id },
         LocalOpenDevice provides { peer: PeerSnapshot -> devicePageId = peer.id },
-        LocalDockInset provides if (keyboardOpen) 0.dp else 96.dp,
     ) {
         CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices, flat = true) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
@@ -238,25 +244,36 @@ fun MainScreen(
                                 onTogglePinActivity = onTogglePinActivity,
                                 onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
+                                onOpenNotes = { notesOpen = true },
                                 onTabSelected = { selectedTab ->
-                                    val targetIndex = tabs.indexOf(selectedTab)
-                                    if (targetIndex >= 0) {
-                                        scope.launch {
-                                            pagerState.animateScrollToPage(
-                                                targetIndex,
-                                                animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                            )
-                                        }
-                                    }
+                                    // Home's "See all" is everything, not the last filter picked.
+                                    if (selectedTab == AppTab.Activity) activityFilter = ActivityFilter.All
+                                    goTo(selectedTab)
                                 },
                                 onRespondPairing = onRespondPairing,
                                 onSendPairingRequest = onSendPairingRequest,
                                 onCancelPairing = onCancelPairing
                             )
-                            AppTab.Notes -> NotesTab(isDark = isDark)
+                            AppTab.Files -> FilesTab(
+                                isDark = isDark,
+                                peers = peers,
+                                feed = feed,
+                                activeTransfers = activeTransfers,
+                                onActionSendFiles = onActionSendFiles,
+                                onActionSendFolder = onActionSendFolder,
+                                onActionPauseTransfer = onActionPauseTransfer,
+                                onActionResumeTransfer = onActionResumeTransfer,
+                                onActionCancelTransfer = onActionCancelTransfer,
+                                onSeeAll = {
+                                    activityFilter = ActivityFilter.Files
+                                    goTo(AppTab.Activity)
+                                },
+                            )
                             AppTab.Activity -> ActivityTab(
                                 isDark = isDark,
                                 feed = feed,
+                                filter = activityFilter,
+                                onFilterChange = { activityFilter = it },
                                 onApply = onApplyClipboard,
                                 onResend = onResendActivity,
                                 onDelete = onDeleteActivity,
@@ -331,17 +348,7 @@ fun MainScreen(
                 ) {
                     BottomDock(
                         currentTab = currentTab,
-                        onTabSelected = { selectedTab ->
-                            val targetIndex = tabs.indexOf(selectedTab)
-                            if (targetIndex >= 0) {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(
-                                        targetIndex,
-                                        animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                    )
-                                }
-                            }
-                        },
+                        onTabSelected = { goTo(it) },
                         isDark = isDark
                     )
                 }
@@ -378,6 +385,15 @@ fun MainScreen(
                         onSpeedTest = { onActionStartSpeedTest(peer.id) },
                     )
                 }
+            }
+
+            // Notes, from the button on Home: over the tabs and the dock.
+            androidx.compose.animation.AnimatedVisibility(
+                visible = notesOpen,
+                enter = androidx.compose.animation.slideInHorizontally { it / 3 } + fadeIn(tween(220)),
+                exit = androidx.compose.animation.slideOutHorizontally { it / 3 } + fadeOut(tween(180)),
+            ) {
+                NotesScreen(isDark = isDark, onBack = { notesOpen = false })
             }
 
             // Over everything, dock included; Back closes it.
@@ -460,21 +476,21 @@ fun BottomDock(
 
 private val AppTab.label get() = when (this) {
     AppTab.Home -> "Home"
-    AppTab.Notes -> "Notes"
+    AppTab.Files -> "Files"
     AppTab.Activity -> "Activity"
     AppTab.Settings -> "Settings"
 }
 
 private val AppTab.icon get() = when (this) {
     AppTab.Home -> Icons.Outlined.Home
-    AppTab.Notes -> Icons.Outlined.StickyNote2
+    AppTab.Files -> Icons.Outlined.Folder
     AppTab.Activity -> Icons.Outlined.History
     AppTab.Settings -> Icons.Outlined.Settings
 }
 
 private val AppTab.selectedIcon get() = when (this) {
     AppTab.Home -> Icons.Filled.Home
-    AppTab.Notes -> Icons.Filled.StickyNote2
+    AppTab.Files -> Icons.Filled.Folder
     AppTab.Activity -> Icons.Filled.History
     AppTab.Settings -> Icons.Filled.Settings
 }

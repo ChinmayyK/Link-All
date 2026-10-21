@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ArrowForward
@@ -116,6 +117,7 @@ fun HomeTab(
     onTogglePinActivity: (ActivityEntry) -> Unit = {},
     onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
+    onOpenNotes: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
     onRespondPairing: (PeerSnapshot, Boolean) -> Unit,
     onSendPairingRequest: (PeerSnapshot) -> Unit,
@@ -143,7 +145,7 @@ fun HomeTab(
             .padding(horizontal = PageGutter)
     ) {
         // This phone's identity and link state.
-        HomeTopBar(c = c, isDark = isDark, peers = peers, onScanQr = onActionPairMagicLink, onManualIp = onManualIp)
+        HomeTopBar(c = c, isDark = isDark, peers = peers, onOpenNotes = onOpenNotes, onScanQr = onActionPairMagicLink, onManualIp = onManualIp)
 
         Spacer(Modifier.height(20.dp))
 
@@ -285,6 +287,7 @@ private fun HomeTopBar(
     c: DdColors,
     isDark: Boolean,
     peers: List<PeerSnapshot>,
+    onOpenNotes: () -> Unit,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit,
 ) {
@@ -311,6 +314,8 @@ private fun HomeTopBar(
             Text("Link All", style = DdType.pageTitle.copy(fontSize = 24.sp, lineHeight = 28.sp), color = c.text)
             if (linked.isNotEmpty()) LinkStatusLine(c, linked, synced, Modifier.padding(top = 2.dp))
         }
+        TopIconButton(c, Icons.AutoMirrored.Outlined.StickyNote2, "Notes", onClick = onOpenNotes)
+        Spacer(Modifier.width(8.dp))
         AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
     }
 }
@@ -485,7 +490,7 @@ internal fun pairingWaitingLabel(peer: PeerSnapshot): String =
 // ---------------------------------------------------------------- lists
 
 @Composable
-private fun TransferRow(
+internal fun TransferRow(
     c: DdColors,
     transfer: TransferProgress,
     onPause: () -> Unit,
