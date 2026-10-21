@@ -122,8 +122,12 @@ mod imp {
         y: f64,
     }
 
-    #[link(name = "CoreGraphics", kind = "framework")]
     #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(obj: *const c_void);
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
     extern "C" {
         fn CGEventCreate(source: *const c_void) -> *mut c_void;
         fn CGEventGetLocation(event: *const c_void) -> CGPoint;
@@ -143,7 +147,6 @@ mod imp {
         fn CGEventKeyboardSetUnicodeString(event: *mut c_void, len: usize, chars: *const u16);
         fn CGEventSetIntegerValueField(event: *mut c_void, field: u32, value: i64);
         fn CGEventPost(tap: u32, event: *mut c_void);
-        fn CFRelease(obj: *const c_void);
     }
 
     const HID_TAP: u32 = 0;
