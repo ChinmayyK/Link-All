@@ -115,7 +115,6 @@ fun HomeTab(
     onActionCancelTransfer: (String) -> Unit,
     onDeleteActivity: (ActivityEntry) -> Unit,
     onTogglePinActivity: (ActivityEntry) -> Unit = {},
-    onResendActivity: (ActivityEntry) -> Unit,
     onReplayOnboarding: () -> Unit,
     onOpenNotes: () -> Unit,
     onTabSelected: (AppTab) -> Unit,
@@ -257,7 +256,6 @@ fun HomeTab(
                         c = c,
                         entry = entry,
                         onApply = { onApplyClipboard(entry) },
-                        onResend = { onResendActivity(entry) },
                         onDelete = { onDeleteActivity(entry) },
                         onTogglePin = { onTogglePinActivity(entry) }
                     )

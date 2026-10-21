@@ -459,14 +459,13 @@ internal fun PinTiles(c: DdColors, pin: String?, modifier: Modifier = Modifier) 
 
 /**
  * One activity entry. Tap applies it (copy again / open); long-press offers
- * resend and remove when the caller supports them.
+ * pin and remove when the caller supports them.
  */
 @Composable
 internal fun ActivityRow(
     c: DdColors,
     entry: ActivityEntry,
     onApply: () -> Unit,
-    onResend: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onTogglePin: (() -> Unit)? = null,
     showClockTime: Boolean = false
@@ -487,7 +486,7 @@ internal fun ActivityRow(
     }
     val showPreview = entry.preview.isNotBlank() &&
         entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED
-    val hasMenu = onResend != null || onDelete != null || onTogglePin != null
+    val hasMenu = onDelete != null || onTogglePin != null
 
     Box {
         Row(
@@ -546,7 +545,6 @@ internal fun ActivityRow(
                         if (entry.isPinned) SheetAction(Icons.Outlined.PushPin, "Unpin", "Let it age out with the rest", onClick = onTogglePin)
                         else SheetAction(Icons.Outlined.PushPin, "Pin to the top", "Kept above everything else, never cleared", onClick = onTogglePin)
                     )
-                    if (onResend != null) add(SheetAction(Icons.Outlined.Replay, "Resend", onClick = onResend))
                     if (onDelete != null) add(SheetAction(Icons.Outlined.DeleteOutline, "Remove", danger = true, onClick = onDelete))
                 },
                 onDismiss = { menuOpen = false }

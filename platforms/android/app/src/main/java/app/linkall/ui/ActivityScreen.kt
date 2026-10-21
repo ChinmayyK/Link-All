@@ -53,7 +53,6 @@ internal fun ActivityTab(
     filter: ActivityFilter,
     onFilterChange: (ActivityFilter) -> Unit,
     onApply: (ActivityEntry) -> Unit,
-    onResend: (ActivityEntry) -> Unit,
     onDelete: (ActivityEntry) -> Unit,
     onTogglePin: (ActivityEntry) -> Unit = {},
     onClearAll: () -> Unit = {}
@@ -143,7 +142,6 @@ internal fun ActivityTab(
                             c = c,
                             entry = entry,
                             onApply = { onApply(entry) },
-                            onResend = { onResend(entry) },
                             onDelete = { onDelete(entry) },
                             onTogglePin = { onTogglePin(entry) },
                             showClockTime = true

@@ -179,7 +179,6 @@ fun MainScreen(
     onDeleteActivity: (ActivityEntry) -> Unit = {},
     onTogglePinActivity: (ActivityEntry) -> Unit = {},
     onClearActivity: () -> Unit = {},
-    onResendActivity: (ActivityEntry) -> Unit = {},
     onReplayOnboarding: () -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
@@ -242,7 +241,6 @@ fun MainScreen(
                                 onActionCancelTransfer = onActionCancelTransfer,
                                 onDeleteActivity = onDeleteActivity,
                                 onTogglePinActivity = onTogglePinActivity,
-                                onResendActivity = onResendActivity,
                                 onReplayOnboarding = onReplayOnboarding,
                                 onOpenNotes = { notesOpen = true },
                                 onTabSelected = { selectedTab ->
@@ -275,7 +273,6 @@ fun MainScreen(
                                 filter = activityFilter,
                                 onFilterChange = { activityFilter = it },
                                 onApply = onApplyClipboard,
-                                onResend = onResendActivity,
                                 onDelete = onDeleteActivity,
                                 onTogglePin = onTogglePinActivity,
                                 onClearAll = onClearActivity
