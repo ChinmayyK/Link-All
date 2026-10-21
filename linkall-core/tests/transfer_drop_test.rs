@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{connected, eventually, eventually_within, start_pair, wait_for_disconnect, Node};
+use common::{connected, eventually, eventually_within, start_pair, Node};
 use linkall_core::engine::EngineEvent;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -48,6 +48,27 @@ impl Relay {
     fn cut(&self) {
         self.cut.send_modify(|n| *n += 1);
     }
+}
+
+/// Waits for `node` to report losing `peer`, or connecting to it again (a
+/// session replaced at once reports no drop in between).
+async fn wait_for_drop_or_redial(node: &mut Node, peer: uuid::Uuid, limit: Duration) {
+    timeout(limit, async {
+        loop {
+            match node.events.recv().await {
+                Some(EngineEvent::PeerDisconnected { device_id, .. })
+                | Some(EngineEvent::PeerConnected { device_id, .. })
+                    if device_id == peer =>
+                {
+                    return
+                }
+                Some(_) => {}
+                None => panic!("event channel closed"),
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("timed out: {peer} neither dropped nor reconnected"))
 }
 
 async fn wait_for_progress(node: &mut Node, percent: u8) {
@@ -121,9 +142,10 @@ async fn a_transfer_cut_off_by_a_drop_finishes_after_reconnecting() {
 
     relay.cut();
     // Watch the phone, which dialled and loses the link first. The computer may
-    // be slow to notice (a debug build on a busy runner), and when the phone has
-    // already reconnected it replaces the old session without reporting a drop.
-    wait_for_disconnect(&mut phone, computer.id, Duration::from_secs(20)).await;
+    // be slow to notice (a debug build on a busy runner). The phone itself may
+    // redial so fast that the new session replaces the old one before the old
+    // one reports a drop, so a fresh connection counts as the drop too.
+    wait_for_drop_or_redial(&mut phone, computer.id, Duration::from_secs(20)).await;
     eventually_within(
         Duration::from_secs(60),
         "they reconnect by themselves",
