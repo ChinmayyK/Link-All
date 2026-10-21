@@ -283,6 +283,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.handlePopoverAction(action)
         }))
         menuPanel = panel
+        NotificationCenter.default.addObserver(forName: .linkAllPopoverContentChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.fitMenuPanel()
+        }
+    }
+
+    /// Keeps the menu-bar panel's top edge in place while its height follows its content.
+    private func fitMenuPanel() {
+        guard let panel = menuPanel, panel.isVisible,
+              let fitted = panel.contentViewController?.view.fittingSize.height else { return }
+        let height = max(350, fitted)
+        var frame = panel.frame
+        guard abs(frame.height - height) > 1 else { return }
+        frame.origin.y += frame.height - height
+        frame.size.height = height
+        panel.setFrame(frame, display: true, animate: true)
     }
 
     private func handlePopoverAction(_ action: MenuBarPopoverAction) {
@@ -1343,7 +1358,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
             let screenRect = window.frame
             
             let panelWidth: CGFloat = 320
-            let panelHeight: CGFloat = 350
+            let panelHeight: CGFloat = max(350, menuPanel.contentViewController?.view.fittingSize.height ?? 350)
             var x = screenRect.midX - (panelWidth / 2)
             
             // Keep panel fully on-screen (prevent overflowing off right or left edge)

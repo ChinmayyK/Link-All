@@ -199,6 +199,21 @@ struct IpcDeviceChoices: Codable {
 
 struct IpcEmpty: Codable {}
 
+struct IpcNowPlaying: Codable, Identifiable, Equatable {
+    var id: String { device_id }
+    let device_id: String
+    let device_name: String
+    let platform: String?
+    let title: String
+    let artist: String
+    let album: String
+    let app: String
+    let playing: Bool
+    let position_ms: UInt64
+    let duration_ms: UInt64
+    let art_base64: String?
+}
+
 struct IpcGuestSession: Codable {
     let url: String
     let pin: String
@@ -574,6 +589,19 @@ final class LinkAllIPCClient {
         let raw = try await send(cmd: ["cmd": "dial_number", "target": target, "number": number])
         let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    /// What the paired devices are playing.
+    func nowPlayingList() async throws -> [IpcNowPlaying] {
+        let raw = try await send(cmd: ["cmd": "now_playing_list"])
+        let resp = try await decode(IpcResponse<[IpcNowPlaying]>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        return resp.data ?? []
+    }
+
+    /// Plays, pauses, skips or seeks a paired device's player (`seek` takes a position in ms).
+    func mediaCommand(target: String, action: String, value: Int = 0) async {
+        _ = try? await send(cmd: ["cmd": "media_command", "target": target, "action": action, "value": value])
     }
 
     /// Starts a Guest Drop session: a link and PIN for someone who isn't paired.
