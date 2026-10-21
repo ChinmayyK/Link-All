@@ -64,7 +64,7 @@ struct MenuBarPopoverView: View {
                             .background(Color.primary.opacity(0.05), in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .help("Scratchpad")
+                    .help("Notes")
                     .crHoverScale()
 
                     Button(action: { onAction(.diagnostics) }) {

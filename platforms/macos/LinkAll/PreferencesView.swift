@@ -110,6 +110,7 @@ struct PreferencesView: View {
     @ViewBuilder private var pane: some View {
         switch tab {
         case .general:       GeneralPane(copy: $copy)
+        case .continuity:    ContinuityPane(copy: $copy)
         case .sync:          SyncPane(copy: $copy, patternDraft: $patternDraft)
         case .notifications: NotificationsPane()
         case .network:       NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
@@ -125,12 +126,13 @@ struct PreferencesView: View {
 // MARK: - Tab Bar
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, sync, notifications, network, security
+    case general, continuity, sync, notifications, network, security
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
     var icon:  String {
         switch self {
         case .general:       return "switch.2"
+        case .continuity:    return "iphone.and.arrow.forward"
         case .sync:          return "arrow.triangle.2.circlepath"
         case .notifications: return "bell.badge"
         case .network:       return "network"
@@ -140,6 +142,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general:       return CRTheme.accentBlue
+        case .continuity:    return CRTheme.accentPurple
         case .sync:          return CRTheme.accentGreen
         case .notifications: return CRTheme.accentPurple
         case .network:       return CRTheme.accentIndigo
@@ -312,41 +315,15 @@ private struct NotificationsPane: View {
 
 // MARK: - General Pane
 
-private struct GeneralPane: View {
+/// What this Mac does with its paired devices beyond the clipboard: files,
+/// remote control, Drop, walk-away lock, screenshots and notifications.
+private struct ContinuityPane: View {
     @Binding var copy: LinkAllSettingsSnapshot
-    @State private var checkForUpdates = UpdateChecker.shared.isEnabled
-    @AppStorage("cr_app_theme") private var appTheme: String = "system"
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
     @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
     @AppStorage("magicClipboardEnabled") private var magicClipboardEnabled: Bool = false
 
     var body: some View {
-        PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
-            PrefsRow(icon: "tag.fill", label: "Device name",
-                     description: "How this Mac appears to other Link All peers.") {
-                TextField("MacBook Pro", text: $copy.deviceName).crInput().frame(maxWidth: 220)
-            }
-            PrefsDivider()
-            PrefsRow(icon: "power", label: "Start on login",
-                     description: "Launch Link All automatically at login.") {
-                Toggle("", isOn: $copy.startOnLogin).labelsHidden()
-            }
-            PrefsDivider()
-            PrefsRow(icon: "arrow.down.circle.fill", label: "Check for updates",
-                     description: "Asks GitHub once a day if a newer version exists. Never installs anything.") {
-                Toggle("", isOn: $checkForUpdates).labelsHidden()
-                    .onChange(of: checkForUpdates) { UpdateChecker.shared.isEnabled = $0 }
-            }
-            PrefsDivider()
-            PrefsRow(icon: "sparkles", label: "Onboarding",
-                     description: "View the welcome tour again.") {
-                Button("Replay Tour") {
-                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
-                }
-                .buttonStyle(CRSecondaryButtonStyle())
-            }
-        }
-
         PrefsSection(title: "File Browsing", icon: "folder.badge.person.crop", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "folder.fill", label: "Let devices browse files",
                      description: "Paired phones can list, preview and fetch files from this Mac's Documents, Downloads, Pictures, Movies and Music folders.") {
@@ -393,7 +370,41 @@ private struct GeneralPane: View {
                 Toggle("", isOn: $mirrorAndroidNotifications).labelsHidden()
             }
         }
-        
+    }
+}
+
+private struct GeneralPane: View {
+    @Binding var copy: LinkAllSettingsSnapshot
+    @State private var checkForUpdates = UpdateChecker.shared.isEnabled
+    @AppStorage("cr_app_theme") private var appTheme: String = "system"
+
+    var body: some View {
+        PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
+            PrefsRow(icon: "tag.fill", label: "Device name",
+                     description: "How this Mac appears to other Link All peers.") {
+                TextField("MacBook Pro", text: $copy.deviceName).crInput().frame(maxWidth: 220)
+            }
+            PrefsDivider()
+            PrefsRow(icon: "power", label: "Start on login",
+                     description: "Launch Link All automatically at login.") {
+                Toggle("", isOn: $copy.startOnLogin).labelsHidden()
+            }
+            PrefsDivider()
+            PrefsRow(icon: "arrow.down.circle.fill", label: "Check for updates",
+                     description: "Asks GitHub once a day if a newer version exists. Never installs anything.") {
+                Toggle("", isOn: $checkForUpdates).labelsHidden()
+                    .onChange(of: checkForUpdates) { UpdateChecker.shared.isEnabled = $0 }
+            }
+            PrefsDivider()
+            PrefsRow(icon: "sparkles", label: "Onboarding",
+                     description: "View the welcome tour again.") {
+                Button("Replay Tour") {
+                    UserDefaults.standard.set(false, forKey: "hasCompletedOnboarding")
+                }
+                .buttonStyle(CRSecondaryButtonStyle())
+            }
+        }
+
         PrefsSection(title: "Appearance", icon: "circle.lefthalf.filled", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "sun.max.fill", label: "Light",
                      description: "Classic clean look with light backgrounds.") {

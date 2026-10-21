@@ -37,6 +37,9 @@ enum CRTheme {
     static let brandViolet   = Color(hex: 0x5E5CE6) // Native purple
     static let brandCyan     = Color(hex: 0x32ADE6)
     static let brandPink     = Color(hex: 0xFF2D55)
+    /// The brand blue for text and small icons. On true black the base blue is
+    /// too dark to read, so dark mode lifts it (the Android app's dark accent).
+    static var brandInk: Color { Color(light: brandElectric, dark: Color(hex: 0x5C95FF)) }
 
     // ── Semantic surfaces ─────────────────────────────────────────────────────
     // Dark mode is true black throughout; fills and cards step up to
@@ -482,45 +485,7 @@ struct CRShortcutHint: View {
 
 // MARK: - Status Dot
 
-/// A still dot with a soft halo when online. It used to pulse forever,
-/// which redrew the whole window every frame while any device was connected.
-struct StatusDot: View {
-    var isOnline: Bool
-    var size: CGFloat = 8
-    var body: some View {
-        ZStack {
-            if isOnline {
-                Circle()
-                    .fill(CRTheme.accentGreen.opacity(0.20))
-                    .frame(width: size + 6, height: size + 6)
-            }
-            Circle().fill(isOnline ? CRTheme.accentGreen : CRTheme.inkSubtle).frame(width: size, height: size)
-        }
-        .animation(.crFast, value: isOnline)
-    }
-}
-
 // MARK: - Device Avatar
-
-struct DeviceAvatar: View {
-    let name: String; let platform: String?
-    var size: CGFloat = 36; var color: Color = CRTheme.accentBlue
-    private var initials: String {
-        let w = name.split(separator: " ")
-        return w.count >= 2 ? String(w[0].prefix(1) + w[1].prefix(1)).uppercased()
-                            : String(name.prefix(2)).uppercased()
-    }
-    var body: some View {
-        ZStack {
-            Circle().fill(color.opacity(0.12))
-                .overlay { Circle().strokeBorder(color.opacity(0.16), lineWidth: 0.5) }
-                .frame(width: size, height: size)
-            Text(initials)
-                .font(.system(size: size * 0.33, weight: .semibold, design: .rounded))
-                .foregroundStyle(color)
-        }
-    }
-}
 
 // MARK: - App Icon Mark
 

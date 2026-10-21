@@ -15,6 +15,10 @@ extension Notification.Name {
     static let linkallOpenHistoryPanel = Notification.Name("app.linkall.openHistoryPanel")
     static let linkallOpenCommandPalette = Notification.Name("app.linkall.openCommandPalette")
     static let linkallEnsureDaemon = Notification.Name("app.linkall.ensureDaemon")
+    /// The windows the store can ask for; AppDelegate owns them.
+    static let linkallOpenNotes = Notification.Name("app.linkall.openNotes")
+    static let linkallOpenDiagnostics = Notification.Name("app.linkall.openDiagnostics")
+    static let linkallShowMainWindow = Notification.Name("app.linkall.showMainWindow")
 }
 
 @MainActor
@@ -86,8 +90,11 @@ final class LinkAllStore: ObservableObject {
     @Published var clipboardPolicy = ClipboardPolicy()
 
     // ── Dashboard UI state ────────────────────────────────────────────────────
-    @Published var selectedSection: DashboardSection = .devices
-    @Published var selectedPendingDevice: ManagedDevice? = nil
+    @Published var selectedSection: DashboardSection = .home
+    /// The device whose page is open on Home; nil shows Home itself.
+    @Published var openDeviceId: String? = nil
+    /// A filter for Activity to start with, taken once when it opens.
+    var pendingActivityFilter: String? = nil
     @Published var toasts: [ToastItem] = []
     @Published var manualConnectAddress: String = ""
     @Published var settings: LinkAllSettingsSnapshot? = nil
@@ -799,8 +806,9 @@ final class LinkAllStore: ObservableObject {
     }
 
     /// The send modal: pick the device (all by default), then drop or choose
-    /// files and folders, or confirm `urls` already chosen.
-    func presentSendModal(urls: [URL]? = nil, completion: ((Bool) -> Void)? = nil) {
+    /// files and folders, or confirm `urls` already chosen. `choosingFolder`
+    /// makes its picker offer folders only.
+    func presentSendModal(urls: [URL]? = nil, choosingFolder: Bool = false, completion: ((Bool) -> Void)? = nil) {
         let devices = connectedDevices
         guard !devices.isEmpty else {
             showToast(title: "No Devices Connected", body: "Connect a device to send files or folders.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
@@ -823,6 +831,7 @@ final class LinkAllStore: ObservableObject {
                     devices: devices,
                     choices: choices,
                     urls: urls,
+                    choosesFolder: choosingFolder,
                     onSend: { chosen, target in
                         dismiss()
                         guard let self else { return }
@@ -1433,12 +1442,150 @@ final class LinkAllStore: ObservableObject {
     func performCommand(_ command: String) {
         let cmd = command.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if cmd.hasPrefix("/history") || cmd.hasPrefix("/timeline") { selectedSection = .clipboard }
-        else if cmd.hasPrefix("/devices") { selectedSection = .devices }
+        else if cmd.hasPrefix("/devices") { selectedSection = .home }
         else if cmd.hasPrefix("/settings") || cmd.hasPrefix("/prefs") { selectedSection = .settings }
         else if cmd.hasPrefix("/connect ") {
             manualConnectAddress = String(command.dropFirst(9))
-            selectedSection = .devices
+            selectedSection = .home
             connectManual()
+        }
+    }
+
+    // MARK: - Navigation
+
+    /// Opens a device's page on Home, inside the main window.
+    func openDevice(_ id: String) {
+        selectedSection = .home
+        openDeviceId = id
+    }
+
+    /// Activity filtered to one kind ("clipboard", "files" or "peers"), inside the main window.
+    func showActivity(filter: String) {
+        pendingActivityFilter = filter
+        selectedSection = .activity
+    }
+
+    /// Shows `section` from outside the main window (menu bar, palette,
+    /// a notification), opening the window if it's closed. Home opens on
+    /// Home itself, not on a device page left open earlier.
+    func reveal(_ section: DashboardSection) {
+        selectedSection = section
+        if section == .home { openDeviceId = nil }
+        NotificationCenter.default.post(name: .linkallShowMainWindow, object: nil)
+    }
+
+    /// Opens a device's page from outside the main window.
+    func revealDevice(_ id: String) {
+        openDevice(id)
+        NotificationCenter.default.post(name: .linkallShowMainWindow, object: nil)
+    }
+
+    func openNotes() { NotificationCenter.default.post(name: .linkallOpenNotes, object: nil) }
+    func openDiagnostics() { NotificationCenter.default.post(name: .linkallOpenDiagnostics, object: nil) }
+
+    /// What to say about the background service when it isn't answering; nil while it is.
+    var serviceProblem: String? {
+        guard !isRunning else { return nil }
+        if serviceStarting { return "Starting…" }
+        return ipcFailureCount >= 3 ? "Link All's background service isn't running" : "Reconnecting…"
+    }
+
+    /// Not answered yet since launch, as opposed to stopped answering.
+    var serviceStarting: Bool { !isRunning && ipcFailureCount == 0 }
+
+    // MARK: - One device (its page on Home)
+
+    /// Whether `device` can be rung, asked for a picture or asked to call, as
+    /// the core sees it; nil when Link All isn't answering.
+    func phoneChoice(for device: ManagedDevice) async -> IpcDeviceChoice? {
+        guard let choices = try? await ipc.deviceChoices(purpose: "find", lastUsed: lastUsedDeviceId) else { return nil }
+        return choices.choices.first { $0.id == device.id }
+    }
+
+    /// The core's choice for `device` when it can be used, or nil after a toast saying why not.
+    private func usablePhone(_ device: ManagedDevice, failure title: String) async -> IpcDeviceChoice? {
+        guard let choices = try? await ipc.deviceChoices(purpose: "find", lastUsed: lastUsedDeviceId) else {
+            showToast(title: title, body: "Link All isn't running.", tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 5.0)
+            return nil
+        }
+        let choice = choices.choices.first { $0.id == device.id }
+        guard let choice, choice.available else {
+            showToast(title: title, body: choice?.reason ?? "Pair it first.", tint: CRTheme.inkSoft, systemImage: "iphone.slash", ttl: 5.0)
+            return nil
+        }
+        return choice
+    }
+
+    /// Rings `device`, even on silent, so it can be found.
+    func ring(_ device: ManagedDevice) {
+        Task { [weak self] in
+            guard let self, let phone = await self.usablePhone(device, failure: "\(device.name) won't ring") else { return }
+            self.ringPhone(phone)
+        }
+    }
+
+    func stopRinging(_ device: ManagedDevice) {
+        Task { try? await ipc.findDevice(target: device.id, ring: false) }
+    }
+
+    /// "Insert from Phone" aimed at `device`: "photo" or "document".
+    func captureFromPhone(mode: String, on device: ManagedDevice) {
+        Task { [weak self] in
+            guard let self, let phone = await self.usablePhone(device, failure: "Can't reach \(device.name)") else { return }
+            self.askForPicture(phone, mode: mode)
+        }
+    }
+
+    /// Click to call aimed at `device`: asks for the number, then offers it to the phone.
+    func callFromPhone(on device: ManagedDevice) {
+        LinkAllModal.shared.present { [weak self] dismiss in
+            CallNumberCard(
+                title: "Call from \(device.name)",
+                onCall: { typed in
+                    dismiss()
+                    let number = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+                    Task { [weak self] in
+                        guard let self, let phone = await self.usablePhone(device, failure: "Can't reach \(device.name)") else { return }
+                        self.offerCall(number, to: phone)
+                    }
+                },
+                onCancel: dismiss
+            )
+        }
+    }
+
+    /// Sends files and folders to one device, saying so.
+    func send(_ urls: [URL], to device: ManagedDevice) {
+        guard !urls.isEmpty else { return }
+        sendFiles(urls: urls, to: device)
+        showToast(
+            title: "Sending to \(device.name)",
+            body: urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) items",
+            tint: CRTheme.brandElectric, systemImage: "paperplane.fill", ttl: 2.5
+        )
+    }
+
+    /// Disconnects every connected paired device. Each stays off until it is connected again.
+    func disconnectAll() {
+        let connected = devices.filter { $0.isConnected && $0.trustState == .trusted }
+        guard !connected.isEmpty else { return }
+        Task {
+            for device in connected { try? await ipc.disconnectPeer(deviceId: device.id) }
+            await refresh()
+        }
+    }
+
+    /// Asks for an address and connects to it: the way in on networks where
+    /// devices can't find each other.
+    func promptConnectByAddress() {
+        LinkAllModal.shared.input(
+            icon: "network",
+            title: "Connect by IP address",
+            subtitle: "For networks where devices can't find each other. This Mac: \(getLocalIPAddress() ?? "unknown")",
+            placeholder: "192.168.x.x",
+            confirm: "Connect"
+        ) { [weak self] host in
+            self?.connectManual(host: host)
         }
     }
 
@@ -1611,7 +1758,10 @@ final class LinkAllStore: ObservableObject {
             lastSeen:    raw.last_seen.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastDiscoveryAt: raw.last_discovery_at.map { Date(timeIntervalSince1970: TimeInterval($0)) },
             lastSync:    raw.last_sync.map { Date(timeIntervalSince1970: TimeInterval($0)) },
-            ip:          raw.ip
+            ip:          raw.ip ?? raw.ips?.first,
+            appVersion:  raw.app_version.flatMap { $0.isEmpty ? nil : $0 },
+            pairingExpiresIn: raw.pairing_expires_in_secs.map { Int($0) },
+            fingerprint: raw.fingerprint_display
         )
     }
 

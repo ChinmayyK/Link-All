@@ -42,6 +42,12 @@ struct PeerViewModel: Identifiable, Equatable {
     let lastDiscoveryAt: Date?
     let lastSync: Date?
     let ip: String?
+    /// The Link All version it last reported; nil when unknown.
+    var appVersion: String? = nil
+    /// Seconds left on a pairing request, in either direction.
+    var pairingExpiresIn: Int? = nil
+    /// Its key fingerprint, formatted; nil until it is paired.
+    var fingerprint: String? = nil
 
     /// Short status description shown under the device name.
     var statusLine: String {

@@ -31,6 +31,14 @@ struct IpcPeerRecord: Codable {
     let pairing_outcome: String?
     /// The phone said its battery settings may pause Link All in the background.
     let background_restricted: Bool?
+    /// The device's addresses; `ip` above is never sent, the first of these is the one in use.
+    let ips: [String]?
+    /// The Link All version it sent in its last handshake; empty from builds before that.
+    let app_version: String?
+    /// Seconds left on a pairing request, in either direction.
+    let pairing_expires_in_secs: UInt64?
+    /// Its key fingerprint, formatted; only for paired devices.
+    let fingerprint_display: String?
 }
 
 struct IpcStatusResponse: Codable {

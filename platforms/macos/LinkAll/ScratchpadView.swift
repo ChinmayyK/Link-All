@@ -118,7 +118,7 @@ struct ScratchpadView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Scratchpad")
+                Text("Notes")
                     .font(.system(size: 16, weight: .semibold, design: .rounded))
                 Text("Shared with your paired devices, nowhere else")
                     .font(.system(size: 11))

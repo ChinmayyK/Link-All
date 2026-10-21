@@ -300,6 +300,8 @@ struct SendModalCard: View {
     let devices: [ManagedDevice]
     let choices: IpcDeviceChoices
     let urls: [URL]?
+    /// The picker offers folders only ("Send a folder"); a drop still takes anything.
+    let choosesFolder: Bool
     let onSend: (_ urls: [URL], _ target: ManagedDevice?) -> Void
     let onCancel: () -> Void
     /// The selected device's id, `allId` for every device.
@@ -307,11 +309,12 @@ struct SendModalCard: View {
     @State private var dropHover = false
     private static let allId = "*all*"
 
-    init(devices: [ManagedDevice], choices: IpcDeviceChoices, urls: [URL]?,
+    init(devices: [ManagedDevice], choices: IpcDeviceChoices, urls: [URL]?, choosesFolder: Bool = false,
          onSend: @escaping (_ urls: [URL], _ target: ManagedDevice?) -> Void, onCancel: @escaping () -> Void) {
         self.devices = devices
         self.choices = choices
         self.urls = urls
+        self.choosesFolder = choosesFolder
         self.onSend = onSend
         self.onCancel = onCancel
         let usable = choices.usable
@@ -326,8 +329,8 @@ struct SendModalCard: View {
 
     var body: some View {
         ModalCard(
-            icon: "paperplane.fill",
-            title: urls.map { "Send \($0.count) item\($0.count == 1 ? "" : "s")" } ?? "Send files & folders",
+            icon: choosesFolder ? "folder.fill" : "paperplane.fill",
+            title: urls.map { "Send \($0.count) item\($0.count == 1 ? "" : "s")" } ?? (choosesFolder ? "Send a folder" : "Send files & folders"),
             subtitle: choices.usable.count == 1 ? "Only \(choices.usable[0].name) is connected" : "\(choices.usable.count) devices are connected",
             width: 480
         ) {
@@ -374,10 +377,10 @@ struct SendModalCard: View {
                     Image(systemName: "tray.and.arrow.down.fill")
                         .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(dropHover ? CRTheme.brandElectric : CRTheme.inkSubtle)
-                    Text("Drop files or folders here")
+                    Text(choosesFolder ? "Drop a folder here" : "Drop files or folders here")
                         .font(.system(size: 13.5, weight: .semibold))
                         .foregroundStyle(CRTheme.ink)
-                    Button("Choose files or folders…", action: choose)
+                    Button(choosesFolder ? "Choose a folder…" : "Choose files or folders…", action: choose)
                         .buttonStyle(CRPrimaryButtonStyle())
                 }
                 .frame(maxWidth: .infinity)
@@ -448,7 +451,7 @@ struct SendModalCard: View {
     private func choose() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
-        panel.canChooseFiles = true
+        panel.canChooseFiles = !choosesFolder
         panel.canChooseDirectories = true
         panel.prompt = "Send"
         panel.level = .modalPanel + 1

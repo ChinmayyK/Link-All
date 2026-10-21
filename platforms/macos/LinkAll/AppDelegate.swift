@@ -146,7 +146,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             name: .linkallEnsureDaemon,
             object: nil
         )
+        // Notes, Diagnostics and the main window, asked for from inside the views.
+        NotificationCenter.default.addObserver(self, selector: #selector(openScratchpad), name: .linkallOpenNotes, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openDiagnosticsFromStore), name: .linkallOpenDiagnostics, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openDashboard), name: .linkallShowMainWindow, object: nil)
     }
+
+    @objc private func openDiagnosticsFromStore() { openDiagnostics() }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let token = activityToken {
@@ -168,7 +174,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered, defer: false
             )
-            win.title = "Scratchpad"
+            win.title = "Notes"
             win.center()
             win.contentViewController = NSHostingController(rootView: ScratchpadView())
             win.isReleasedWhenClosed = false
@@ -366,7 +372,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
         windowMenu.addItem(NSMenuItem.separator())
-        let scratchpad = windowMenu.addItem(withTitle: "Scratchpad", action: #selector(openScratchpad), keyEquivalent: "n")
+        let scratchpad = windowMenu.addItem(withTitle: "Notes", action: #selector(openScratchpad), keyEquivalent: "n")
         scratchpad.keyEquivalentModifierMask = [.command, .shift]
         scratchpad.target = self
         let guest = windowMenu.addItem(withTitle: "Receive from Guest", action: #selector(receiveFromGuest), keyEquivalent: "g")

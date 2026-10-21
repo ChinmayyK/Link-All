@@ -2,12 +2,13 @@ import SwiftUI
 
 /// Asks for a phone number to call from a paired phone.
 struct CallNumberCard: View {
+    var title = "Call from your phone"
     let onCall: (String) -> Void
     let onCancel: () -> Void
     @State private var number = ""
 
     var body: some View {
-        ModalCard(icon: "phone.fill", title: "Call from your phone",
+        ModalCard(icon: "phone.fill", title: title,
                   subtitle: "Your phone shows a notification; tap it to open the dialer", width: 420) {
             VStack(spacing: 14) {
                 TextField("+1 234 567 8900", text: $number)

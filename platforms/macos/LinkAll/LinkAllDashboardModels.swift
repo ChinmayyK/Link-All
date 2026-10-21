@@ -6,48 +6,42 @@ import SwiftUI
 
 // MARK: - Dashboard Navigation
 
+/// The main window's sections. Devices live on Home, each with its own page there.
 enum DashboardSection: String, CaseIterable, Identifiable {
-    case devices, clipboard, transfers, settings
+    case home, clipboard, files, activity, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .devices:       return "Devices"
-        case .clipboard:     return "Clipboard"
-        case .transfers:     return "Transfers"
-        case .settings:      return "Settings"
+        case .home:      return "Home"
+        case .clipboard: return "Clipboard"
+        case .files:     return "Files"
+        case .activity:  return "Activity"
+        case .settings:  return "Settings"
         }
     }
 
     var icon: String {
         switch self {
-        case .devices:       return "list.bullet.rectangle"
-        case .clipboard:     return "doc.on.clipboard"
-        case .transfers:     return "folder"
-        case .settings:      return "gearshape"
+        case .home:      return "house"
+        case .clipboard: return "doc.on.clipboard"
+        case .files:     return "folder"
+        case .activity:  return "clock"
+        case .settings:  return "gearshape"
         }
     }
 
-    var eyebrow: String {
-        switch self {
-        case .devices:       return "Overview"
-        case .clipboard:     return "Activity"
-        case .transfers:     return "Files & Folders"
-        case .settings:      return "Configuration"
-        }
-    }
+    var selectedIcon: String { icon + ".fill" }
 
-    var subtitle: String {
+    /// ⌘1 to ⌘4 for the sections, ⌘, for Settings as everywhere on the Mac.
+    var shortcut: KeyEquivalent {
         switch self {
-        case .devices:
-            return "Manage your connected ecosystem."
-        case .clipboard:
-            return "Cross-device clipboard history."
-        case .transfers:
-            return "Recent file transfers."
-        case .settings:
-            return "Configure your workspace."
+        case .home:      return "1"
+        case .clipboard: return "2"
+        case .files:     return "3"
+        case .activity:  return "4"
+        case .settings:  return ","
         }
     }
 }
@@ -251,8 +245,16 @@ struct ManagedDevice: Identifiable {
     let pausedByPhone: Bool
     /// "Android", "macOS", "Windows" or "Linux"; nil until the device connects with 1.3.4+.
     let platform: String?
+    /// The Link All version it last reported; nil when unknown.
+    let appVersion: String?
+    /// Seconds left on a pairing request, in either direction.
+    let pairingExpiresIn: Int?
     var os: DeviceOS { DeviceOS(platform: platform, name: rawName) }
     var isConnected: Bool { connectionState == .connected }
+    /// Paired, connected and trusted both ways: everything works. A paired device
+    /// that stopped trusting this Mac is connected but waits for approval.
+    var isLinked: Bool { isConnected && trustState == .trusted && !outgoingPairingWaiting }
+    var isPhone: Bool { os == .android }
     /// Why the last request with an unpaired device ended, for its status line.
     var pairingOutcomeText: String? {
         guard trustState != .trusted, !pairingRequested, !outgoingPairingWaiting else { return nil }
@@ -298,7 +300,9 @@ struct ManagedDevice: Identifiable {
         }
         self.remembered      = peer.remembered
         self.autoConnect     = peer.autoConnect
-        self.fingerprint     = nil
+        self.fingerprint     = peer.fingerprint
+        self.appVersion      = peer.appVersion
+        self.pairingExpiresIn = peer.pairingExpiresIn
         self.lastSeen        = peer.lastSeen
         self.lastDiscoveryAt = peer.lastDiscoveryAt
         self.lastSync        = peer.lastSync
