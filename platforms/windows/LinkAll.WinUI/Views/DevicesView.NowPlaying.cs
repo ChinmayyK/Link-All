@@ -27,6 +27,11 @@ namespace LinkAll.WinUI.Views
         {
             try
             {
+                // On a device's page, what that device plays; on Home, the first.
+                var pageDevice = DevicePage.Visibility == Visibility.Visible
+                    ? (DevicePage.DataContext as PeerViewModel)?.device_id
+                    : null;
+                var host = pageDevice != null ? DeviceNowPlayingHost : NowPlayingHost;
                 var item = await Task.Run(() =>
                 {
                     // Without covers: they're most of the reply. art_key says
@@ -37,19 +42,24 @@ namespace LinkAll.WinUI.Views
                         && data.ValueKind == JsonValueKind.Array
                         && data.GetArrayLength() > 0)
                     {
-                        var first = data[0].Clone();
-                        LoadCover(first);
-                        return first;
+                        foreach (var entry in data.EnumerateArray())
+                        {
+                            if (pageDevice != null && entry.GetProperty("device_id").GetString() != pageDevice) continue;
+                            var chosen = entry.Clone();
+                            LoadCover(chosen);
+                            return chosen;
+                        }
                     }
                     return (JsonElement?)null;
                 });
-                var key = item == null
+                var key = (pageDevice ?? "home") + "|" + (item == null
                     ? ""
-                    : $"{item.Value.GetProperty("device_id").GetString()}|{item.Value.GetProperty("title").GetString()}|{item.Value.GetProperty("playing").GetBoolean()}|{item.Value.GetProperty("position_ms").GetUInt64() / 2000}";
+                    : $"{item.Value.GetProperty("device_id").GetString()}|{item.Value.GetProperty("title").GetString()}|{item.Value.GetProperty("playing").GetBoolean()}|{item.Value.GetProperty("position_ms").GetUInt64() / 2000}");
                 if (key == _nowPlayingShown) return;
                 _nowPlayingShown = key;
                 NowPlayingHost.Children.Clear();
-                if (item != null) NowPlayingHost.Children.Add(NowPlayingCard(item.Value));
+                DeviceNowPlayingHost.Children.Clear();
+                if (item != null) host.Children.Add(NowPlayingCard(item.Value));
             }
             catch (Exception ex) { App.HandleError(ex); }
         }

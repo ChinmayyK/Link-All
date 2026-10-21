@@ -650,6 +650,9 @@
                     </StackPanel>
                 </Border>
 
+                <!-- What it plays, filled in by DevicesView.NowPlaying.cs. -->
+                <StackPanel x:Name="DeviceNowPlayingHost" Margin="0,16,0,0" />
+
                 <StackPanel Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibleConverter}}">
                 <StackPanel Spacing="8" Margin="0,16,0,0">
                     <TextBlock Text="SHARE" Style="{StaticResource AppOverline}" />
