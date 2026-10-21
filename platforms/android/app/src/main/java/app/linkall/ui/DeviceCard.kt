@@ -2,6 +2,12 @@ package app.linkall.ui
 
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -102,14 +108,10 @@ internal fun DeviceCard(
             }
             Spacer(Modifier.height(14.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PillButton(c, "Send", filled = true, compact = true, modifier = Modifier.weight(1f), icon = Icons.Outlined.UploadFile) { sendOpen = true }
-                PillButton(c, "Browse", filled = false, compact = true, modifier = Modifier.weight(1f), icon = Icons.Outlined.FolderOpen, onClick = onBrowse)
+                CardAction(c, Icons.Outlined.UploadFile, "Send", primary = true) { sendOpen = true }
+                CardAction(c, Icons.Outlined.FolderOpen, "Browse", onClick = onBrowse)
                 if (isComputer) {
-                    PillButton(
-                        c, "Remote", filled = false, compact = true, modifier = Modifier.weight(1f),
-                        icon = Icons.Outlined.SettingsRemote,
-                        textColor = if (remoteOk) null else c.textMuted,
-                    ) {
+                    CardAction(c, Icons.Outlined.SettingsRemote, "Remote", muted = !remoteOk) {
                         if (remoteOk) onRemote()
                         else Toast.makeText(context, "Update Link All on ${peer.name} to use Remote.", Toast.LENGTH_LONG).show()
                     }
@@ -137,5 +139,37 @@ internal fun DeviceCard(
             ),
             onDismiss = { moreOpen = false },
         )
+    }
+}
+
+/** An action on a device card: icon over its full label, so nothing is clipped at three across. */
+@Composable
+private fun RowScope.CardAction(
+    c: DdColors,
+    icon: ImageVector,
+    label: String,
+    primary: Boolean = false,
+    muted: Boolean = false,
+    onClick: () -> Unit,
+) {
+    val shape = RoundedCornerShape(16.dp)
+    val fg = when {
+        primary -> c.onAccent
+        muted -> c.textMuted
+        else -> c.text
+    }
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(shape)
+            .background(if (primary) c.accent else c.surfaceSunk)
+            .then(if (primary) Modifier else Modifier.border(1.dp, c.line, shape))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 11.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = null, tint = if (primary || muted) fg else c.accent, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = DdType.small.copy(fontWeight = FontWeight.Medium), color = fg, maxLines = 1)
     }
 }
