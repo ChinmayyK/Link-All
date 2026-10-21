@@ -114,6 +114,20 @@
             </intent-filter>
         </activity>
 
+        <!-- ── Save shared text as a Scratchpad note ───────────────────── -->
+        <activity
+            android:name=".ScratchpadShareActivity"
+            android:exported="true"
+            android:label="Scratchpad"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- ── Home screen widget ─────────────────────────────────────── -->
         <receiver
             android:name=".LinkAllWidget"

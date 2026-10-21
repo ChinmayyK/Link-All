@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -57,15 +58,39 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 
 /** One Scratchpad note as the engine reports it. */
-internal data class ScratchNote(val id: String, val text: String, val pinned: Boolean)
+internal data class ScratchNote(val id: String, val text: String, val pinned: Boolean, val updatedAtMs: Long = 0L)
 
 internal fun parseScratchNotes(json: String?): List<ScratchNote> {
     if (json.isNullOrBlank()) return emptyList()
     val array = runCatching { JSONArray(json) }.getOrNull() ?: return emptyList()
     return (0 until array.length()).mapNotNull { i ->
         val o = array.optJSONObject(i) ?: return@mapNotNull null
-        ScratchNote(o.optString("id"), o.optString("text"), o.optBoolean("pinned"))
+        ScratchNote(o.optString("id"), o.optString("text"), o.optBoolean("pinned"), o.optLong("updated_at_ms"))
     }
+}
+
+private val LINK = Regex("https?://[^\\s<>\"')]+")
+
+/** The first web link in [text], or null. */
+internal fun firstLink(text: String): String? = LINK.find(text)?.value?.trimEnd('.', ',', ';', ':', '!', '?')
+
+/** "just now", "5 min ago", "3 h ago", "2 days ago". */
+internal fun ago(thenMs: Long, nowMs: Long = System.currentTimeMillis()): String {
+    if (thenMs <= 0L) return ""
+    val secs = ((nowMs - thenMs) / 1000).coerceAtLeast(0)
+    return when {
+        secs < 60 -> "just now"
+        secs < 3600 -> "${secs / 60} min ago"
+        secs < 86_400 -> "${secs / 3600} h ago"
+        else -> "${secs / 86_400} ${if (secs / 86_400 == 1L) "day" else "days"} ago"
+    }
+}
+
+/** Notes that match what was typed in the search box, every word anywhere in the note. */
+internal fun filterNotes(notes: List<ScratchNote>, query: String): List<ScratchNote> {
+    val words = query.trim().lowercase().split(Regex("\\s+")).filter { it.isNotEmpty() }
+    if (words.isEmpty()) return notes
+    return notes.filter { n -> words.all { n.text.lowercase().contains(it) } }
 }
 
 /**
@@ -81,6 +106,10 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
     var draft by remember { mutableStateOf("") }
     var editing by remember { mutableStateOf<ScratchNote?>(null) }
     var confirmClear by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    // The note just deleted, so "Undo" can put it back.
+    var undo by remember { mutableStateOf<ScratchNote?>(null) }
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
 
     suspend fun reload() {
         val json = withContext(Dispatchers.IO) {
@@ -103,7 +132,14 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             reload()
+            now = System.currentTimeMillis()
             delay(1500)
+        }
+    }
+    LaunchedEffect(undo) {
+        if (undo != null) {
+            delay(6000)
+            undo = null
         }
     }
 
@@ -118,7 +154,11 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Scratchpad", style = DdType.title, color = c.text)
-                    Text("Shared with your paired devices, nowhere else", style = DdType.small, color = c.textMuted)
+                    Text(
+                        if (notes.isEmpty()) "Shared with your paired devices, nowhere else"
+                        else "${notes.size} ${if (notes.size == 1) "note" else "notes"} · shared with your paired devices only",
+                        style = DdType.small, color = c.textMuted,
+                    )
                 }
                 if (notes.any { !it.pinned }) {
                     Text(
@@ -149,6 +189,21 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
                 }
             }
 
+            if (notes.size >= 4) {
+                TextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Search notes") },
+                    singleLine = true,
+                    leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+                )
+            }
+
+            val shown = filterNotes(notes, query)
+            if (notes.isNotEmpty() && shown.isEmpty()) {
+                Text("No note matches \"${query.trim()}\".", style = DdType.body, color = c.textMuted, modifier = Modifier.padding(top = 8.dp))
+            }
             if (notes.isEmpty()) {
                 Text(
                     "Nothing here yet. Add something and it appears on your other devices.",
@@ -156,9 +211,9 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
                 )
             }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                items(notes, key = { it.id }) { note ->
+                items(shown, key = { it.id }) { note ->
                     NoteCard(
-                        c, note,
+                        c, note, now,
                         onEdit = { editing = note },
                         onCopy = {
                             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -166,7 +221,39 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
                             Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                         },
                         onPin = { act { h -> LinkAllJni.scratchpadSave(h, note.id, note.text, !note.pinned) } },
-                        onDelete = { act { h -> LinkAllJni.scratchpadDelete(h, note.id) } },
+                        onDelete = {
+                            undo = note
+                            act { h -> LinkAllJni.scratchpadDelete(h, note.id) }
+                        },
+                        onOpenLink = { link ->
+                            runCatching {
+                                context.startActivity(
+                                    android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))
+                                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }
+                        },
+                    )
+                }
+            }
+
+            undo?.let { gone ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(c.surfaceSunk)
+                        .border(1.dp, c.line, RoundedCornerShape(14.dp))
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text("Note deleted", style = DdType.body, color = c.text, modifier = Modifier.weight(1f))
+                    Text(
+                        "Undo", style = DdType.label, color = c.accent,
+                        modifier = Modifier.clickable {
+                            undo = null
+                            act { h -> LinkAllJni.scratchpadSave(h, null, gone.text, gone.pinned) }
+                        }.padding(8.dp),
                     )
                 }
             }
@@ -215,12 +302,17 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
 private fun NoteCard(
     c: DdColors,
     note: ScratchNote,
+    now: Long,
     onEdit: () -> Unit,
     onCopy: () -> Unit,
     onPin: () -> Unit,
     onDelete: () -> Unit,
+    onOpenLink: (String) -> Unit,
 ) {
     val shape = RoundedCornerShape(16.dp)
+    val long = note.text.lines().size > 6 || note.text.length > 360
+    var expanded by remember(note.id) { mutableStateOf(false) }
+    val link = remember(note.text) { firstLink(note.text) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -231,11 +323,29 @@ private fun NoteCard(
             .padding(14.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(markdown(note.text, c), style = DdType.body, color = c.text, maxLines = 12)
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+        Text(
+            markdown(note.text, c), style = DdType.body, color = c.text,
+            maxLines = if (expanded) Int.MAX_VALUE else 6,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+        if (long) {
+            Text(
+                if (expanded) "Show less" else "Show more", style = DdType.small, color = c.accent,
+                modifier = Modifier.clickable { expanded = !expanded },
+            )
+        }
+        if (link != null) {
+            Text(
+                "Open link", style = DdType.label, color = c.accent,
+                modifier = Modifier.clickable { onOpenLink(link) },
+            )
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
             NoteAction(Icons.Outlined.ContentCopy, "Copy", c.textMuted, onCopy)
             NoteAction(Icons.Outlined.PushPin, if (note.pinned) "Unpin" else "Pin", if (note.pinned) c.accent else c.textMuted, onPin)
             NoteAction(Icons.Outlined.Delete, "Delete", c.textMuted, onDelete)
+            Spacer(Modifier.weight(1f))
+            Text(ago(note.updatedAtMs, now), style = DdType.small, color = c.textMuted)
         }
     }
 }
