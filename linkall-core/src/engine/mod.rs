@@ -44,6 +44,7 @@ mod background;
 pub(crate) mod clipboard;
 mod connection;
 mod diagnostics;
+mod drop_folder;
 pub(crate) mod file_ops;
 mod folder_ops;
 mod health;
@@ -58,6 +59,7 @@ mod trust_ops;
 mod types;
 
 use connection::*;
+pub use drop_folder::drop_folder_path;
 pub(crate) use file_ops::*;
 pub use folder_ops::{FolderItem, FolderProgress, FolderSend};
 pub use health::HealthIssue;
@@ -305,6 +307,7 @@ impl Engine {
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
         engine.spawn_health_monitor();
+        engine.spawn_drop_folder();
 
         // Spawn UDP broadcast beacon and listener for resilient discovery.
         // Off with discovery: test engines beaconed onto the real LAN, and
