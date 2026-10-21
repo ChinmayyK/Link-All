@@ -61,6 +61,13 @@ pub fn perform(action: Action) -> Result<(), String> {
     imp::perform(action)
 }
 
+/// Turns the display back on, without unlocking anything: the lock screen
+/// shows, ready for the owner to sign in. Used when the paired phone comes
+/// back after the walk-away lock.
+pub fn wake_display() -> Result<(), String> {
+    imp::wake_display()
+}
+
 /// How long a computer keeps ringing if nobody stops it.
 const RING_LIMIT: std::time::Duration = std::time::Duration::from_secs(30);
 
@@ -154,6 +161,15 @@ function key(code) {
                  set volume output volume v"
             ),
         ])
+    }
+
+    pub fn wake_display() -> Result<(), String> {
+        // caffeinate -u declares user activity, which wakes the display.
+        Command::new("/usr/bin/caffeinate")
+            .args(["-u", "-t", "3"])
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| format!("couldn't wake the display: {e}"))
     }
 
     /// The volume to put back after ringing, as osascript prints it ("40, false").
@@ -266,6 +282,15 @@ mod imp {
         }
     }
 
+    pub fn wake_display() -> Result<(), String> {
+        // -1 means on.
+        if unsafe { PostMessageW(HWND_BROADCAST, WM_SYSCOMMAND, SC_MONITORPOWER, -1) } != 0 {
+            Ok(())
+        } else {
+            Err("Windows didn't turn the display on".to_string())
+        }
+    }
+
     pub fn before_ring() {}
 
     pub fn chime() -> Result<(), String> {
@@ -333,6 +358,10 @@ mod imp {
             }
         }
         Err(format!("needs one of: {}", missing.join(", ")))
+    }
+
+    pub fn wake_display() -> Result<(), String> {
+        first_that_works(&[&["xset", "dpms", "force", "on"]])
     }
 
     pub fn before_ring() {}
@@ -405,6 +434,10 @@ mod imp {
     use super::Action;
 
     pub fn perform(_action: Action) -> Result<(), String> {
+        Err("this device can't be controlled".to_string())
+    }
+
+    pub fn wake_display() -> Result<(), String> {
         Err("this device can't be controlled".to_string())
     }
 

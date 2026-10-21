@@ -18,11 +18,16 @@ const GRACE: Duration = Duration::from_secs(30);
 pub(super) enum Step {
     Nothing,
     Lock,
+    /// The phone is back after the lock: turn the display on so the lock
+    /// screen shows. Nothing is unlocked.
+    Wake,
 }
 
 #[derive(Default)]
 pub(super) struct Watch {
     had_phone: bool,
+    /// This watcher locked the screen and the phone hasn't come back yet.
+    locked: bool,
     gone_for: Duration,
 }
 
@@ -34,6 +39,9 @@ impl Watch {
         if phone_here {
             self.had_phone = true;
             self.gone_for = Duration::ZERO;
+            if std::mem::take(&mut self.locked) {
+                return Step::Wake;
+            }
             return Step::Nothing;
         }
         if !self.had_phone || !network_up {
@@ -44,6 +52,7 @@ impl Watch {
         if self.gone_for >= GRACE {
             // Lock once; it arms again when the phone comes back.
             self.had_phone = false;
+            self.locked = true;
             self.gone_for = Duration::ZERO;
             return Step::Lock;
         }
@@ -82,6 +91,10 @@ impl Engine {
                     network_manager::has_local_network(),
                     CHECK_EVERY,
                 );
+                if step == Step::Wake {
+                    tracing::info!("the paired phone is back, waking the display");
+                    let _ = tokio::task::spawn_blocking(crate::remote_control::wake_display).await;
+                }
                 if step == Step::Lock {
                     tracing::info!("the paired phone has been gone, locking the screen");
                     let _ = tokio::task::spawn_blocking(|| {
@@ -137,6 +150,23 @@ mod tests {
         let mut w = Watch::default();
         run(&mut w, true, true, 1);
         assert!(run(&mut w, false, false, 60)
+            .iter()
+            .all(|s| *s == Step::Nothing));
+    }
+
+    #[test]
+    fn the_display_wakes_once_when_the_phone_returns_after_a_lock() {
+        let mut w = Watch::default();
+        run(&mut w, true, true, 1);
+        run(&mut w, false, true, 20);
+        let back = run(&mut w, true, true, 5);
+        assert_eq!(back.iter().filter(|s| **s == Step::Wake).count(), 1);
+        assert_eq!(back[0], Step::Wake);
+        // A phone that was only briefly gone, with no lock, wakes nothing.
+        let mut w = Watch::default();
+        run(&mut w, true, true, 1);
+        run(&mut w, false, true, 3);
+        assert!(run(&mut w, true, true, 5)
             .iter()
             .all(|s| *s == Step::Nothing));
     }
