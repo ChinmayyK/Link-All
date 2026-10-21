@@ -58,9 +58,9 @@ private val FinishedFileKinds = setOf(
 @Composable
 fun FilesTab(
     isDark: Boolean,
-    peers: List<PeerSnapshot>,
-    feed: List<ActivityEntry>,
-    activeTransfers: List<TransferProgress>,
+    peers: kotlinx.collections.immutable.ImmutableList<PeerSnapshot>,
+    feed: kotlinx.collections.immutable.ImmutableList<ActivityEntry>,
+    activeTransfers: kotlinx.collections.immutable.ImmutableList<TransferProgress>,
     onActionSendFiles: (String?) -> Unit,
     onActionSendFolder: (String?) -> Unit,
     onActionPauseTransfer: (String) -> Unit,
