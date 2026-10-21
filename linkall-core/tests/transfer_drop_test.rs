@@ -120,7 +120,10 @@ async fn a_transfer_cut_off_by_a_drop_finishes_after_reconnecting() {
     wait_for_progress(&mut phone, 40).await;
 
     relay.cut();
-    wait_for_disconnect(&mut computer, phone.id, Duration::from_secs(20)).await;
+    // Watch the phone, which dialled and loses the link first. The computer may
+    // be slow to notice (a debug build on a busy runner), and when the phone has
+    // already reconnected it replaces the old session without reporting a drop.
+    wait_for_disconnect(&mut phone, computer.id, Duration::from_secs(20)).await;
     eventually_within(
         Duration::from_secs(60),
         "they reconnect by themselves",
