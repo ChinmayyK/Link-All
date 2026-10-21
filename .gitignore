@@ -98,3 +98,6 @@ platforms/android/app/src/main/jniLibs/**/libandroid_native_keyring_store-*.so
 
 # Windows MSIX builds (scripts/windows-msix.ps1)
 /dist/
+
+# Built by cargo-ndk (build-android.sh and the release workflow); not source.
+platforms/android/app/src/main/jniLibs/*/liblinkall_core.so
