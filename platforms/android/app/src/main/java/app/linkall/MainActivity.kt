@@ -641,6 +641,21 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Failed to refresh service onResume", e)
         }
+        // The service reports a failed start here; without this it died
+        // silently and the app looked fine but never found a device.
+        feedRefreshHandler.postDelayed({ showServiceStartError() }, 2500L)
+    }
+
+    private fun showServiceStartError() {
+        if (isFinishing || isDestroyed) return
+        val prefs = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
+        val error = prefs.getString(LinkAllService.PREF_START_ERROR, null) ?: return
+        prefs.edit().remove(LinkAllService.PREF_START_ERROR).apply()
+        android.app.AlertDialog.Builder(this)
+            .setTitle("Link All couldn't start")
+            .setMessage("Your devices won't connect until it does. Restart the app. If this keeps happening, send this to the developer:\n\n$error")
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {

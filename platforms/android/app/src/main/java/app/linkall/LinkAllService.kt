@@ -175,6 +175,8 @@ class LinkAllService : Service() {
         const val EXTRA_NOTIFICATION_TITLE  = "notification_title"
         const val EXTRA_NOTIFICATION_TEXT   = "notification_text"
         const val PREF_SERVICE_RUNNING      = "service_running"
+        /** Why the service could not start; the app shows it, then clears it. */
+        const val PREF_START_ERROR          = "service_start_error"
 
         // Poll intervals
         private const val POLL_FULL_MS      = 20L    // 50 Hz — always-active mode
@@ -709,6 +711,9 @@ class LinkAllService : Service() {
             ensureEngineStarted(intent)
         } catch (ex: Throwable) {
             Log.e(TAG, "Engine start failed", ex)
+            prefs().edit()
+                .putString(PREF_START_ERROR, "${ex.javaClass.simpleName}: ${ex.message}")
+                .apply()
             // The engine may have started before the step that threw. Left
             // running, the next start launched another one in this process,
             // on the same port and the same pairing files.
@@ -726,9 +731,14 @@ class LinkAllService : Service() {
             false
         }
         if (!engineUp) {
+            val prefs = prefs()
+            if (!prefs.contains(PREF_START_ERROR)) {
+                prefs.edit().putString(PREF_START_ERROR, "The engine did not start.").apply()
+            }
             stopSelf()
             return START_NOT_STICKY
         }
+        prefs().edit().remove(PREF_START_ERROR).apply()
 
         return try {
             handleStart(intent)
