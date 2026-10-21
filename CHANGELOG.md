@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Android:** Verification codes. Turn on Settings › Continuity › Verification codes (it needs notification access) and the 4 to 8 digit code in a text from a bank, Google or GitHub is sent to your computers' clipboards, so you can paste it. Only a message that says what the number is for counts, and an amount or a year in the same message is not picked.
 - **Click to call.** `linkall-cli call <device-id> <number>` offers a paired phone a call: the phone shows a notification, and the dialer opens with the number filled in when you tap it. Nothing is dialled on its own.
 - **Walk-away lock.** On Mac, Windows and Linux, turn on "Lock when my phone leaves" and the computer locks when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone. Off by default.
 - **Trackpad and keyboard.** The phone's Remote sheet opens a full-screen trackpad for a paired computer: one finger moves the pointer, a tap clicks, two fingers scroll, a two-finger tap right-clicks. A text field and arrow keys type, and Air mouse points with the phone's gyroscope. Needs Remote control on at the computer.
