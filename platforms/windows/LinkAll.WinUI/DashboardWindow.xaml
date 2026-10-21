@@ -29,6 +29,7 @@
                         IsTitleBarAutoPaddingEnabled="False"
                         OpenPaneLength="212"
                         SelectionChanged="NavView_SelectionChanged"
+                        BackRequested="NavView_BackRequested"
                         Background="Transparent">
 
             <!-- Reserves the height our custom title bar overlay draws into,
@@ -45,11 +46,11 @@
             -->
             <NavigationView.MenuItems>
 
-                <NavigationViewItem Tag="Devices" Content="Devices" x:Name="NavDevices"
+                <NavigationViewItem Tag="Devices" Content="Home" x:Name="NavDevices"
                                     Style="{StaticResource AppNavItem}"
-                                    AutomationProperties.Name="Devices">
+                                    AutomationProperties.Name="Home">
                     <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE8EA;" FontSize="16" />
+                        <FontIcon Glyph="&#xE80F;" FontSize="16" />
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
@@ -61,19 +62,11 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="DevicePeer" Content="Remote files" x:Name="NavPeer"
+                <NavigationViewItem Tag="Transfers" Content="Files" x:Name="NavTransfers"
                                     Style="{StaticResource AppNavItem}"
-                                    AutomationProperties.Name="Remote files">
+                                    AutomationProperties.Name="Files">
                     <NavigationViewItem.Icon>
                         <FontIcon Glyph="&#xE8B7;" FontSize="16" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
-
-                <NavigationViewItem Tag="Transfers" Content="Transfers" x:Name="NavTransfers"
-                                    Style="{StaticResource AppNavItem}"
-                                    AutomationProperties.Name="Transfers">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE896;" FontSize="16" />
                     </NavigationViewItem.Icon>
                     <!-- Running-transfer count, so progress is visible from
                          any page. -->
@@ -92,13 +85,6 @@
                     </NavigationViewItem.Icon>
                 </NavigationViewItem>
 
-                <NavigationViewItem Tag="Scratchpad" Content="Scratchpad" x:Name="NavScratchpad"
-                                    Style="{StaticResource AppNavItem}"
-                                    AutomationProperties.Name="Scratchpad">
-                    <NavigationViewItem.Icon>
-                        <FontIcon Glyph="&#xE70F;" FontSize="16" />
-                    </NavigationViewItem.Icon>
-                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <NavigationView.FooterMenuItems>
@@ -390,7 +376,7 @@
                  "Ecosystem" text visibly competing with "Devices" beneath
                  it. Toggled in DashboardWindow.xaml.cs's SetPageTitle. -->
             <TextBlock x:Name="PageTitleText" Grid.Column="1"
-                       Text="Devices"
+                       Text="Home"
                        Style="{StaticResource AppPageTitle}"
                        VerticalAlignment="Center"
                        Margin="28,0,12,0"

@@ -26,7 +26,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Scratchpad" Style="{StaticResource AppDisplayText}" />
+                    <TextBlock Text="Notes" Style="{StaticResource AppDisplayText}" />
                     <TextBlock x:Name="CountText" Style="{StaticResource AppSecondary}"
                                Text="Shared with your paired devices, nowhere else" />
                 </StackPanel>

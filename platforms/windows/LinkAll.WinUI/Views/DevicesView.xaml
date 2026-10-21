@@ -23,7 +23,9 @@
 
         <!-- ============================== DEVICE ROW (paired) -->
         <DataTemplate x:Key="DeviceRowTemplate" x:DataType="winui:PeerViewModel">
-            <Grid Padding="16,12" ColumnSpacing="14" Background="Transparent">
+            <Grid Padding="16,12" ColumnSpacing="14" Background="Transparent"
+                  Tapped="OnOpenDeviceTapped"
+                  ToolTipService.ToolTip="Open this device's page">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
@@ -244,7 +246,8 @@
         </DataTemplate>
     </Page.Resources>
 
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+    <Grid>
+    <ScrollViewer x:Name="HomeScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <ui:PageColumn MaxContentWidth="860">
         <StackPanel Padding="{StaticResource PagePadding}" Spacing="24">
 
@@ -284,6 +287,12 @@
                 </StackPanel>
 
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <Button Style="{StaticResource AppIconButton}"
+                            ToolTipService.ToolTip="Notes"
+                            AutomationProperties.Name="Notes"
+                            Click="OnOpenNotesClicked">
+                        <FontIcon Glyph="&#xE70B;" FontSize="15" />
+                    </Button>
                     <Button Style="{StaticResource AppSecondaryButton}"
                             ToolTipService.ToolTip="Show a pairing code for a new device (Ctrl+N)"
                             Click="OnShowQRCodeClicked">
@@ -575,4 +584,167 @@
         </StackPanel>
         </ui:PageColumn>
     </ScrollViewer>
+
+    <!-- ============================== A DEVICE'S PAGE
+         Opened from its row; DataContext is that PeerViewModel, so every
+         button below reaches the same handlers as the row menus. -->
+    <ScrollViewer x:Name="DevicePage" Visibility="Collapsed"
+                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ui:PageColumn MaxContentWidth="860">
+            <StackPanel Padding="{StaticResource PagePadding}" Spacing="4">
+                <Button Style="{StaticResource AppGhostButton}" Click="OnCloseDeviceClicked"
+                        HorizontalAlignment="Left" AutomationProperties.Name="Back to Home"
+                        ToolTipService.ToolTip="Back to Home">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <FontIcon Glyph="&#xE72B;" FontSize="12" />
+                        <TextBlock Text="Home" />
+                    </StackPanel>
+                </Button>
+
+                <Grid ColumnSpacing="16" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border Style="{StaticResource AppIconTileLarge}" Width="64" Height="64">
+                        <FontIcon Glyph="{Binding DeviceGlyph}" FontSize="28"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  Foreground="{ThemeResource AppAccentBrush}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="{Binding DisplayName}" Style="{StaticResource AppDisplayText}" FontSize="26"
+                                   TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding ConnectionText}" Style="{StaticResource AppSecondary}" />
+                    </StackPanel>
+                </Grid>
+
+                <!-- Pairing, not paired yet, or offline: what to do first. -->
+                <Border Style="{StaticResource AppCard}" Padding="18,16" Margin="0,16,0,0"
+                        Visibility="{Binding pairingRequested, Converter={StaticResource BoolToVisibleConverter}}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Wants to pair with this PC" Style="{StaticResource AppBodyStrong}" />
+                        <TextBlock Text="{Binding pairingPin}" Style="{StaticResource AppDisplayText}" FontSize="28" />
+                        <TextBlock Text="Pair only if the other device shows the same code." Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Style="{StaticResource AppPrimaryButton}" Content="Pair" Click="OnPairingAcceptClicked" />
+                            <Button Style="{StaticResource AppSecondaryButton}" Content="Decline" Click="OnPairingRejectClicked" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource AppCard}" Padding="18,16" Margin="0,16,0,0"
+                        Visibility="{Binding ShowPairButton, Converter={StaticResource BoolToVisibleConverter}}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Not paired yet" Style="{StaticResource AppBodyStrong}" />
+                        <TextBlock Text="Pair to share your clipboard and files. Both devices show a code to compare first."
+                                   Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                        <Button Style="{StaticResource AppPrimaryButton}" Content="Pair" Click="OnPairDeviceClicked" />
+                    </StackPanel>
+                </Border>
+                <Border Style="{StaticResource AppCard}" Padding="18,16" Margin="0,16,0,0"
+                        Visibility="{Binding ShowConnectButton, Converter={StaticResource BoolToVisibleConverter}}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Not connected" Style="{StaticResource AppBodyStrong}" />
+                        <TextBlock Text="It reconnects on its own when both are on the same Wi-Fi or hotspot and Link All is open on it."
+                                   Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                        <Button Style="{StaticResource AppPrimaryButton}" Content="Connect now" Click="OnPairDeviceClicked" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibleConverter}}">
+                <StackPanel Spacing="8" Margin="0,16,0,0">
+                    <TextBlock Text="SHARE" Style="{StaticResource AppOverline}" />
+                    <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="200" ItemHeight="56">
+                        <Button Style="{StaticResource AppActionTile}" Click="OnSendFilesToDeviceClicked" MinWidth="190"
+                                AutomationProperties.Name="Send files">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE898;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Send files" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource AppActionTile}" Click="OnSendFolderToDeviceClicked" MinWidth="190"
+                                AutomationProperties.Name="Send a folder">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Send a folder" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource AppActionTile}" Click="OnOpenLinkOnDeviceClicked" MinWidth="190" ToolTipService.ToolTip="It opens in that device's browser"
+                                AutomationProperties.Name="Open a link">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE71B;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Open a link" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </VariableSizedWrapGrid>
+                </StackPanel>
+                <StackPanel Spacing="8" Margin="0,16,0,0">
+                    <TextBlock Text="FILES" Style="{StaticResource AppOverline}" />
+                    <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="200" ItemHeight="56">
+                        <Button Style="{StaticResource AppActionTile}" Click="OnExploreDeviceClicked" MinWidth="190"
+                                AutomationProperties.Name="Browse files">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xEC50;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Browse files" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </VariableSizedWrapGrid>
+                </StackPanel>
+                <StackPanel Spacing="8" Margin="0,16,0,0" Visibility="{Binding IsPhone, Converter={StaticResource BoolToVisibleConverter}}">
+                    <TextBlock Text="PHONE" Style="{StaticResource AppOverline}" />
+                    <VariableSizedWrapGrid Orientation="Horizontal" ItemWidth="200" ItemHeight="56">
+                        <Button Style="{StaticResource AppActionTile}" Click="OnCallFromPhoneClicked" MinWidth="190" ToolTipService.ToolTip="Your phone shows a notification that opens its dialer"
+                                AutomationProperties.Name="Call a number">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE717;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Call a number" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource AppActionTile}" Click="OnScanDocumentClicked" MinWidth="190"
+                                AutomationProperties.Name="Scan a document">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE8A5;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Scan a document" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource AppActionTile}" Click="OnTakePhotoClicked" MinWidth="190"
+                                AutomationProperties.Name="Take a photo">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xE722;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Take a photo" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Style="{StaticResource AppActionTile}" Click="OnFindPhoneClicked" MinWidth="190" ToolTipService.ToolTip="Rings it, even on silent"
+                                AutomationProperties.Name="Ring">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <FontIcon Glyph="&#xEA8F;" FontSize="16" Foreground="{ThemeResource AppAccentBrush}" />
+                                <TextBlock Text="Ring" Style="{StaticResource AppBodyStrong}" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </VariableSizedWrapGrid>
+                </StackPanel>
+                </StackPanel>
+
+                <TextBlock Text="ABOUT THIS DEVICE" Style="{StaticResource AppOverline}" Margin="0,24,0,8" />
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel Padding="16,12" Spacing="10">
+                        <Grid><TextBlock Text="System" Style="{StaticResource AppBody}" /><TextBlock Text="{Binding PlatformLabel}" Style="{StaticResource AppSecondary}" HorizontalAlignment="Right" /></Grid>
+                        <Grid><TextBlock Text="Address" Style="{StaticResource AppBody}" /><TextBlock Text="{Binding PrimaryIpText}" Style="{StaticResource AppMono}" HorizontalAlignment="Right" IsTextSelectionEnabled="True" /></Grid>
+                        <Grid Visibility="{Binding ShowBattery, Converter={StaticResource BoolToVisibleConverter}}"><TextBlock Text="Battery" Style="{StaticResource AppBody}" /><TextBlock Text="{Binding BatteryPercentText}" Style="{StaticResource AppSecondary}" HorizontalAlignment="Right" /></Grid>
+                        <Grid Visibility="{Binding HasFingerprint, Converter={StaticResource BoolToVisibleConverter}}"><TextBlock Text="Fingerprint" Style="{StaticResource AppBody}" /><TextBlock Text="{Binding fingerprint_display}" Style="{StaticResource AppMono}" HorizontalAlignment="Right" IsTextSelectionEnabled="True" /></Grid>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="MANAGE" Style="{StaticResource AppOverline}" Margin="0,24,0,8" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Style="{StaticResource AppSecondaryButton}" Content="Test speed" Click="OnSpeedTestDeviceClicked"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibleConverter}}" />
+                    <Button Style="{StaticResource AppSecondaryButton}" Content="Rename" Click="OnRenameDeviceClicked" />
+                    <Button Style="{StaticResource AppSecondaryButton}" Content="Disconnect" Click="OnDisconnectClicked"
+                            Visibility="{Binding IsConnected, Converter={StaticResource BoolToVisibleConverter}}" />
+                    <Button Style="{StaticResource AppDestructiveButton}" Content="Forget" Click="OnForgetDeviceMenuClicked" />
+                </StackPanel>
+            </StackPanel>
+        </ui:PageColumn>
+    </ScrollViewer>
+    </Grid>
 </Page>

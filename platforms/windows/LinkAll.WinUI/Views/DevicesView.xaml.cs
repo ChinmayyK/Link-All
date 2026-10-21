@@ -23,6 +23,40 @@ namespace LinkAll.WinUI.Views
             StartNowPlaying();
         }
 
+        // A row opens its device's page, unless the tap was on one of its own buttons.
+        private void OnOpenDeviceTapped(object sender, TappedRoutedEventArgs e)
+        {
+            for (var el = e.OriginalSource as DependencyObject; el != null && el != sender; el = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(el))
+            {
+                if (el is ButtonBase) return;
+            }
+            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer) OpenDevice(peer);
+        }
+
+        // The page sits over Home in this view, so Back returns to where Home was scrolled.
+        private void OpenDevice(PeerViewModel peer)
+        {
+            mgr.SelectedPeer = peer;
+            DevicePage.DataContext = peer;
+            HomeScroll.Visibility = Visibility.Collapsed;
+            DevicePage.Visibility = Visibility.Visible;
+            DevicePage.ChangeView(null, 0, null, true);
+        }
+
+        private void CloseDevice()
+        {
+            DevicePage.Visibility = Visibility.Collapsed;
+            HomeScroll.Visibility = Visibility.Visible;
+            DevicePage.DataContext = null;
+        }
+
+        private void OnCloseDeviceClicked(object sender, RoutedEventArgs e) => CloseDevice();
+
+        private void OnOpenNotesClicked(object sender, RoutedEventArgs e)
+        {
+            DashboardWindow.Current?.NavigateTo("Scratchpad");
+        }
+
         private void OnPeerCardTapped(object sender, TappedRoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
@@ -74,12 +108,17 @@ namespace LinkAll.WinUI.Views
             }
         }
 
-        private void OnForgetDeviceMenuClicked(object sender, RoutedEventArgs e)
+        private async void OnForgetDeviceMenuClicked(object sender, RoutedEventArgs e)
         {
-            if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)
-            {
-                mgr.ForgetPeer(peer.device_id);
-            }
+            if ((sender as FrameworkElement)?.DataContext is not PeerViewModel peer) return;
+            var dialog = Services.AppDialog.Create(this.XamlRoot, "\uE74D", $"Forget {peer.DisplayName}?",
+                "This PC stops trusting it. To use it again, pair again and compare the code.", danger: true);
+            dialog.PrimaryButtonText = "Forget";
+            dialog.CloseButtonText = "Cancel";
+            dialog.DefaultButton = ContentDialogButton.Close;
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+            mgr.ForgetPeer(peer.device_id);
+            if (DevicePage.DataContext == peer) CloseDevice();
         }
 
         private async void OnRenameDeviceClicked(object sender, RoutedEventArgs e)

@@ -11,8 +11,9 @@
     mc:Ignorable="d">
 
     <!--
-        Transfers, in the shared Android/Windows layout: large heading, the
-        live speed test when one runs, the in-progress list, then history.
+        Files, in the shared Android/Windows layout: large heading with Send,
+        each paired device to browse, the live speed test when one runs, the
+        in-progress list, then history.
         Rows sit in grouped panels separated by hairlines; each active row
         keeps its numbers (percent, rate) on the right and a thin bar under.
     -->
@@ -153,7 +154,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Transfers" Style="{StaticResource AppDisplayText}" />
+                    <TextBlock Text="Files" Style="{StaticResource AppDisplayText}" />
                     <TextBlock Style="{StaticResource AppSecondary}"
                                Text="{x:Bind mgr.TransfersSummaryText, Mode=OneWay}" />
                 </StackPanel>
@@ -184,6 +185,36 @@
                     </Button>
                 </StackPanel>
             </Grid>
+
+            <!-- Browse: each paired device; a connected one opens its files. -->
+            <StackPanel Spacing="10">
+                <TextBlock Text="Browse" Style="{StaticResource AppSectionTitle}" />
+                <Border Style="{StaticResource AppGroupCard}">
+                    <ItemsControl ItemsSource="{x:Bind mgr.KnownDevices, Mode=OneWay}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="winui:PeerViewModel">
+                                <Button Style="{StaticResource AppListRowButton}" Click="OnBrowseDeviceClicked"
+                                        IsEnabled="{x:Bind IsConnected, Mode=OneWay}"
+                                        AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}">
+                                    <Grid ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon Glyph="{x:Bind DeviceGlyph, Mode=OneWay}" FontSize="18" VerticalAlignment="Center" />
+                                        <StackPanel Grid.Column="1" Spacing="1">
+                                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" />
+                                            <TextBlock Text="{x:Bind ConnectionText, Mode=OneWay}" Style="{StaticResource AppCaption}" />
+                                        </StackPanel>
+                                        <FontIcon Grid.Column="2" Glyph="&#xE76C;" FontSize="12" VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </StackPanel>
 
             <!-- Live speed test, leading with the number it exists to produce. -->
             <ItemsControl ItemsSource="{x:Bind mgr.ActiveSpeedTests, Mode=OneWay}">

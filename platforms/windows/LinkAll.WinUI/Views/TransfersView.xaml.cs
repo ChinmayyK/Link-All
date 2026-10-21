@@ -147,5 +147,13 @@ namespace LinkAll.WinUI.Views
                 App.HandleError(ex);
             }
         }
+
+        // A paired device's files, over this page with Back.
+        private void OnBrowseDeviceClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not PeerViewModel peer || !peer.IsConnected) return;
+            mgr.SelectedPeer = peer;
+            DashboardWindow.Current?.NavigateTo("DevicePeer");
+        }
     }
 }
