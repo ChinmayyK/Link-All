@@ -5,6 +5,7 @@ mod clipboard;
 pub mod devices;
 mod extras;
 mod files;
+mod now_playing;
 pub mod pairing;
 pub mod palette;
 mod scratchpad;

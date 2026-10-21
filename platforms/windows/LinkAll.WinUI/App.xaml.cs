@@ -225,6 +225,7 @@ public partial class App : Application
             });
 
             Clipboard = new LinkAll.WinUI.Services.ClipboardManager();
+            new LinkAll.WinUI.Services.NowPlayingSource().Start();
             ClipboardReady.TrySetResult(Clipboard);
 
             try

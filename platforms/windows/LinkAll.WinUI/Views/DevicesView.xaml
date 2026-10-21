@@ -327,6 +327,9 @@
                 </StackPanel>
             </Grid>
 
+            <!-- ============================== NOW PLAYING: what another device is playing -->
+            <StackPanel x:Name="NowPlayingHost" />
+
             <!-- ============================== PAIRING REQUESTS -->
             <ItemsControl ItemsSource="{x:Bind mgr.PairingRequests, Mode=OneWay}"
                           Visibility="{x:Bind mgr.HasPairingRequests, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">

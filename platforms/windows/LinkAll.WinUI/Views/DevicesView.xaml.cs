@@ -20,6 +20,7 @@ namespace LinkAll.WinUI.Views
             TraceLog.Write("DevicesView constructor starting");
             this.InitializeComponent();
             TraceLog.Write("DevicesView InitializeComponent done");
+            StartNowPlaying();
         }
 
         private void OnPeerCardTapped(object sender, TappedRoutedEventArgs e)

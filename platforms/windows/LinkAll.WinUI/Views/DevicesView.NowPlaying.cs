@@ -1,0 +1,135 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media.Imaging;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace LinkAll.WinUI.Views
+{
+    // What another device is playing, with its cover and controls, at the top of Devices.
+    public sealed partial class DevicesView
+    {
+        private readonly DispatcherTimer _nowPlayingTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+        private string _nowPlayingShown = "";
+
+        private void StartNowPlaying()
+        {
+            _nowPlayingTimer.Tick += async (s, e) => await RefreshNowPlayingAsync();
+            this.Loaded += async (s, e) => { _nowPlayingTimer.Start(); await RefreshNowPlayingAsync(); };
+            this.Unloaded += (s, e) => _nowPlayingTimer.Stop();
+        }
+
+        private async Task RefreshNowPlayingAsync()
+        {
+            try
+            {
+                var item = await Task.Run(() =>
+                {
+                    using var doc = DaemonClient.Send(DaemonClient.Req("now_playing_list"));
+                    if (doc != null
+                        && doc.RootElement.TryGetProperty("data", out var data)
+                        && data.ValueKind == JsonValueKind.Array
+                        && data.GetArrayLength() > 0)
+                    {
+                        return data[0].Clone();
+                    }
+                    return (JsonElement?)null;
+                });
+                var key = item == null
+                    ? ""
+                    : $"{item.Value.GetProperty("device_id").GetString()}|{item.Value.GetProperty("title").GetString()}|{item.Value.GetProperty("playing").GetBoolean()}|{item.Value.GetProperty("position_ms").GetUInt64() / 2000}";
+                if (key == _nowPlayingShown) return;
+                _nowPlayingShown = key;
+                NowPlayingHost.Children.Clear();
+                if (item != null) NowPlayingHost.Children.Add(NowPlayingCard(item.Value));
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+        }
+
+        private static string Clock(ulong ms) => $"{ms / 60000}:{ms / 1000 % 60:00}";
+
+        private static void Command(string device, string action, long value = 0) =>
+            _ = Task.Run(() => DaemonClient.Send(DaemonClient.Req("media_command", ("target", device), ("action", action), ("value", value)))?.Dispose());
+
+        private UIElement NowPlayingCard(JsonElement item)
+        {
+            var device = item.GetProperty("device_id").GetString() ?? "";
+            var playing = item.GetProperty("playing").GetBoolean();
+            var position = item.GetProperty("position_ms").GetUInt64();
+            var duration = item.GetProperty("duration_ms").GetUInt64();
+            var artist = item.GetProperty("artist").GetString() ?? "";
+
+            var cover = new Border
+            {
+                Width = 72, Height = 72, CornerRadius = new CornerRadius(10),
+                Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AppSurfaceSubtleBrush"],
+            };
+            if (item.TryGetProperty("art_base64", out var art) && art.ValueKind == JsonValueKind.String)
+            {
+                try
+                {
+                    var image = new BitmapImage();
+                    using var stream = new MemoryStream(Convert.FromBase64String(art.GetString()!));
+                    image.SetSource(stream.AsRandomAccessStream());
+                    cover.Child = new Image { Source = image, Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill };
+                }
+                catch { cover.Child = new FontIcon { Glyph = "" }; }
+            }
+            else
+            {
+                cover.Child = new FontIcon { Glyph = "" };
+            }
+
+            var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+            text.Children.Add(new TextBlock { Text = item.GetProperty("title").GetString(), FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis });
+            text.Children.Add(new TextBlock { Text = artist.Length > 0 ? artist : item.GetProperty("album").GetString(), Opacity = 0.7, TextTrimming = TextTrimming.CharacterEllipsis });
+            var app = item.GetProperty("app").GetString();
+            text.Children.Add(new TextBlock
+            {
+                Text = $"{(string.IsNullOrEmpty(app) ? "Playing" : app)} · on {item.GetProperty("device_name").GetString()} · {Clock(position)} / {Clock(duration)}",
+                Opacity = 0.55, FontSize = 12,
+            });
+            if (duration > 0)
+            {
+                var slider = new Slider { Minimum = 0, Maximum = duration, Value = Math.Min(position, duration), StepFrequency = 1000, IsThumbToolTipEnabled = false };
+                slider.PointerCaptureLost += (s, e) => Command(device, "seek", (long)slider.Value);
+                text.Children.Add(slider);
+            }
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+            buttons.Children.Add(MediaButton("", "Previous", () => Command(device, "previous")));
+            buttons.Children.Add(MediaButton(playing ? "" : "", playing ? "Pause" : "Play", () => Command(device, "play_pause")));
+            buttons.Children.Add(MediaButton("", "Next", () => Command(device, "next")));
+
+            var row = new Grid { ColumnSpacing = 14, Padding = new Thickness(14) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            Grid.SetColumn(text, 1);
+            Grid.SetColumn(buttons, 2);
+            row.Children.Add(cover);
+            row.Children.Add(text);
+            row.Children.Add(buttons);
+            return new Border { Style = (Style)Application.Current.Resources["AppCard"], Child = row };
+        }
+
+        private static Button MediaButton(string glyph, string label, Action onClick)
+        {
+            var b = new Button
+            {
+                Content = new FontIcon { Glyph = glyph, FontSize = 16 },
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(10),
+            };
+            ToolTipService.SetToolTip(b, label);
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b, label);
+            b.Click += (s, e) => onClick();
+            return b;
+        }
+    }
+}

@@ -110,6 +110,7 @@ pub fn page(hub: &Hub) -> gtk::ScrolledWindow {
             .build(),
     );
     column.append(&hero);
+    column.append(&super::now_playing::card());
     add.set_action_name(Some("app.pair-phone"));
 
     // ── First run: pair a phone right here ──

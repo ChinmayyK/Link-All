@@ -78,12 +78,18 @@ impl Engine {
                 if !due {
                     return;
                 }
+                // An app that sends the cover once per track keeps it for the
+                // devices that connect later.
+                let mut remember = now.clone();
+                if remember.art.is_none() && !changed_track {
+                    remember.art = last.info.art.clone();
+                }
                 (
                     message_of(
                         now,
                         changed_track || last.info.art.is_none() && now.art.is_some(),
                     ),
-                    now.clone(),
+                    remember,
                 )
             }
         };
