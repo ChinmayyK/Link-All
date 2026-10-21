@@ -129,6 +129,8 @@ fun HomeTab(
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
     var showSendSheet by remember { mutableStateOf(false) }
     var showBrowsePicker by remember { mutableStateOf(false) }
+    var remoteTarget by remember { mutableStateOf<PeerSnapshot?>(null) }
+    var showRemotePicker by remember { mutableStateOf(false) }
     val browseFiles = LocalBrowseFiles.current
 
 
@@ -202,6 +204,17 @@ fun HomeTab(
                     enabled = enabled,
                     onClick = { if (connected.size == 1) browseFiles(connected.first()) else showBrowsePicker = true }
                 )
+                Hairline(c)
+                ActionRow(
+                    c, Icons.Outlined.SettingsRemote, "Remote",
+                    when (connected.size) {
+                        0 -> "Control music, volume and slides"
+                        1 -> "Control ${connected.first().name}"
+                        else -> "Control any of ${connected.size} devices"
+                    },
+                    enabled = enabled,
+                    onClick = { if (connected.size == 1) remoteTarget = connected.first() else showRemotePicker = true }
+                )
             }
         }
 
@@ -273,6 +286,10 @@ fun HomeTab(
     if (showBrowsePicker) {
         BrowseDevicePicker(c, connected, onPick = browseFiles, onDismiss = { showBrowsePicker = false })
     }
+    if (showRemotePicker) {
+        RemoteDevicePicker(c, connected, onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })
+    }
+    remoteTarget?.let { RemoteSheet(c, it, onDismiss = { remoteTarget = null }) }
 
     if (showSendSheet) {
         SendSheet(

@@ -1739,6 +1739,15 @@ class LinkAllService : Service() {
                 TransferManager.publishActiveTransfers(force = true)
             }
 
+            LinkAllJni.CR_EVENT_REMOTE_CONTROL_ACK -> {
+                if (!LinkAllJni.eventRemoteControlSuccess(ev)) {
+                    val why = LinkAllJni.eventText(ev) ?: "The computer didn't do that."
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        android.widget.Toast.makeText(applicationContext, why, android.widget.Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+
             LinkAllJni.CR_EVENT_FOLDER_TRANSFER_COMPLETE -> {
                 val folder = LinkAllJni.eventTransferFileName(ev) ?: "Folder"
                 val destDir = LinkAllJni.eventTransferDestPath(ev).orEmpty()

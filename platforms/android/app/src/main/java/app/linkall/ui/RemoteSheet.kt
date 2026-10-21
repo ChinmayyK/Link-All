@@ -1,0 +1,96 @@
+package app.linkall.ui
+
+import android.widget.Toast
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.SettingsRemote
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.VolumeDown
+import androidx.compose.material.icons.outlined.VolumeOff
+import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material.icons.outlined.NavigateBefore
+import androidx.compose.material.icons.outlined.NavigateNext
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
+import app.linkall.LinkAllJni
+import app.linkall.LinkAllService
+import app.linkall.PeerSnapshot
+
+/** Which connected computer to control, when there's more than one. */
+@Composable
+internal fun RemoteDevicePicker(c: DdColors, connected: List<PeerSnapshot>, onPick: (PeerSnapshot) -> Unit, onDismiss: () -> Unit) {
+    DdSheet(c, icon = Icons.Outlined.SettingsRemote, title = "Remote", subtitle = "Control another device", onDismiss = onDismiss) { close ->
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            connected.forEach { peer ->
+                SheetOption(c, osIcon(peer.platform, peer.name), peer.name, null) { close { onPick(peer) } }
+            }
+        }
+    }
+}
+
+/** Music, volume and slide keys for one computer. The computer decides whether to allow it. */
+@Composable
+internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    fun press(action: String) {
+        Thread {
+            // Null: the engine isn't running. Empty: sent. Otherwise why it could not be sent.
+            val problem = LinkAllService.withLiveEngine { handle ->
+                if (LinkAllJni.remoteControl(handle, peer.id, action) == 0) "" else LinkAllJni.remoteControlError(handle, peer.id) ?: "Couldn't reach ${peer.name}."
+            } ?: "Link All isn't running."
+            if (problem.isNotEmpty()) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    Toast.makeText(context, problem, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+
+    DdSheet(
+        c, icon = Icons.Outlined.SettingsRemote, title = "Remote",
+        subtitle = "${peer.name} · turn on Remote control in Link All there first",
+        onDismiss = onDismiss,
+    ) { _ ->
+        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Group(c, "Music") {
+                RemoteKey(c, Icons.Outlined.SkipPrevious, "Previous") { press("previous_track") }
+                RemoteKey(c, Icons.Outlined.PlayArrow, "Play / pause") { press("play_pause") }
+                RemoteKey(c, Icons.Outlined.SkipNext, "Next") { press("next_track") }
+            }
+            Group(c, "Volume") {
+                RemoteKey(c, Icons.Outlined.VolumeDown, "Down") { press("volume_down") }
+                RemoteKey(c, Icons.Outlined.VolumeOff, "Mute") { press("mute") }
+                RemoteKey(c, Icons.Outlined.VolumeUp, "Up") { press("volume_up") }
+            }
+            Group(c, "Slides") {
+                RemoteKey(c, Icons.Outlined.NavigateBefore, "Back") { press("slide_previous") }
+                RemoteKey(c, Icons.Outlined.NavigateNext, "Next") { press("slide_next") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Group(c: DdColors, title: String, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.material3.Text(title, style = DdType.small, color = c.textMuted)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { content() }
+    }
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.RemoteKey(
+    c: DdColors,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+) {
+    PillButton(c, label, filled = false, modifier = Modifier.weight(1f), icon = icon, onClick = onClick)
+}
