@@ -339,5 +339,14 @@ namespace LinkAll.WinUI.Views
             var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("sync_enabled", mgr.SyncEnabled))));
             DaemonActions.ReportIfFailed("Save Settings", resp);
         }
+
+        // A category button scrolls its group to the top of the page.
+        private void OnCategoryClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.Tag is string name && FindName(name) is UIElement group)
+            {
+                group.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0, AnimationDesired = true });
+            }
+        }
     }
 }
