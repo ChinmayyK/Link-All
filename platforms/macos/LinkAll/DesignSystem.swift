@@ -33,25 +33,26 @@ extension Color {
 enum CRTheme {
 
     // ── Brand ─────────────────────────────────────────────────────────────────
-    static let brandElectric = Color(hex: 0x0055CC) // Native blue
+    // Ink blue on light, a softer blue on dark: the one brand colour.
+    static var brandElectric: Color { Color(light: Color(hex: 0x2F5BFF), dark: Color(hex: 0x5F82FF)) }
     static let brandViolet   = Color(hex: 0x5E5CE6) // Native purple
     static let brandCyan     = Color(hex: 0x32ADE6)
     static let brandPink     = Color(hex: 0xFF2D55)
 
     // ── Semantic surfaces ─────────────────────────────────────────────────────
-    // Dark mode is true black throughout; fills and cards step up to
-    // #121212 / #141414 so they still read as raised against it.
-    static var surface:         Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x000000)) }
-    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF5F5F5), dark: Color(hex: 0x121212)) }
-    static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x141414)) }
+    // Warm paper in light mode, a warm near-black in dark; cards step up
+    // from the page so they still read as raised against it.
+    static var surface:         Color { Color(light: Color(hex: 0xFAF8F5), dark: Color(hex: 0x0F1012)) }
+    static var surfaceStrong:   Color { Color(light: Color(hex: 0xF2EFEA), dark: Color(hex: 0x17181B)) }
+    static var surfaceElevated: Color { Color(light: Color(hex: 0xFFFFFF), dark: Color(hex: 0x1D1E22)) }
 
     // ── Row states ────────────────────────────────────────────────────────────
     static var rowHover:    Color { Color(light: Color(hex: 0x000000, opacity: 0.04), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
     static var rowSelected: Color { Color(light: Color(hex: 0x000000, opacity: 0.08), dark: Color(hex: 0xFFFFFF, opacity: 0.10)) }
 
     // ── System accent palette ─────────────────────────────────────────────────
-    static let accentBlue   = Color(hex: 0x0055CC)
-    static let accentGreen  = Color(hex: 0x34C759)
+    static var accentBlue: Color { brandElectric }
+    static var accentGreen: Color { Color(light: Color(hex: 0x16A34A), dark: Color(hex: 0x34D399)) }
     static let accentYellow = Color(hex: 0xFFCC00)
     static let accentOrange = Color(hex: 0xFF9500)
     static let accentRed    = Color(hex: 0xFF3B30)
@@ -63,14 +64,14 @@ enum CRTheme {
     static let accentGold   = Color(hex: 0xAF52DE)
 
     // ── Text ──────────────────────────────────────────────────────────────────
-    static var ink:       Color { Color(light: Color(hex: 0x000000, opacity: 0.85), dark: Color(hex: 0xFFFFFF, opacity: 0.85)) }
-    static var inkSoft:   Color { Color(light: Color(hex: 0x000000, opacity: 0.55), dark: Color(hex: 0xFFFFFF, opacity: 0.55)) }
-    static var inkSubtle: Color { Color(light: Color(hex: 0x000000, opacity: 0.40), dark: Color(hex: 0xFFFFFF, opacity: 0.40)) }
-    static var inkFaint:  Color { Color(light: Color(hex: 0x000000, opacity: 0.25), dark: Color(hex: 0xFFFFFF, opacity: 0.25)) }
+    static var ink:       Color { Color(light: Color(hex: 0x1B1A17, opacity: 0.90), dark: Color(hex: 0xF1EFEA, opacity: 0.88)) }
+    static var inkSoft:   Color { Color(light: Color(hex: 0x1B1A17, opacity: 0.60), dark: Color(hex: 0xF1EFEA, opacity: 0.60)) }
+    static var inkSubtle: Color { Color(light: Color(hex: 0x1B1A17, opacity: 0.42), dark: Color(hex: 0xF1EFEA, opacity: 0.42)) }
+    static var inkFaint:  Color { Color(light: Color(hex: 0x1B1A17, opacity: 0.26), dark: Color(hex: 0xF1EFEA, opacity: 0.26)) }
 
     // ── Borders ───────────────────────────────────────────────────────────────
-    static var stroke:     Color { Color(light: Color(hex: 0x000000, opacity: 0.10), dark: Color(hex: 0xFFFFFF, opacity: 0.10)) }
-    static var strokeSoft: Color { Color(light: Color(hex: 0x000000, opacity: 0.05), dark: Color(hex: 0xFFFFFF, opacity: 0.05)) }
+    static var stroke:     Color { Color(light: Color(hex: 0x1B1A17, opacity: 0.10), dark: Color(hex: 0xF1EFEA, opacity: 0.10)) }
+    static var strokeSoft: Color { Color(light: Color(hex: 0x1B1A17, opacity: 0.05), dark: Color(hex: 0xF1EFEA, opacity: 0.05)) }
 
     // ── Legacy Mappings (Redirect to strict surfaces) ─────────────────────────
     static var sidebarBase: Color { surfaceElevated }
