@@ -31,4 +31,15 @@ class ScratchpadHelpersTest {
         assertEquals("2 days ago", ago(now - 2 * 86_400_000, now))
         assertEquals("", ago(0, now))
     }
+
+    @Test fun noteKinds() {
+        assertEquals(NoteKind.Link, kindOf("https://example.com/docs"))
+        assertEquals(NoteKind.Link, kindOf("read later https://example.com/a"))
+        assertEquals(NoteKind.Code, kindOf("ssh ops@10.0.0.4"))
+        assertEquals(NoteKind.Code, kindOf("git pull\nnpm install"))
+        assertEquals(NoteKind.Code, kindOf("```\nlet x = 1\n```"))
+        assertEquals(NoteKind.Text, kindOf("Buy milk and eggs"))
+        // A long text that merely mentions a link is still text.
+        assertEquals(NoteKind.Text, kindOf("The report is at https://example.com/r and it says " + "a lot ".repeat(30)))
+    }
 }
