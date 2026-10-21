@@ -57,6 +57,10 @@ object LinkAllJni {
     const val CR_EVENT_SCRATCHPAD_CHANGED      = 45
     /** A paired computer asked this phone to take a picture; the mode ("photo" or "document") is [eventText]. */
     const val CR_EVENT_CAPTURE_REQUESTED       = 46
+    /** What a paired device plays changed; see [nowPlayingJson]. */
+    const val CR_EVENT_NOW_PLAYING_CHANGED     = 47
+    /** A computer asked this phone's player to do something; [eventText] is "action:value". */
+    const val CR_EVENT_MEDIA_COMMAND           = 48
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)
@@ -76,6 +80,14 @@ object LinkAllJni {
     /** Why [remoteControl] could not send, as a sentence, or null. */
     @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
     @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean
+    // Now Playing: what this phone plays, and what the paired computers play.
+    @JvmStatic external fun setNowPlaying(handle: Long, title: String, artist: String, album: String, app: String, playing: Boolean, positionMs: Long, durationMs: Long, art: ByteArray?): Int
+    @JvmStatic external fun clearNowPlaying(handle: Long): Int
+    /** What the paired devices play, as a JSON array without cover art. */
+    @JvmStatic external fun nowPlayingJson(handle: Long): String?
+    @JvmStatic external fun nowPlayingArt(handle: Long, deviceId: String): ByteArray?
+    /** [action]: play, pause, play_pause, next, previous or seek (with [value] in ms). */
+    @JvmStatic external fun sendMediaCommand(handle: Long, deviceId: String, action: String, value: Long): Int
     // Scratchpad: notes shared between your devices.
     /** The notes as a JSON array, pinned first; each has id, text, pinned, updated_at_ms. */
     @JvmStatic external fun scratchpadListJson(handle: Long): String?

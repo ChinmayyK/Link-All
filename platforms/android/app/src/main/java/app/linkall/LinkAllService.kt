@@ -631,6 +631,7 @@ class LinkAllService : Service() {
             // Cache our own UUID prefix so NSD can filter self-connections.
             myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
             myDeviceUuidPrefix = myDeviceId?.take(8)
+            nowPlaying = NowPlayingBridge(applicationContext).also { it.start() }
             startNsdDiscovery()   // advertise + browse so the Mac can find us
             registerNetworkCallback() // restart NSD on WiFi changes
             // call continuity: receiver is statically registered now
@@ -1131,7 +1132,11 @@ class LinkAllService : Service() {
         }
     }
 
+    private var nowPlaying: NowPlayingBridge? = null
+
     override fun onDestroy() {
+        nowPlaying?.stop()
+        nowPlaying = null
         FindPhone.stop(this)
         unregisterCallStateCallback()
         stopCallRefresh()
@@ -1782,6 +1787,10 @@ class LinkAllService : Service() {
                     }
                 }
             }
+
+            LinkAllJni.CR_EVENT_NOW_PLAYING_CHANGED -> nowPlaying?.refreshRemote()
+
+            LinkAllJni.CR_EVENT_MEDIA_COMMAND -> LinkAllJni.eventText(ev)?.let { nowPlaying?.onCommand(it) }
 
             LinkAllJni.CR_EVENT_CAPTURE_REQUESTED -> {
                 val deviceId = LinkAllJni.eventDeviceId(ev) ?: return
