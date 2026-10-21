@@ -93,7 +93,7 @@ import app.linkall.ui.theme.CRTypography
 import app.linkall.ui.theme.crGlassCard
 import app.linkall.ui.theme.crPressScale
 
-val CRTheme.brandElectric get() = Color(0xFF0066FF)
+val CRTheme.brandElectric get() = Color(0xFF14B8A6)
 val CRTheme.brandViolet get() = Color(0xFF8B5CF6)
 val CRTheme.brandCyan get() = Color(0xFF06B6D4)
 val CRTheme.brandPink get() = Color(0xFFEC4899)
