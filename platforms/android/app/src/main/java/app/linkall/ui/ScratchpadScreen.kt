@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
@@ -563,7 +564,7 @@ private fun Composer(c: DdColors, value: String, onChange: (String) -> Unit, onS
     val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     Row(
         Modifier
-            .padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = if (keyboardOpen) 34.dp else 12.dp)
+            .padding(start = PageGutter, end = PageGutter, top = 8.dp, bottom = if (keyboardOpen) 34.dp else 20.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
             .background(c.surface)
@@ -571,7 +572,12 @@ private fun Composer(c: DdColors, value: String, onChange: (String) -> Unit, onS
             .padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
-        Box(Modifier.weight(1f).padding(vertical = 8.dp)) {
+        // As tall as the send button, with the text centred in it, so the hint and what
+        // you type sit level with the button; a longer note grows the box upwards.
+        Box(
+            Modifier.weight(1f).heightIn(min = 44.dp).padding(end = 8.dp),
+            contentAlignment = Alignment.CenterStart,
+        ) {
             if (value.isEmpty()) Text("A link, a command, a thought…", style = DdType.body, color = c.textMuted)
             BasicTextField(
                 value = value, onValueChange = onChange, maxLines = 6,
