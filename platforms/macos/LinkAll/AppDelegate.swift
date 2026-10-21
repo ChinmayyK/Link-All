@@ -274,6 +274,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .commandPalette: openCommandPalette()
         case .pushClipboard: forcePushClipboard()
         case .sendFile: sendFileFromMenu()
+        case .findPhone: store.findPhone()
         case .scan: scanDevices()
         case .connectByIP: connectManually()
         case .diagnostics: openDiagnostics()

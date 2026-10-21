@@ -6,6 +6,7 @@ enum MenuBarPopoverAction {
     case commandPalette
     case pushClipboard
     case sendFile
+    case findPhone
     case scan
     case connectByIP
     case diagnostics
@@ -123,7 +124,7 @@ struct MenuBarPopoverView: View {
                 Divider().frame(height: 14)
                 
                 Button(action: { onAction(.scan) }) {
-                    Text("Scan Network")
+                    Text("Scan")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary)
                         .lineLimit(1)
@@ -140,6 +141,21 @@ struct MenuBarPopoverView: View {
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+
+                Divider().frame(height: 14)
+
+                // Rings a paired phone, even on silent, so it can be found.
+                Button(action: { onAction(.findPhone) }) {
+                    Text("Find Phone")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)
                 }
