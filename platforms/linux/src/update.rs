@@ -53,15 +53,15 @@ pub fn refresh_if_due() {
 }
 
 fn fetch() -> Option<Update> {
-    let body = ureq::get(LATEST)
-        .timeout(Duration::from_secs(8))
-        .set("Accept", "application/vnd.github+json")
-        .set("User-Agent", "link-all")
+    let mut response = ureq::get(LATEST)
+        .config()
+        .timeout_global(Some(Duration::from_secs(8)))
+        .build()
+        .header("Accept", "application/vnd.github+json")
+        .header("User-Agent", "link-all")
         .call()
-        .ok()?
-        .into_string()
         .ok()?;
-    parse(&body)
+    parse(&response.body_mut().read_to_string().ok()?)
 }
 
 fn parse(body: &str) -> Option<Update> {
