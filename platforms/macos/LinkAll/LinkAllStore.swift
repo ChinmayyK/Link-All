@@ -798,19 +798,32 @@ final class LinkAllStore: ObservableObject {
             completion?(false)
             return
         }
-        LinkAllModal.shared.present { [weak self] dismiss in
-            SendModalCard(
-                devices: devices,
-                urls: urls,
-                onSend: { chosen, target in
-                    dismiss()
-                    guard let self else { return }
-                    if let target { self.sendFiles(urls: chosen, to: target) }
-                    else { self.sendFiles(urls: chosen, toPeer: nil) }
-                    completion?(true)
-                },
-                onCancel: { dismiss(); completion?(false) }
-            )
+        Task { [weak self] in
+            guard let self else { return }
+            // The core ranks the paired devices and says why any can't be used; if the
+            // daemon doesn't answer, every connected device is offered as usable.
+            let choices = (try? await self.ipc.deviceChoices(purpose: "send", lastUsed: self.lastUsedDeviceId))
+                ?? IpcDeviceChoices(
+                    offers_all: devices.count > 1,
+                    choices: devices.map {
+                        IpcDeviceChoice(id: $0.id, name: $0.name, platform: nil, available: true, reason: nil, last_used: $0.id == self.lastUsedDeviceId)
+                    }
+                )
+            LinkAllModal.shared.present { [weak self] dismiss in
+                SendModalCard(
+                    devices: devices,
+                    choices: choices,
+                    urls: urls,
+                    onSend: { chosen, target in
+                        dismiss()
+                        guard let self else { return }
+                        if let target { self.sendFiles(urls: chosen, to: target) }
+                        else { self.sendFiles(urls: chosen, toPeer: nil) }
+                        completion?(true)
+                    },
+                    onCancel: { dismiss(); completion?(false) }
+                )
+            }
         }
     }
 

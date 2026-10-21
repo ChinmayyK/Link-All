@@ -179,6 +179,24 @@ struct IpcRemoteFilesResult: Codable {
     let error: String?
 }
 
+/// One device in a chooser, as the core ranked it.
+struct IpcDeviceChoice: Codable, Identifiable {
+    let id: String
+    let name: String
+    let platform: String?
+    let available: Bool
+    /// Why it can't be chosen right now; nil when it can.
+    let reason: String?
+    let last_used: Bool
+}
+
+struct IpcDeviceChoices: Codable {
+    let offers_all: Bool
+    let choices: [IpcDeviceChoice]
+    var usable: [IpcDeviceChoice] { choices.filter(\.available) }
+    var unusable: [IpcDeviceChoice] { choices.filter { !$0.available } }
+}
+
 struct IpcDiagnosticReport: Codable {
     let text: String
 }
@@ -512,6 +530,18 @@ final class LinkAllIPCClient {
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
         guard let b64 = resp.data?.data_base64 else { return nil }
         return Data(base64Encoded: b64)
+    }
+
+    /// The paired devices `purpose` ("send", "remote", "browse", "sync_target") can go
+    /// to, best first, with why the others can't. `lastUsed` is the device chosen last.
+    func deviceChoices(purpose: String, lastUsed: String?) async throws -> IpcDeviceChoices {
+        var cmd: [String: Any] = ["cmd": "device_choices", "purpose": purpose]
+        if let lastUsed { cmd["last_used"] = lastUsed }
+        let raw = try await send(cmd: cmd)
+        let resp = try await decode(IpcResponse<IpcDeviceChoices>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        guard let data = resp.data else { throw LinkAllIPCError.noData }
+        return data
     }
 
     /// The daemon's redacted problem report; `header` is what only the app knows.
