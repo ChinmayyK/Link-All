@@ -493,7 +493,6 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         OpenUrlOnDeviceAckReceived { .. } => 39,
         RemoteControlAckReceived { .. } => 42,
         FindDeviceRequested { .. } => 43,
-        FindDeviceAckReceived { .. } => 44,
     }
 }
 
@@ -668,7 +667,6 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceId(
         OpenUrlOnDeviceAckReceived { from_device, .. } => Some(*from_device),
         RemoteControlAckReceived { from_device, .. } => Some(*from_device),
         FindDeviceRequested { from_device, .. } => Some(*from_device),
-        FindDeviceAckReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())

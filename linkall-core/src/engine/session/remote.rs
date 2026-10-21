@@ -314,14 +314,13 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         }
         AppMessage::FindDeviceAck { success, error } => {
             ctx.touch_last_seen();
-            let _ = shared
-                .event_tx
-                .send(EngineEvent::FindDeviceAckReceived {
-                    from_device: peer_id,
-                    success,
-                    error,
-                })
-                .await;
+            if let Some(waiter) = shared.remote_waiters.find.lock().await.remove(&peer_id) {
+                let _ = waiter.send(if success {
+                    Ok(())
+                } else {
+                    Err(error.unwrap_or_else(|| "The phone didn't ring.".into()))
+                });
+            }
         }
         _ => unreachable!("dispatch_inbound routed a non-remote message here"),
     }

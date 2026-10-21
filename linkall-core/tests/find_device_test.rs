@@ -4,35 +4,21 @@
 
 mod common;
 
-use common::{connect, start_pair, wait_for};
-use linkall_core::engine::EngineEvent;
+use common::{connect, start_pair};
 use tempfile::TempDir;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_computer_says_only_a_phone_can_ring() {
     let tmp = TempDir::new().unwrap();
-    let (mut asker, other) = start_pair(&tmp, true, true).await;
+    let (asker, other) = start_pair(&tmp, true, true).await;
     connect(&asker, &other).await;
 
-    asker
+    let err = asker
         .engine
         .send_find_device(other.id, true)
         .await
-        .expect("sent");
-
-    let got = std::cell::RefCell::new(None);
-    wait_for(&mut asker.events, "find answer", |e| {
-        if let EngineEvent::FindDeviceAckReceived { success, error, .. } = e {
-            *got.borrow_mut() = Some((*success, error.clone()));
-            true
-        } else {
-            false
-        }
-    })
-    .await;
-    let (success, error) = got.into_inner().unwrap();
-    assert!(!success);
-    assert!(error.unwrap().contains("phone"));
+        .unwrap_err();
+    assert!(err.contains("phone"));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
