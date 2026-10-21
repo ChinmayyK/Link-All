@@ -38,30 +38,30 @@ import kotlin.random.Random
 
 object CRTheme {
     // Structural Neutrals (Proper Contrast)
-    val bgLight = Color(0xFFF6F7F7)
-    val bgDark = Color(0xFF0E1113)
+    val bgLight = Color(0xFFFAF8F5)
+    val bgDark = Color(0xFF0F1012)
     
     val surfaceLight = Color.White.copy(alpha = 0.90f)
-    val surfaceDark = Color(0xFF171B1E).copy(alpha = 0.85f)
+    val surfaceDark = Color(0xFF17181B).copy(alpha = 0.85f)
     
     val surfaceElevatedLight = Color.White.copy(alpha = 1.0f)
-    val surfaceElevatedDark = Color(0xFF1C2124).copy(alpha = 1.0f)
+    val surfaceElevatedDark = Color(0xFF1D1E22).copy(alpha = 1.0f)
     
-    val textHighLight = Color(0xFF14191C)
-    val textHighDark = Color(0xFFECEFF0)
-    val textMediumLight = Color(0xFF5A666C) // Darkened for contrast
-    val textMediumDark = Color(0xFF9AA4A9)  // Lightened for contrast
+    val textHighLight = Color(0xFF1B1A17)
+    val textHighDark = Color(0xFFF1EFEA)
+    val textMediumLight = Color(0xFF6B665E) // Darkened for contrast
+    val textMediumDark = Color(0xFFA19D95)  // Lightened for contrast
     
-    val strokeLight = Color(0xFFE1E5E7)     // Darkened stroke
-    val strokeDark = Color(0xFF262C30)      // Lightened stroke
+    val strokeLight = Color(0xFFE7E2DA)     // Darkened stroke
+    val strokeDark = Color(0xFF2A2B30)      // Lightened stroke
     
     // STRICT ACCENT PALETTE
-    val blueSoft = Color(0xFF14B8A6)
+    val blueSoft = Color(0xFF4F74FF)
     val cyanSoft = Color(0xFF06B6D4)
     val blueGray = Color(0xFF4B5563)
 
     // Status
-    val statusGreen = Color(0xFF4ADE80)
+    val statusGreen = Color(0xFF34D399)
     val statusAmber = Color(0xFFFBBF24)
     val statusRed = Color(0xFFF87171)
 
