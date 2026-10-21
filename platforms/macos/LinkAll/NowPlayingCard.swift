@@ -46,10 +46,23 @@ final class NowPlayingModel: ObservableObject {
     private func updateArt(for list: [IpcNowPlaying]) {
         var next = art
         var changed = false
-        for item in list where artSource[item.device_id] != item.art_base64 {
-            artSource[item.device_id] = item.art_base64
-            next[item.device_id] = item.art_base64.flatMap { Data(base64Encoded: $0) }.flatMap { NSImage(data: $0) }
-            changed = true
+        // A cover is fetched and decoded once per change of its key.
+        for item in list {
+            let source = item.art_key ?? item.art_base64
+            guard artSource[item.device_id] != source else { continue }
+            artSource[item.device_id] = source
+            if item.art_key != nil {
+                let id = item.device_id
+                Task {
+                    let image = await ipc.nowPlayingArt(deviceId: id).flatMap { NSImage(data: $0) }
+                    // Still the same cover by the time it arrives.
+                    guard artSource[id] == source else { return }
+                    art[id] = image
+                }
+            } else {
+                next[item.device_id] = item.art_base64.flatMap { Data(base64Encoded: $0) }.flatMap { NSImage(data: $0) }
+                changed = true
+            }
         }
         // A device that stopped playing loses its cover, so a new one decodes fresh.
         let playing = Set(list.map(\.device_id))

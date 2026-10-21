@@ -29,13 +29,17 @@ namespace LinkAll.WinUI.Views
             {
                 var item = await Task.Run(() =>
                 {
-                    using var doc = DaemonClient.Send(DaemonClient.Req("now_playing_list"));
+                    // Without covers: they're most of the reply. art_key says
+                    // when the cover changed, and only then is it fetched.
+                    using var doc = DaemonClient.Send(DaemonClient.Req("now_playing_list", ("art", false)));
                     if (doc != null
                         && doc.RootElement.TryGetProperty("data", out var data)
                         && data.ValueKind == JsonValueKind.Array
                         && data.GetArrayLength() > 0)
                     {
-                        return data[0].Clone();
+                        var first = data[0].Clone();
+                        LoadCover(first);
+                        return first;
                     }
                     return (JsonElement?)null;
                 });
@@ -48,6 +52,28 @@ namespace LinkAll.WinUI.Views
                 if (item != null) NowPlayingHost.Children.Add(NowPlayingCard(item.Value));
             }
             catch (Exception ex) { App.HandleError(ex); }
+        }
+
+        private string? _coverKey;
+        private byte[]? _coverBytes;
+
+        // Off the UI thread: fetches the cover once each time its key changes.
+        private void LoadCover(JsonElement item)
+        {
+            var artKey = item.TryGetProperty("art_key", out var k) && k.ValueKind == JsonValueKind.String ? k.GetString() : null;
+            if (artKey == _coverKey) return;
+            _coverKey = artKey;
+            _coverBytes = null;
+            if (artKey == null) return;
+            var device = item.GetProperty("device_id").GetString() ?? "";
+            using var doc = DaemonClient.Send(DaemonClient.Req("now_playing_art", ("device_id", device)));
+            if (doc != null
+                && doc.RootElement.TryGetProperty("data", out var data)
+                && data.TryGetProperty("art_base64", out var art)
+                && art.ValueKind == JsonValueKind.String)
+            {
+                try { _coverBytes = Convert.FromBase64String(art.GetString()!); } catch (FormatException) { }
+            }
         }
 
         private static string Clock(ulong ms) => $"{ms / 60000}:{ms / 1000 % 60:00}";
@@ -68,12 +94,16 @@ namespace LinkAll.WinUI.Views
                 Width = 72, Height = 72, CornerRadius = new CornerRadius(10),
                 Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["AppSurfaceSubtleBrush"],
             };
-            if (item.TryGetProperty("art_base64", out var art) && art.ValueKind == JsonValueKind.String)
+            // From the cache, or inline from a service older than art_key.
+            var coverBytes = _coverBytes
+                ?? (item.TryGetProperty("art_base64", out var art) && art.ValueKind == JsonValueKind.String
+                    ? Convert.FromBase64String(art.GetString()!) : null);
+            if (coverBytes != null)
             {
                 try
                 {
                     var image = new BitmapImage();
-                    using var stream = new MemoryStream(Convert.FromBase64String(art.GetString()!));
+                    using var stream = new MemoryStream(coverBytes);
                     image.SetSource(stream.AsRandomAccessStream());
                     cover.Child = new Image { Source = image, Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill };
                 }
