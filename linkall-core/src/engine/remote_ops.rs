@@ -176,6 +176,26 @@ impl Engine {
         }
     }
 
+    /// The devices `purpose` ("send", "remote", "browse" or "sync_target") can
+    /// go to, usable ones first, each unusable one with its reason. `last_used`
+    /// is the device the user chose last for it; `offers_all` says whether the
+    /// chooser should add "All devices".
+    pub fn device_choices(
+        &self,
+        purpose: &str,
+        last_used: Option<&str>,
+    ) -> Result<serde_json::Value, String> {
+        use crate::device_choice::{choices, offers_all, Purpose};
+        let purpose =
+            Purpose::parse(purpose).ok_or_else(|| format!("unknown purpose: {purpose}"))?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let list = choices(&self.shared.peer_manager.list(), purpose, last_used, now);
+        Ok(serde_json::json!({ "offers_all": offers_all(purpose, &list), "choices": list }))
+    }
+
     /// Ask a connected, trusted computer to run a remote-control action. Only
     /// computers that report 2.1.0 or later understand the message, so an
     /// older one gets an error back instead of a message it can't decode.
@@ -207,7 +227,7 @@ impl Engine {
             .peer_manager
             .get(target_device)
             .ok_or_else(|| "That computer isn't known.".to_string())?;
-        if !peer_understands_remote_control(peer.app_version.as_deref()) {
+        if !crate::device_choice::understands_remote_control(peer.app_version.as_deref()) {
             return Err("Update Link All on that computer to use the remote.".to_string());
         }
         self.shared
@@ -417,34 +437,5 @@ pub(crate) async fn drain_remote_waiters(shared: &EngineShared, peer_id: Uuid) {
             data: Vec::new(),
             error: Some("Peer disconnected".to_string()),
         });
-    }
-}
-
-/// True for a peer on 2.1.0 or later, the first release with remote control.
-fn peer_understands_remote_control(app_version: Option<&str>) -> bool {
-    let Some(v) = app_version else { return false };
-    let mut parts = v.split(['.', '-', '+']).map(|p| {
-        p.chars()
-            .take_while(char::is_ascii_digit)
-            .collect::<String>()
-            .parse::<u32>()
-            .unwrap_or(0)
-    });
-    let version = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
-    version >= (2, 1)
-}
-
-#[cfg(test)]
-mod remote_control_tests {
-    use super::peer_understands_remote_control as ok;
-
-    #[test]
-    fn only_2_1_and_later_understand_it() {
-        assert!(ok(Some("2.1.0")));
-        assert!(ok(Some("2.1.3")));
-        assert!(ok(Some("3.0.0")));
-        assert!(!ok(Some("2.0.2")));
-        assert!(!ok(Some("1.3.3")));
-        assert!(!ok(None));
     }
 }

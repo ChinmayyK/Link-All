@@ -124,6 +124,13 @@ pub enum IpcRequest {
         #[serde(default)]
         header: String,
     },
+    /// The devices an action can go to, best first, with why the others can't.
+    /// `purpose` is "send", "remote", "browse" or "sync_target".
+    DeviceChoices {
+        purpose: String,
+        #[serde(default)]
+        last_used: Option<String>,
+    },
     /// List connected peers with stats.
     Peers,
     /// List trusted devices from the store.
@@ -778,6 +785,12 @@ pub async fn handle_ipc_request(
         }
         IpcRequest::DiagnosticReport { header } => {
             IpcResponse::ok(serde_json::json!({ "text": eng.diagnostic_report(&header).await }))
+        }
+        IpcRequest::DeviceChoices { purpose, last_used } => {
+            match eng.device_choices(&purpose, last_used.as_deref()) {
+                Ok(v) => IpcResponse::ok(v),
+                Err(e) => IpcResponse::err(e),
+            }
         }
         IpcRequest::Peers => IpcResponse::ok(eng.status_snapshot().await.peers),
         IpcRequest::PushStorageStatus {

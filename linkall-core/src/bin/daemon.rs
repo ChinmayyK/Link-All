@@ -681,6 +681,12 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
         IpcRequest::DiagnosticReport { header } => Ok(IpcResponse::ok(
             json!({ "text": state.engine.diagnostic_report(&header).await }),
         )),
+        IpcRequest::DeviceChoices { purpose, last_used } => Ok(
+            match state.engine.device_choices(&purpose, last_used.as_deref()) {
+                Ok(v) => IpcResponse::ok(v),
+                Err(e) => IpcResponse::error(e),
+            },
+        ),
         IpcRequest::Peers => {
             let snapshot = state.engine.status_snapshot().await;
             Ok(IpcResponse::ok(snapshot.peers))

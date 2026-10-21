@@ -2377,6 +2377,37 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_openUrlOnDevice(
     0
 }
 
+/// The devices `purpose` can go to as JSON: {"offers_all": bool, "choices": [...]}.
+/// `last_used` may be null. Null result: the engine isn't running or the purpose is unknown.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_deviceChoicesJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    purpose: JString,
+    last_used: JString,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let Ok(purpose) = env.get_string(&purpose).map(String::from) else {
+        return std::ptr::null_mut();
+    };
+    let last_used = if last_used.is_null() {
+        None
+    } else {
+        env.get_string(&last_used).map(String::from).ok()
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match h.engine.device_choices(&purpose, last_used.as_deref()) {
+        Ok(v) => env
+            .new_string(v.to_string())
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
 /// Asks a computer to run a remote-control action (media, volume, slides).
 /// Returns 0 when the request was sent, or -1 when it could not be (the
 /// computer is unknown, offline, or too old to understand it).
