@@ -25,6 +25,7 @@ namespace LinkAll.WinUI.Views
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
             _ = LoadFileBrowsingAsync();
             _ = LoadRemoteControlAsync();
+            _ = LoadDropFolderAsync();
             UpdateRow.Visibility = LinkAll.WinUI.Services.UpdateChecker.Supported ? Visibility.Visible : Visibility.Collapsed;
             _showingSavedUpdateCheck = true;
             UpdateCheckToggle.IsOn = LinkAll.WinUI.Services.UpdateChecker.Enabled;
@@ -85,6 +86,32 @@ namespace LinkAll.WinUI.Views
             var on = RemoteControlToggle.IsOn;
             var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("allow_remote_control", on))));
             DaemonActions.ReportIfFailed("Let phones control this PC", resp);
+        }
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _showingSavedDropFolder;
+
+        private async Task LoadDropFolderAsync()
+        {
+            var on = await Task.Run(() =>
+            {
+                using var doc = DaemonClient.GetSettings();
+                return doc != null
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("drop_folder_enabled", out var value)
+                    && value.ValueKind == JsonValueKind.True;
+            });
+            _showingSavedDropFolder = true;
+            DropFolderToggle.IsOn = on;
+            _showingSavedDropFolder = false;
+        }
+
+        private async void OnDropFolderToggled(object sender, RoutedEventArgs e)
+        {
+            if (_showingSavedDropFolder) return;
+            var on = DropFolderToggle.IsOn;
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("drop_folder_enabled", on))));
+            DaemonActions.ReportIfFailed("Link All Drop", resp);
         }
 
         private async void OnFileBrowsingToggled(object sender, RoutedEventArgs e)

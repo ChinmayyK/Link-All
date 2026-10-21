@@ -235,6 +235,7 @@ struct IpcSettings: Codable {
     // Optional so an older daemon's reply still decodes.
     let allow_file_browsing: Bool?
     let allow_remote_control: Bool?
+    let drop_folder_enabled: Bool?
 }
 
 struct IpcResponse<T: Codable>: Codable {
@@ -748,7 +749,8 @@ extension LinkAllIPCClient {
             smartSyncDebounceMs: s.smart_sync_debounce_ms,
             startOnLogin: false,
             allowFileBrowsing: s.allow_file_browsing ?? false,
-            allowRemoteControl: s.allow_remote_control ?? false
+            allowRemoteControl: s.allow_remote_control ?? false,
+            dropFolderEnabled: s.drop_folder_enabled ?? false
         )
     }
 
@@ -776,6 +778,7 @@ extension LinkAllIPCClient {
             "ignore_patterns":                  snapshot.ignorePatterns,
             "allow_file_browsing":              snapshot.allowFileBrowsing,
             "allow_remote_control":             snapshot.allowRemoteControl,
+            "drop_folder_enabled":              snapshot.dropFolderEnabled,
         ]
         _ = try await send(cmd: cmd)
     }

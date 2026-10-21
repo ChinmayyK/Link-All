@@ -210,10 +210,23 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         &remote,
         "allow_remote_control",
         "Let Phones Control This Computer",
-        "Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides. Uses playerctl, wpctl or pactl, and xdotool or wtype when installed",
+        "Paired phones can press play/pause, volume and the arrow keys for slides, move the pointer and type, lock this computer, turn its screen off and make it ring. Uses playerctl, wpctl or pactl, loginctl, xset, xdotool or wtype and /dev/uinput when available",
         &syncing,
     );
     page.add(&remote);
+
+    let drop = adw::PreferencesGroup::builder()
+        .title("Link All Drop")
+        .build();
+    switch(
+        hub,
+        &drop,
+        "drop_folder_enabled",
+        "Send Files Dropped in Link All Drop",
+        "Files you put in the Link All Drop folder in your home folder are sent to your paired devices on their own",
+        &syncing,
+    );
+    page.add(&drop);
 
     let startup = adw::PreferencesGroup::builder().title("Startup").build();
     let login = adw::SwitchRow::builder()

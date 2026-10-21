@@ -354,9 +354,16 @@ private struct GeneralPane: View {
             }
         }
 
+        PrefsSection(title: "Link All Drop", icon: "tray.and.arrow.up.fill", tint: CRTheme.accentIndigo) {
+            PrefsRow(icon: "folder.fill.badge.plus", label: "Send files dropped in ~/Link All Drop",
+                     description: "Anything you put in the Link All Drop folder in your home folder is sent to your paired devices on its own.") {
+                Toggle("", isOn: $copy.dropFolderEnabled).labelsHidden()
+            }
+        }
+
         PrefsSection(title: "Remote Control", icon: "dial.medium.fill", tint: CRTheme.accentPurple) {
             PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Let phones control this Mac",
-                     description: "Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides.") {
+                     description: "Paired phones can press play/pause, volume and the arrow keys for slides, move the pointer and type, lock this Mac, turn its screen off and make it ring.") {
                 Toggle("", isOn: $copy.allowRemoteControl).labelsHidden()
             }
         }
