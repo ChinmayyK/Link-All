@@ -7,7 +7,7 @@ import android.widget.Toast
 import kotlin.concurrent.thread
 
 /**
- * "Scratchpad" in the share sheet: shared text becomes a note, with no screen
+ * "Save to Notes" in the share sheet: shared text becomes a note, with no screen
  * of its own. A link shared from the browser, a command copied from a
  * message or a snippet from a chat is one tap from your other devices.
  */
@@ -18,7 +18,7 @@ class ScratchpadShareActivity : Activity() {
             ?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()
         val subject = intent?.getStringExtra(Intent.EXTRA_SUBJECT)?.trim().orEmpty()
         if (text.isNullOrEmpty()) {
-            Toast.makeText(this, "Only text can be saved to the Scratchpad", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Only text can be saved to Notes", Toast.LENGTH_SHORT).show()
             finish()
             return
         }
@@ -27,7 +27,7 @@ class ScratchpadShareActivity : Activity() {
         thread {
             val saved = LinkAllService.withLiveEngine { LinkAllJni.scratchpadSave(it, null, note, false) }
             val message = when (saved) {
-                0 -> "Saved to Scratchpad"
+                0 -> "Saved to Notes"
                 null -> "Link All isn't running"
                 else -> "Couldn't save the note. It may be too long."
             }

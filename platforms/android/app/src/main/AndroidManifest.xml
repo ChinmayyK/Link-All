@@ -121,11 +121,11 @@
             </intent-filter>
         </activity>
 
-        <!-- ── Save shared text as a Scratchpad note ───────────────────── -->
+        <!-- ── Save shared text as a note ──────────────────────────────── -->
         <activity
             android:name=".ScratchpadShareActivity"
             android:exported="true"
-            android:label="Scratchpad"
+            android:label="Save to Notes"
             android:excludeFromRecents="true"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
