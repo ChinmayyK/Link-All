@@ -35,6 +35,11 @@ async fn a_track_reaches_the_other_device_with_its_cover_and_clears_when_it_stop
     })
     .await;
     assert_eq!(b.engine.now_playing_art(a.id), Some(vec![1, 2, 3, 4]));
+    // Without covers, as the apps poll: the key stays so they know when to fetch it.
+    let light = b.engine.now_playing_list_with(false);
+    assert!(light[0].art_base64.is_none());
+    assert_eq!(light[0].art_key, b.engine.now_playing_list()[0].art_key);
+    assert!(light[0].art_key.is_some());
 
     // A pause is a change and goes out at once; the cover is kept.
     a.engine
@@ -77,4 +82,14 @@ async fn an_untrusted_device_cannot_show_a_track() {
     a.engine.set_now_playing(Some(track("Secret", true, 0)));
     tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     assert!(b.engine.now_playing_list().is_empty());
+}
+
+#[test]
+fn now_playing_list_keeps_covers_unless_asked_not_to() {
+    use linkall_core::ipc::IpcRequest;
+    let plain: IpcRequest = serde_json::from_str(r#"{"cmd":"now_playing_list"}"#).unwrap();
+    assert!(matches!(plain, IpcRequest::NowPlayingList { art: true }));
+    let light: IpcRequest =
+        serde_json::from_str(r#"{"cmd":"now_playing_list","art":false}"#).unwrap();
+    assert!(matches!(light, IpcRequest::NowPlayingList { art: false }));
 }

@@ -694,7 +694,12 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
-        IpcRequest::NowPlayingList => Ok(IpcResponse::ok(state.engine.now_playing_list())),
+        IpcRequest::NowPlayingList { art } => {
+            Ok(IpcResponse::ok(state.engine.now_playing_list_with(art)))
+        }
+        IpcRequest::NowPlayingArt { device_id } => Ok(IpcResponse::ok(
+            linkall_core::ipc::now_playing_art_json(&state.engine, &device_id),
+        )),
         IpcRequest::SetNowPlaying {
             title,
             artist,
