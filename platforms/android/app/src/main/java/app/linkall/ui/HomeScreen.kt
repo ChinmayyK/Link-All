@@ -130,7 +130,6 @@ fun HomeTab(
     val pairingRequest = peers.firstOrNull { it.pairingRequested && !it.trusted }
     val outgoingRequest = peers.firstOrNull { it.outgoingPairingWaiting && !it.trusted }
     var showSendSheet by remember { mutableStateOf(false) }
-    var showBrowsePicker by remember { mutableStateOf(false) }
     var remoteTarget by remember { mutableStateOf<PeerSnapshot?>(null) }
     var showRemotePicker by remember { mutableStateOf(false) }
     val browseFiles = LocalBrowseFiles.current
@@ -173,12 +172,54 @@ fun HomeTab(
             }
         }
 
+        val groups = remember(peers) { homeDeviceGroups(peers) }
+        if (groups.connected.isNotEmpty()) {
+            SectionHeader(c, if (groups.connected.size == 1) "Connected device" else "Connected devices", null)
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                groups.connected.forEach { peer ->
+                    DeviceCard(
+                        c = c,
+                        peer = peer,
+                        speedTest = activeSpeedTests.find { it.peerId == peer.id },
+                        onSendFiles = { onActionSendFiles(peer.id) },
+                        onSendFolder = { onActionSendFolder(peer.id) },
+                        onBrowse = { browseFiles(peer) },
+                        onRemote = { remoteTarget = peer },
+                        onSpeedTest = { onActionStartSpeedTest(peer.id) },
+                        onForget = { onForgetPeer(peer) },
+                    )
+                }
+            }
+        }
+
+        if (groups.other.isNotEmpty()) {
+            SectionHeader(c, "Not connected", "${groups.other.size}") { onTabSelected(AppTab.Devices) }
+            Panel(c) {
+                groups.other.forEachIndexed { i, peer ->
+                    if (i > 0) Hairline(c)
+                    DeviceRow(
+                        c = c,
+                        peer = peer,
+                        speedTest = activeSpeedTests.find { it.peerId == peer.id },
+                        onSendFiles = { onActionSendFiles(peer.id) },
+                        onSendFolder = { onActionSendFolder(peer.id) },
+                        onSpeedTest = { onActionStartSpeedTest(peer.id) },
+                        onRespond = { onRespondPairing(peer, it) },
+                        onPair = { onSendPairingRequest(peer) },
+                        onForget = { onForgetPeer(peer) }
+                    )
+                }
+            }
+        }
+
+        // Sending to every device, or to one chosen in the device chooser. Sending to a
+        // particular device is on its card above.
         if (peers.isNotEmpty()) {
             val enabled = connected.isNotEmpty()
-            SectionHeader(c, "Send", if (enabled) null else "Connect a device first")
+            SectionHeader(c, "Send to…", if (enabled) null else "Connect a device first")
             Panel(c) {
                 ActionRow(
-                    c, Icons.Outlined.UploadFile, "Files & folders", "Send files or entire folders",
+                    c, Icons.Outlined.UploadFile, "Files & folders", "To all your devices, or choose one",
                     enabled = enabled,
                     onClick = { showSendSheet = true }
                 )
@@ -191,35 +232,6 @@ fun HomeTab(
                     clip?.let { "Send copied text · ${it.length} characters" } ?: "Send what you last copied",
                     enabled = enabled,
                     onClick = if (clip == null) onActionPushClipboard else onActionSendQuickContext
-                )
-            }
-
-            SectionHeader(c, "Get", if (enabled) null else "Connect a device first")
-            Panel(c) {
-                ActionRow(
-                    c, Icons.Outlined.FolderOpen, "Browse files",
-                    when (connected.size) {
-                        0 -> "Open files on your other devices"
-                        1 -> "Open files on ${connected.first().name}"
-                        else -> "Open files on any of ${connected.size} devices"
-                    },
-                    enabled = enabled,
-                    onClick = { if (connected.size == 1) browseFiles(connected.first()) else showBrowsePicker = true }
-                )
-                Hairline(c)
-                val computers = connected.controllableComputers()
-                ActionRow(
-                    c, Icons.Outlined.SettingsRemote, "Remote",
-                    when (computers.size) {
-                        0 -> "Connect a computer to control its music, volume and slides"
-                        1 -> "Control ${computers.first().name}"
-                        else -> "Choose which of ${computers.size} computers"
-                    },
-                    enabled = enabled && computers.isNotEmpty(),
-                    onClick = {
-                        val only = computers.singleOrNull()
-                        if (only != null && supportsRemoteControl(only.appVersion)) remoteTarget = only else showRemotePicker = true
-                    }
                 )
             }
         }
@@ -235,29 +247,6 @@ fun HomeTab(
                         onPause = { onActionPauseTransfer(t.id) },
                         onResume = { onActionResumeTransfer(t.id) },
                         onCancel = { onActionCancelTransfer(t.id) }
-                    )
-                }
-            }
-        }
-
-        val listed = peers.filter { it.isListable }
-        if (listed.isNotEmpty()) {
-            SectionHeader(c, "Your devices", "${connected.size} of ${listed.size} online") {
-                onTabSelected(AppTab.Devices)
-            }
-            Panel(c) {
-                listed.forEachIndexed { i, peer ->
-                    if (i > 0) Hairline(c)
-                    DeviceRow(
-                        c = c,
-                        peer = peer,
-                        speedTest = activeSpeedTests.find { it.peerId == peer.id },
-                        onSendFiles = { onActionSendFiles(peer.id) },
-                        onSendFolder = { onActionSendFolder(peer.id) },
-                        onSpeedTest = { onActionStartSpeedTest(peer.id) },
-                        onRespond = { onRespondPairing(peer, it) },
-                        onPair = { onSendPairingRequest(peer) },
-                        onForget = { onForgetPeer(peer) }
                     )
                 }
             }
@@ -289,9 +278,6 @@ fun HomeTab(
         Spacer(Modifier.height(140.dp))
     }
 
-    if (showBrowsePicker) {
-        BrowseDevicePicker(c, connected, onPick = browseFiles, onDismiss = { showBrowsePicker = false })
-    }
     if (showRemotePicker) {
         RemoteDevicePicker(c, connected, onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })
     }
@@ -663,16 +649,7 @@ internal fun DeviceRow(
     val waiting = peer.outgoingPairingWaiting && !peer.trusted
     // Not paired and nothing in flight: offer Pair right on the row.
     val canPair = !peer.trusted && !asksUs && !waiting && !peer.isConnecting
-    val (status, statusColor) = when {
-        speedTest != null -> "${speedTest.phase} · ${speedTest.speedMbpsString}" to c.accent
-        peer.pairingRequested && !peer.trusted -> "Wants to pair" to c.accent
-        peer.isConnected -> "Connected" to c.live
-        peer.outgoingPairingWaiting && !peer.trusted -> pairingWaitingLabel(peer) to c.warn
-        peer.pairingOutcomeLabel != null -> peer.pairingOutcomeLabel!! to c.warn
-        peer.isConnecting -> "Connecting…" to c.textMuted
-        peer.trusted -> (agoLabel(peer.lastSeenSecs)?.let { "Seen $it" } ?: "Offline") to c.textMuted
-        else -> "Not paired" to c.warn
-    }
+    val (status, statusColor) = deviceStatus(c, peer, speedTest)
 
     Box {
         Row(

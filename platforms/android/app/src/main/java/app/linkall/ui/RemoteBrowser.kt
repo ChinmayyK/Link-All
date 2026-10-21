@@ -430,19 +430,3 @@ private fun iconFor(file: RemoteFile): ImageVector = when {
     file.category == "Apks" -> Icons.Outlined.Android
     else -> Icons.Outlined.Description
 }
-
-/** Which device to browse, ranked by the core; unusable devices say why. */
-@Composable
-internal fun BrowseDevicePicker(c: DdColors, connected: List<PeerSnapshot>, onPick: (PeerSnapshot) -> Unit, onDismiss: () -> Unit) {
-    DeviceChooserSheet(
-        c, purpose = app.linkall.ChoicePurpose.Browse, icon = Icons.Outlined.FolderOpen,
-        title = "Browse which device?",
-        emptyHint = "No paired device is connected.",
-        actions = listOf(
-            ChooserAction(Icons.Outlined.FolderOpen, { d -> "Browse ${d?.name ?: "files"}" }) { id ->
-                connected.firstOrNull { it.id == id }?.let(onPick)
-            },
-        ),
-        onDismiss = onDismiss,
-    )
-}
