@@ -202,7 +202,7 @@ fn shrink_art(bytes: Vec<u8>) -> Option<Vec<u8>> {
         let mut out = std::io::Cursor::new(Vec::new());
         img.write_to(&mut out, image::ImageFormat::Jpeg).ok()?;
         let out = out.into_inner();
-        return (out.len() <= MAX_ART_BYTES).then_some(out);
+        (out.len() <= MAX_ART_BYTES).then_some(out)
     }
     #[cfg(not(feature = "image"))]
     {
