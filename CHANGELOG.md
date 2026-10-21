@@ -9,6 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Click to call.** `linkall-cli call <device-id> <number>` offers a paired phone a call: the phone shows a notification, and the dialer opens with the number filled in when you tap it. Nothing is dialled on its own.
 - **Walk-away lock.** On Mac, Windows and Linux, turn on "Lock when my phone leaves" and the computer locks when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone. Off by default.
 - **Trackpad and keyboard.** The phone's Remote sheet opens a full-screen trackpad for a paired computer: one finger moves the pointer, a tap clicks, two fingers scroll, a two-finger tap right-clicks. A text field and arrow keys type, and Air mouse points with the phone's gyroscope. Needs Remote control on at the computer.
 - **Lock, screen off and ring a computer.** The Remote sheet can lock a computer, turn its screen off, and make it ring so you can find it. A computer rings only while Remote control is on.

@@ -51,6 +51,8 @@ object LinkAllJni {
     const val CR_EVENT_REMOTE_CONTROL_ACK      = 42
     /** A paired computer asked this phone to start or stop ringing; see [eventFindRing]. */
     const val CR_EVENT_FIND_DEVICE_REQUESTED   = 43
+    /** A paired computer offered to call a number from this phone; the number is [eventText]. */
+    const val CR_EVENT_DIAL_REQUESTED          = 44
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)

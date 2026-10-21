@@ -1759,6 +1759,11 @@ class LinkAllService : Service() {
                 }
             }
 
+            LinkAllJni.CR_EVENT_DIAL_REQUESTED -> {
+                val number = LinkAllJni.eventText(ev) ?: return
+                showCallOffer(LinkAllJni.eventDeviceName(ev) ?: "A computer", number)
+            }
+
             LinkAllJni.CR_EVENT_FOLDER_TRANSFER_COMPLETE -> {
                 val folder = LinkAllJni.eventTransferFileName(ev) ?: "Folder"
                 val destDir = LinkAllJni.eventTransferDestPath(ev).orEmpty()
@@ -2323,6 +2328,40 @@ class LinkAllService : Service() {
             .setOngoing(true)
             .build()
         notificationManager.notify(transferNotifId(tid), notif)
+    }
+
+    /**
+     * A computer offered to call [number]. Nothing is dialled on its own: the
+     * notification opens the dialer with the number filled in, and its owner
+     * presses call.
+     */
+    private fun showCallOffer(from: String, number: String) {
+        val channel = "cr_call"
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channel, "Calls from your computer", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Offers from a paired computer to call a number from this phone"
+            }
+        )
+        val dial = PendingIntent.getActivity(
+            this, number.hashCode(),
+            Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching {
+            notificationManager.notify(
+                (number.hashCode() and 0x7fff) + 7400,
+                NotificationCompat.Builder(this, channel)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Call $number?")
+                    .setContentText("$from offered this call. Tap to open the dialer.")
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(dial)
+                    .addAction(0, "Open dialer", dial)
+                    .build()
+            )
+        }.onFailure { Log.w(TAG, "Couldn't show the call offer", it) }
     }
 
     private fun showPairingRequestNotification(
