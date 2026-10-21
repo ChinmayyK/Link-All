@@ -839,32 +839,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
 
         let size = baseImage.size
-        let badged = NSImage(size: size)
-        badged.lockFocus()
-        baseImage.draw(in: NSRect(origin: .zero, size: size))
+        // A template image can't carry a coloured dot, so this one is drawn by hand, and the
+        // glyph must be drawn in the menu bar's own text colour: a plain black glyph is nearly
+        // invisible on a dark menu bar. The drawing handler runs each time the image is drawn,
+        // so the colour follows light and dark mode.
+        let badged = NSImage(size: size, flipped: false) { rect in
+            baseImage.draw(in: rect)
+            NSColor.controlTextColor.setFill()
+            rect.fill(using: .sourceIn)
 
-        let dotSize: CGFloat = size.height * 0.38
-        let dotRect = CGRect(
-            x: size.width - dotSize - 0.5,
-            y: size.height - dotSize - 0.5,
-            width: dotSize, height: dotSize
-        )
+            let dotSize: CGFloat = rect.height * 0.38
+            let dotRect = CGRect(
+                x: rect.width - dotSize - 0.5,
+                y: rect.height - dotSize - 0.5,
+                width: dotSize, height: dotSize
+            )
 
-        NSColor.systemRed.setFill()
-        NSBezierPath(ovalIn: dotRect).fill()
+            NSColor.systemRed.setFill()
+            NSBezierPath(ovalIn: dotRect).fill()
 
-        if pendingCount > 1 {
-            let label = pendingCount < 10 ? "\(pendingCount)" : "+"
-            let attrs: [NSAttributedString.Key: Any] = [
-                .font: NSFont.systemFont(ofSize: dotSize * 0.68, weight: .bold),
-                .foregroundColor: NSColor.white
-            ]
-            let str = NSAttributedString(string: label, attributes: attrs)
-            let s = str.size()
-            str.draw(at: CGPoint(x: dotRect.midX - s.width / 2, y: dotRect.midY - s.height / 2))
+            if pendingCount > 1 {
+                let label = pendingCount < 10 ? "\(pendingCount)" : "+"
+                let attrs: [NSAttributedString.Key: Any] = [
+                    .font: NSFont.systemFont(ofSize: dotSize * 0.68, weight: .bold),
+                    .foregroundColor: NSColor.white
+                ]
+                let str = NSAttributedString(string: label, attributes: attrs)
+                let s = str.size()
+                str.draw(at: CGPoint(x: dotRect.midX - s.width / 2, y: dotRect.midY - s.height / 2))
+            }
+            return true
         }
-
-        badged.unlockFocus()
         badged.isTemplate = false
         button.image = badged
         button.imageScaling = .scaleProportionallyUpOrDown
