@@ -863,6 +863,53 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
+    /// When a picture was last asked of a phone; the picture that arrives within ten
+    /// minutes is put on the clipboard and pasted where you were typing.
+    var pendingCaptureAt: Date?
+
+    /// "Insert from Phone": asks a paired phone to take a photo or scan a document,
+    /// and sends it back to be pasted into the app you were using.
+    func captureFromPhone(mode: String) {
+        Task { [weak self] in
+            guard let self else { return }
+            guard let choices = try? await self.ipc.deviceChoices(purpose: "find", lastUsed: self.lastUsedDeviceId) else {
+                self.showToast(title: "Can't reach your phone", body: "Link All isn't running.", tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 5.0)
+                return
+            }
+            let usable = choices.usable
+            if usable.count == 1 {
+                self.askForPicture(usable[0], mode: mode)
+            } else if usable.isEmpty {
+                let why = choices.choices.first?.reason ?? "Pair your phone first."
+                self.showToast(title: "No phone to use", body: why, tint: CRTheme.inkSoft, systemImage: "iphone.slash", ttl: 5.0)
+            } else {
+                LinkAllModal.shared.present { [weak self] dismiss in
+                    FindPhoneCard(
+                        title: mode == "document" ? "Scan with which phone?" : "Take a photo with which phone?",
+                        subtitle: "The picture comes straight back to this Mac",
+                        icon: "camera.fill",
+                        choices: choices,
+                        onPick: { choice in dismiss(); self?.askForPicture(choice, mode: mode) },
+                        onCancel: dismiss
+                    )
+                }
+            }
+        }
+    }
+
+    private func askForPicture(_ phone: IpcDeviceChoice, mode: String) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.ipc.captureRequest(target: phone.id, mode: mode)
+                self.pendingCaptureAt = Date()
+                self.showToast(title: "Check \(phone.name)", body: "Tap the notification to open its camera.", tint: CRTheme.accentBlue, systemImage: "camera.fill", ttl: 8.0)
+            } catch {
+                self.showToast(title: "\(phone.name) can't do that", body: error.localizedDescription, tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 6.0)
+            }
+        }
+    }
+
     private func ringPhone(_ phone: IpcDeviceChoice) {
         Task { [weak self] in
             guard let self else { return }

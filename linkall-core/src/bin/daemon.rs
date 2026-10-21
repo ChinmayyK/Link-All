@@ -694,6 +694,13 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
+        IpcRequest::CaptureRequest { target, mode } => Ok(match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match state.engine.send_capture_request(id, &mode).await {
+                Ok(()) => IpcResponse::ok(json!({})),
+                Err(e) => IpcResponse::error(e),
+            },
+            Err(_) => IpcResponse::error("unknown device".to_string()),
+        }),
         IpcRequest::ScratchpadList => Ok(IpcResponse::ok(state.engine.scratchpad_list())),
         IpcRequest::ScratchpadSave { id, text, pinned } => {
             let id = match id.as_deref().map(uuid::Uuid::parse_str).transpose() {

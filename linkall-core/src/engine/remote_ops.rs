@@ -283,6 +283,26 @@ impl Engine {
             .map_err(|_| "That phone isn't connected.".to_string())
     }
 
+    /// Ask a connected, trusted phone on 2.1.0 or later to take a picture and
+    /// send it back. `mode` is "photo" or "document".
+    pub async fn send_capture_request(
+        &self,
+        target_device: Uuid,
+        mode: &str,
+    ) -> Result<(), String> {
+        let tx = self.remote_control_sender(target_device)?;
+        let mode = if mode == "document" {
+            "document"
+        } else {
+            "photo"
+        };
+        tx.send(AppMessage::CaptureRequest {
+            mode: mode.to_string(),
+        })
+        .await
+        .map_err(|_| "That phone isn't connected.".to_string())
+    }
+
     /// Why a remote-control action could not be sent to `target_device`, or
     /// `Ok` when it could.
     pub async fn send_remote_control_check(&self, target_device: Uuid) -> Result<(), String> {

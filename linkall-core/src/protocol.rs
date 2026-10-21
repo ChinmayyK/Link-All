@@ -644,6 +644,12 @@ pub enum AppMessage {
         updated_at_ms: u64,
         deleted: bool,
     },
+    /// Computer -> phone: open the camera and send the picture back. `mode` is
+    /// "photo" or "document". The phone shows a notification to tap; nothing
+    /// is captured without its owner taking the picture.
+    CaptureRequest {
+        mode: String,
+    },
 }
 
 impl AppMessage {

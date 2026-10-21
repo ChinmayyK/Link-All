@@ -122,6 +122,7 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::RemoteKeyPress { .. }
         | M::DialNumber { .. }) => remote::handle(ctx, m).await,
         m @ M::ScratchpadNote { .. } => scratchpad::handle(ctx, m).await,
+        M::CaptureRequest { mode } => remote::capture_request(ctx, mode).await,
         // Handshake messages; once the session is up they carry nothing.
         M::Hello { .. } | M::HelloAck { .. } => Flow::Continue,
         // Sent only by older builds that had the camera stream.

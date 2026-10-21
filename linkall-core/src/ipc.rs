@@ -145,6 +145,11 @@ pub enum IpcRequest {
         target: String,
         number: String,
     },
+    /// Ask a paired phone to take a picture ("photo" or "document") and send it back.
+    CaptureRequest {
+        target: String,
+        mode: String,
+    },
     /// The Scratchpad notes, pinned first.
     ScratchpadList,
     /// Create a note (`id` absent) or edit one.
@@ -942,6 +947,13 @@ pub async fn handle_ipc_request(
         }
         IpcRequest::FindDevice { target, ring } => match uuid::Uuid::parse_str(&target) {
             Ok(id) => match eng.send_find_device(id, ring).await {
+                Ok(()) => IpcResponse::ok(serde_json::json!({})),
+                Err(e) => IpcResponse::err(e),
+            },
+            Err(_) => IpcResponse::err("unknown device".to_string()),
+        },
+        IpcRequest::CaptureRequest { target, mode } => match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match eng.send_capture_request(id, &mode).await {
                 Ok(()) => IpcResponse::ok(serde_json::json!({})),
                 Err(e) => IpcResponse::err(e),
             },

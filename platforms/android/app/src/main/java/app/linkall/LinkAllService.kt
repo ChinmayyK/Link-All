@@ -1783,6 +1783,11 @@ class LinkAllService : Service() {
                 }
             }
 
+            LinkAllJni.CR_EVENT_CAPTURE_REQUESTED -> {
+                val deviceId = LinkAllJni.eventDeviceId(ev) ?: return
+                showCaptureOffer(LinkAllJni.eventDeviceName(ev) ?: "A computer", deviceId, LinkAllJni.eventText(ev) ?: "photo")
+            }
+
             LinkAllJni.CR_EVENT_DIAL_REQUESTED -> {
                 val number = LinkAllJni.eventText(ev) ?: return
                 showCallOffer(LinkAllJni.eventDeviceName(ev) ?: "A computer", number)
@@ -2352,6 +2357,43 @@ class LinkAllService : Service() {
             .setOngoing(true)
             .build()
         notificationManager.notify(transferNotifId(tid), notif)
+    }
+
+    /**
+     * A computer asked for a picture. The camera opens when this notification is
+     * tapped (or straight away on a phone that allows it over the lock screen).
+     */
+    private fun showCaptureOffer(from: String, deviceId: String, mode: String) {
+        val channel = "cr_capture"
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channel, "Picture requests", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "A paired computer asked this phone to take a picture"
+            }
+        )
+        val open = PendingIntent.getActivity(
+            this, 9100,
+            Intent(this, CaptureActivity::class.java)
+                .putExtra(CaptureActivity.EXTRA_MODE, mode)
+                .putExtra(CaptureActivity.EXTRA_DEVICE_ID, deviceId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val what = if (mode == "document") "scan a document" else "take a photo"
+        runCatching {
+            notificationManager.notify(
+                9100,
+                NotificationCompat.Builder(this, channel)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("$from wants you to $what")
+                    .setContentText("Tap to open the camera. The picture goes straight to $from.")
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(open)
+                    .setFullScreenIntent(open, true)
+                    .build()
+            )
+        }.onFailure { Log.w(TAG, "Couldn't show the picture request", it) }
     }
 
     /**

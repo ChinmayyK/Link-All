@@ -278,6 +278,12 @@ pub enum EngineEvent {
         from_device: Uuid,
         ring: bool,
     },
+    /// A paired computer asked this phone to take a picture ("photo" or "document").
+    CaptureRequested {
+        from_device: Uuid,
+        from_name: String,
+        mode: String,
+    },
     /// The Scratchpad changed, here or on a paired device.
     ScratchpadChanged,
     /// A paired computer offered to call a number from this phone.

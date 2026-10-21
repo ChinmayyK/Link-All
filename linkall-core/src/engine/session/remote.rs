@@ -437,3 +437,31 @@ async fn input(ctx: &InboundCtx, run: impl FnOnce() -> Result<(), String> + Send
         })
         .await;
 }
+
+/// A paired computer asked this phone to take a picture. Only a phone can; a
+/// computer ignores it. `mode` is "photo" or "document", anything else is a photo.
+pub(super) async fn capture_request(ctx: &InboundCtx, mode: String) -> Flow {
+    ctx.touch_last_seen();
+    let shared = &ctx.shared;
+    let trusted = shared
+        .peer_manager
+        .get(ctx.peer_id)
+        .map(|p| p.trusted)
+        .unwrap_or(false);
+    if trusted && cfg!(target_os = "android") {
+        let mode = if mode == "document" {
+            mode
+        } else {
+            "photo".to_string()
+        };
+        let _ = shared
+            .event_tx
+            .send(EngineEvent::CaptureRequested {
+                from_device: ctx.peer_id,
+                from_name: ctx.peer_name.clone(),
+                mode,
+            })
+            .await;
+    }
+    Flow::Continue
+}

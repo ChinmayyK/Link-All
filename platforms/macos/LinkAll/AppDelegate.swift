@@ -354,6 +354,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let scratchpad = windowMenu.addItem(withTitle: "Scratchpad", action: #selector(openScratchpad), keyEquivalent: "n")
         scratchpad.keyEquivalentModifierMask = [.command, .shift]
         scratchpad.target = self
+        let insert = windowMenu.addItem(withTitle: "Insert Photo from Phone", action: #selector(insertPhotoFromPhone), keyEquivalent: "i")
+        insert.keyEquivalentModifierMask = [.command, .shift]
+        insert.target = self
+        let scan = windowMenu.addItem(withTitle: "Scan Document with Phone", action: #selector(scanDocumentWithPhone), keyEquivalent: "d")
+        scan.keyEquivalentModifierMask = [.command, .shift]
+        scan.target = self
 
         NSApp.mainMenu = mainMenu
     }
@@ -704,6 +710,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             guard let destPath = entry.dest_path else { return }
             
             let fileName = entry.file_name ?? URL(fileURLWithPath: destPath).lastPathComponent
+            // A picture asked of the phone with "Insert from Phone" is pasted where you were typing.
+            if fileName.hasPrefix("LinkAll Capture "),
+               let asked = store.pendingCaptureAt, Date().timeIntervalSince(asked) < 600 {
+                store.pendingCaptureAt = nil
+                insertPicture(at: URL(fileURLWithPath: destPath))
+                return
+            }
             let isScreenshot = fileName.lowercased().contains("screenshot")
 
             if isScreenshot {
@@ -851,6 +864,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
         // Let the popup give focus back first.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: down)
+                event?.flags = .maskCommand
+                event?.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
+    @objc private func insertPhotoFromPhone() { store.captureFromPhone(mode: "photo") }
+    @objc private func scanDocumentWithPhone() { store.captureFromPhone(mode: "document") }
+
+    /// Puts the picture on the clipboard and presses Command-V in the app that has
+    /// focus. Pressing keys needs Accessibility; without it the picture is only copied.
+    private func insertPicture(at url: URL) {
+        guard let image = NSImage(contentsOf: url) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else {
+            store.showToast(title: "Picture copied", body: "Paste it with ⌘V. Allow Link All in Accessibility to paste it for you.", tint: CRTheme.accentGreen, systemImage: "photo", ttl: 6.0)
+            return
+        }
+        store.showToast(title: "Picture inserted", body: url.lastPathComponent, tint: CRTheme.accentGreen, systemImage: "photo", ttl: 3.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             for down in [true, false] {
                 let event = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: down)
                 event?.flags = .maskCommand

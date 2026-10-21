@@ -61,6 +61,8 @@ async fn run() -> Result<()> {
         ["find", "stop", id] => cmd_find(id, false).await,
         ["find", id] => cmd_find(id, true).await,
         ["call", id, number] => cmd_call(id, number).await,
+        ["capture", id] => cmd_capture(id, "photo").await,
+        ["capture", id, mode] => cmd_capture(id, mode).await,
         ["scratch"] | ["scratch", "list"] => cmd_scratch_list().await,
         ["scratch", "add", words @ ..] if !words.is_empty() => {
             cmd_scratch_save(None, &words.join(" ")).await
@@ -283,6 +285,22 @@ async fn cmd_push(text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+/// Asks a paired phone to take a picture ("photo" or "document") and send it back.
+async fn cmd_capture(id: &str, mode: &str) -> Result<()> {
+    match ipc(&IpcRequest::CaptureRequest {
+        target: id.to_string(),
+        mode: mode.to_string(),
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Asked the phone to take a picture");
+            Ok(())
+        }
+    }
 }
 
 /// Lists the Scratchpad notes, pinned first.
@@ -1432,6 +1450,7 @@ DAEMON CONTROL
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
   find [stop] <uuid>              Make a paired phone ring (or stop) so you can find it
   call <uuid> <number>            Offer a paired phone a call (it opens the dialer when tapped)
+  capture <uuid> [document]       Ask a paired phone to take a picture and send it back
   scratch [add <text> | rm <id> | clear]  Notes shared between your devices
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it

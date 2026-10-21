@@ -556,6 +556,13 @@ final class LinkAllIPCClient {
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
     }
 
+    /// Asks a paired phone to take a picture ("photo" or "document") and send it back.
+    func captureRequest(target: String, mode: String) async throws {
+        let raw = try await send(cmd: ["cmd": "capture_request", "target": target, "mode": mode])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
     /// The daemon's redacted problem report; `header` is what only the app knows.
     func diagnosticReport(header: String) async throws -> String {
         let raw = try await send(cmd: ["cmd": "diagnostic_report", "header": header])

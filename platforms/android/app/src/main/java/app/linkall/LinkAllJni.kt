@@ -55,6 +55,8 @@ object LinkAllJni {
     const val CR_EVENT_DIAL_REQUESTED          = 44
     /** The Scratchpad changed, here or on a paired device. */
     const val CR_EVENT_SCRATCHPAD_CHANGED      = 45
+    /** A paired computer asked this phone to take a picture; the mode ("photo" or "document") is [eventText]. */
+    const val CR_EVENT_CAPTURE_REQUESTED       = 46
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)

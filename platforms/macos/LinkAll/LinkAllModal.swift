@@ -476,13 +476,15 @@ struct SendModalCard: View {
 
 /// Which phone to ring, when more than one can be asked. One tap rings it.
 struct FindPhoneCard: View {
+    var title = "Ring which phone?"
+    var subtitle = "It rings even on silent until you tap Found it"
+    var icon = "bell.and.waves.left.and.right.fill"
     let choices: IpcDeviceChoices
     let onPick: (IpcDeviceChoice) -> Void
     let onCancel: () -> Void
 
     var body: some View {
-        ModalCard(icon: "bell.and.waves.left.and.right.fill", title: "Ring which phone?",
-                  subtitle: "It rings even on silent until you tap Found it", width: 440) {
+        ModalCard(icon: icon, title: title, subtitle: subtitle, width: 440) {
             VStack(spacing: 8) {
                 ForEach(choices.usable) { d in row(d, enabled: true) }
                 if !choices.unusable.isEmpty {

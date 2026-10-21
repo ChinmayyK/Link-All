@@ -94,6 +94,13 @@
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
 
+        <!-- ── Take a picture for a computer ─────────────────────────── -->
+        <activity
+            android:name=".CaptureActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- ── Share target ──────────────────────────────────────────── -->
         <activity
             android:name=".LinkAllShareTarget"
