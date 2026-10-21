@@ -435,6 +435,9 @@ namespace LinkAll.WinUI
         }
         public bool ShowTransferIndicator => IsTransferring && IsConnected;
 
+        // Only a phone can be asked to ring.
+        public bool IsPhone => (platform ?? "").Contains("android", StringComparison.OrdinalIgnoreCase);
+
         public string PlatformLabel
         {
             get

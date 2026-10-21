@@ -127,6 +127,10 @@
                                                 Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE7F5;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Find phone" Click="OnFindPhoneClicked"
+                                                Visibility="{x:Bind IsPhone, Converter={StaticResource BoolToVisibleConverter}, Mode=OneTime}">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEA8F;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                                 <MenuFlyoutItem Text="Run speed test" Click="OnSpeedTestDeviceClicked"
                                                 Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE916;" /></MenuFlyoutItem.Icon>
