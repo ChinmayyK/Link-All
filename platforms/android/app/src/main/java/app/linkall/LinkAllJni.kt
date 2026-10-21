@@ -70,6 +70,16 @@ object LinkAllJni {
     /** Why [remoteControl] could not send, as a sentence, or null. */
     @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
     @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean
+    /** Rings or stops a computer; waits for its answer. Null when it will, otherwise why it won't. */
+    @JvmStatic external fun sendFindDevice(handle: Long, targetDeviceId: String, ring: Boolean): String?
+    // Trackpad and keyboard for a computer. Each returns 0 when sent, -1 when it could not be.
+    @JvmStatic external fun sendPointerMove(handle: Long, targetDeviceId: String, dx: Int, dy: Int): Int
+    /** [button]: 0 left, 1 right, 2 middle. */
+    @JvmStatic external fun sendPointerButton(handle: Long, targetDeviceId: String, button: Int, down: Boolean): Int
+    @JvmStatic external fun sendPointerScroll(handle: Long, targetDeviceId: String, dx: Int, dy: Int): Int
+    @JvmStatic external fun sendTypeText(handle: Long, targetDeviceId: String, text: String): Int
+    /** [key]: backspace, enter, escape, tab, left, right, up or down. */
+    @JvmStatic external fun sendKeyPress(handle: Long, targetDeviceId: String, key: String): Int
     /** True when a [CR_EVENT_FIND_DEVICE_REQUESTED] says to start ringing, false to stop. */
     @JvmStatic external fun eventFindRing(event: Long): Boolean
     /** Whether paired computers may make this phone ring. Returns 0 on success. */

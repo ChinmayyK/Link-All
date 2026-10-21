@@ -32,6 +32,14 @@ import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.NavigateBefore
 import androidx.compose.material.icons.outlined.NavigateNext
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Mouse
+import androidx.compose.material.icons.outlined.NotificationsActive
+import androidx.compose.material.icons.outlined.NotificationsOff
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -77,6 +85,26 @@ internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, canChange: Boolean, on
         }.start()
     }
 
+    // Rings or stops the computer. Waits for its answer, so it runs off the main thread.
+    fun ring(on: Boolean) {
+        Thread {
+            val problem = LinkAllService.withLiveEngine { handle -> LinkAllJni.sendFindDevice(handle, peer.id, on) }
+                ?: "Link All isn't running."
+            val message = when {
+                problem.isNotEmpty() -> problem
+                on -> "${peer.name} is ringing"
+                else -> ""
+            }
+            if (message.isNotEmpty()) {
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                }
+            }
+        }.start()
+    }
+    var showPad by remember { mutableStateOf(false) }
+    if (showPad) TrackpadDialog(c, peer, onDismiss = { showPad = false })
+
     DdSheet(
         c, icon = Icons.Outlined.SettingsRemote, title = "Remote · ${peer.name}",
         subtitle = "Turn on Remote control in Link All on that computer first",
@@ -86,6 +114,7 @@ internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, canChange: Boolean, on
             if (canChange) {
                 PillButton(c, "Change computer", filled = false, compact = true, icon = Icons.Outlined.SwapHoriz) { close { onChange() } }
             }
+            PillButton(c, "Trackpad and keyboard", filled = true, icon = Icons.Outlined.Mouse, modifier = Modifier.fillMaxWidth()) { showPad = true }
             Group(c, "Music") {
                 RemoteKey(c, Icons.Outlined.SkipPrevious, "Previous") { press("previous_track") }
                 RemoteKey(c, Icons.Outlined.PlayArrow, "Play") { press("play_pause") }
@@ -99,6 +128,14 @@ internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, canChange: Boolean, on
             Group(c, "Slides") {
                 RemoteKey(c, Icons.Outlined.NavigateBefore, "Back") { press("slide_previous") }
                 RemoteKey(c, Icons.Outlined.NavigateNext, "Next") { press("slide_next") }
+            }
+            Group(c, "Computer") {
+                RemoteKey(c, Icons.Outlined.Lock, "Lock") { press("lock_screen") }
+                RemoteKey(c, Icons.Outlined.DarkMode, "Screen off") { press("sleep_display") }
+            }
+            Group(c, "Find this computer") {
+                RemoteKey(c, Icons.Outlined.NotificationsActive, "Ring") { ring(true) }
+                RemoteKey(c, Icons.Outlined.NotificationsOff, "Stop") { ring(false) }
             }
         }
     }
