@@ -44,20 +44,26 @@ mod background;
 pub(crate) mod clipboard;
 mod connection;
 mod diagnostics;
+mod drop_folder;
 pub(crate) mod file_ops;
 mod folder_ops;
+mod guest_ops;
 mod health;
 mod listener;
+pub(crate) mod now_playing_ops;
 mod peer_discovery;
 mod remote_ops;
+mod scratchpad_ops;
 mod session;
 mod settings_ops;
 pub(crate) mod telemetry;
 mod transfer_ops;
 mod trust_ops;
 mod types;
+mod walk_away;
 
 use connection::*;
+pub use drop_folder::drop_folder_path;
 pub(crate) use file_ops::*;
 pub use folder_ops::{FolderItem, FolderProgress, FolderSend};
 pub use health::HealthIssue;
@@ -187,6 +193,12 @@ impl Engine {
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
+            guest: Arc::default(),
+            now_playing_sent: Arc::default(),
+            now_playing_remote: Arc::default(),
+            scratchpad: Arc::new(std::sync::Mutex::new(crate::scratchpad::Scratchpad::load(
+                &config.data_dir.join("scratchpad.json"),
+            ))),
             started_at: Instant::now(),
             network_hint: Arc::default(),
         };
@@ -305,6 +317,9 @@ impl Engine {
         engine.spawn_sensitive_history_pruner();
         engine.spawn_auto_reconnector();
         engine.spawn_health_monitor();
+        engine.spawn_drop_folder();
+        engine.spawn_walk_away_lock();
+        engine.spawn_now_playing_source();
 
         // Spawn UDP broadcast beacon and listener for resilient discovery.
         // Off with discovery: test engines beaconed onto the real LAN, and

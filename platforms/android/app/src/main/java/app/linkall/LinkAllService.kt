@@ -134,6 +134,10 @@ class LinkAllService : Service() {
         const val ACTION_SETTINGS_CHANGED   = "app.linkall.SETTINGS_CHANGED"  // re-read prefs live
         const val ACTION_PUSH_CLIPBOARD     = "app.linkall.PUSH_CLIPBOARD"    // send Android clipboard to peers
         const val ACTION_PUSH_NOTIFICATION  = "app.linkall.PUSH_NOTIFICATION"
+        /** A one-time code from a text, for the computers to offer to copy or paste. */
+        const val ACTION_PUSH_VERIFICATION_CODE = "app.linkall.PUSH_VERIFICATION_CODE"
+        const val EXTRA_VERIFICATION_CODE   = "verification_code"
+        const val EXTRA_VERIFICATION_FROM   = "verification_from"
         const val ACTION_APPLY_CLIPBOARD    = "app.linkall.APPLY_CLIPBOARD"
         const val ACTION_ACCEPT_FILE_TRANSFER = "app.linkall.ACCEPT_FILE_TRANSFER"
         const val ACTION_REJECT_FILE_TRANSFER = "app.linkall.REJECT_FILE_TRANSFER"
@@ -629,6 +633,7 @@ class LinkAllService : Service() {
             // Cache our own UUID prefix so NSD can filter self-connections.
             myDeviceId = withEngine { live -> LinkAllJni.getDeviceId(live) }
             myDeviceUuidPrefix = myDeviceId?.take(8)
+            nowPlaying = NowPlayingBridge(applicationContext).also { it.start() }
             startNsdDiscovery()   // advertise + browse so the Mac can find us
             registerNetworkCallback() // restart NSD on WiFi changes
             // call continuity: receiver is statically registered now
@@ -1033,7 +1038,7 @@ class LinkAllService : Service() {
                 return START_STICKY
             }
             // Handled after the engine start below.
-            ACTION_PUSH_TEXT, ACTION_PUSH_SHARED_URI, ACTION_PUSH_NOTIFICATION -> Unit
+            ACTION_PUSH_TEXT, ACTION_PUSH_SHARED_URI, ACTION_PUSH_NOTIFICATION, ACTION_PUSH_VERIFICATION_CODE -> Unit
             else -> Log.w(TAG, "Unknown action: ${intent?.action}")
         }
 
@@ -1078,6 +1083,26 @@ class LinkAllService : Service() {
                 ) }
             }
 
+            // The computers show a popup with Copy and Paste buttons for this; it is
+            // a notification whose title starts "Verification code" and whose text is
+            // just the digits, which an older computer shows as a plain notification.
+            if (intent?.action == ACTION_PUSH_VERIFICATION_CODE &&
+                prefs().getBoolean("share_verification_codes", false) &&
+                engineHandle != 0L && hasConnectedPeers()
+            ) {
+                val code = intent.getStringExtra(EXTRA_VERIFICATION_CODE).orEmpty()
+                val from = intent.getStringExtra(EXTRA_VERIFICATION_FROM).orEmpty()
+                if (code.isNotBlank()) {
+                    withEngine { live -> LinkAllJni.pushNotification(
+                        live,
+                        "otp-${System.currentTimeMillis()}",
+                        "app.linkall.verification_code",
+                        if (from.isBlank()) "Verification code" else "Verification code from $from",
+                        code,
+                    ) }
+                }
+            }
+
             if (intent?.action == ACTION_PUSH_FOLDER) {
                 val treeUri = intent.getStringExtra(EXTRA_SHARED_URI)?.let { runCatching { Uri.parse(it) }.getOrNull() }
                 val targetDeviceId = intent.getStringExtra(EXTRA_TARGET_DEVICE_ID)
@@ -1117,7 +1142,11 @@ class LinkAllService : Service() {
         }
     }
 
+    private var nowPlaying: NowPlayingBridge? = null
+
     override fun onDestroy() {
+        nowPlaying?.stop()
+        nowPlaying = null
         FindPhone.stop(this)
         unregisterCallStateCallback()
         stopCallRefresh()
@@ -1769,6 +1798,20 @@ class LinkAllService : Service() {
                 }
             }
 
+            LinkAllJni.CR_EVENT_NOW_PLAYING_CHANGED -> nowPlaying?.refreshRemote()
+
+            LinkAllJni.CR_EVENT_MEDIA_COMMAND -> LinkAllJni.eventText(ev)?.let { nowPlaying?.onCommand(it) }
+
+            LinkAllJni.CR_EVENT_CAPTURE_REQUESTED -> {
+                val deviceId = LinkAllJni.eventDeviceId(ev) ?: return
+                showCaptureOffer(LinkAllJni.eventDeviceName(ev) ?: "A computer", deviceId, LinkAllJni.eventText(ev) ?: "photo")
+            }
+
+            LinkAllJni.CR_EVENT_DIAL_REQUESTED -> {
+                val number = LinkAllJni.eventText(ev) ?: return
+                showCallOffer(LinkAllJni.eventDeviceName(ev) ?: "A computer", number)
+            }
+
             LinkAllJni.CR_EVENT_FOLDER_TRANSFER_COMPLETE -> {
                 val folder = LinkAllJni.eventTransferFileName(ev) ?: "Folder"
                 val destDir = LinkAllJni.eventTransferDestPath(ev).orEmpty()
@@ -2333,6 +2376,77 @@ class LinkAllService : Service() {
             .setOngoing(true)
             .build()
         notificationManager.notify(transferNotifId(tid), notif)
+    }
+
+    /**
+     * A computer asked for a picture. The camera opens when this notification is
+     * tapped (or straight away on a phone that allows it over the lock screen).
+     */
+    private fun showCaptureOffer(from: String, deviceId: String, mode: String) {
+        val channel = "cr_capture"
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channel, "Picture requests", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "A paired computer asked this phone to take a picture"
+            }
+        )
+        val open = PendingIntent.getActivity(
+            this, 9100,
+            Intent(this, CaptureActivity::class.java)
+                .putExtra(CaptureActivity.EXTRA_MODE, mode)
+                .putExtra(CaptureActivity.EXTRA_DEVICE_ID, deviceId)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val what = if (mode == "document") "scan a document" else "take a photo"
+        runCatching {
+            notificationManager.notify(
+                9100,
+                NotificationCompat.Builder(this, channel)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("$from wants you to $what")
+                    .setContentText("Tap to open the camera. The picture goes straight to $from.")
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(open)
+                    .setFullScreenIntent(open, true)
+                    .build()
+            )
+        }.onFailure { Log.w(TAG, "Couldn't show the picture request", it) }
+    }
+
+    /**
+     * A computer offered to call [number]. Nothing is dialled on its own: the
+     * notification opens the dialer with the number filled in, and its owner
+     * presses call.
+     */
+    private fun showCallOffer(from: String, number: String) {
+        val channel = "cr_call"
+        notificationManager.createNotificationChannel(
+            NotificationChannel(channel, "Calls from your computer", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Offers from a paired computer to call a number from this phone"
+            }
+        )
+        val dial = PendingIntent.getActivity(
+            this, number.hashCode(),
+            Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + Uri.encode(number))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        runCatching {
+            notificationManager.notify(
+                (number.hashCode() and 0x7fff) + 7400,
+                NotificationCompat.Builder(this, channel)
+                    .setSmallIcon(R.mipmap.ic_launcher)
+                    .setContentTitle("Call $number?")
+                    .setContentText("$from offered this call. Tap to open the dialer.")
+                    .setCategory(NotificationCompat.CATEGORY_CALL)
+                    .setPriority(NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(dial)
+                    .addAction(0, "Open dialer", dial)
+                    .build()
+            )
+        }.onFailure { Log.w(TAG, "Couldn't show the call offer", it) }
     }
 
     private fun showPairingRequestNotification(

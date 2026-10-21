@@ -317,6 +317,22 @@ namespace LinkAll.WinUI
         public static JsonDocument? FindDevice(string deviceId, bool ring) =>
             Send(Req("find_device", ("target", deviceId), ("ring", ring)));
 
+        // Ask a paired phone to take a photo ("photo") or scan a document ("document") and send it back.
+        public static JsonDocument? CaptureRequest(string deviceId, string mode) =>
+            Send(Req("capture_request", ("target", deviceId), ("mode", mode)));
+
+        // Offer a paired phone a call; its owner taps a notification to open the dialer.
+        public static JsonDocument? DialNumber(string deviceId, string number) =>
+            Send(Req("dial_number", ("target", deviceId), ("number", number)));
+
+        // The devices a purpose ("send", "remote", "find" ...) can go to, ranked.
+        public static JsonDocument? DeviceChoices(string purpose) =>
+            Send(Req("device_choices", ("purpose", purpose)));
+
+        // Guest Drop: a link and PIN for someone who isn't paired, and stop it.
+        public static JsonDocument? GuestDropStart() => Send(Req("guest_drop_start"));
+        public static JsonDocument? GuestDropStop() => Send(Req("guest_drop_stop"));
+
         // Report back whether we actually managed to open a URL a peer asked
         // us to open. Called after the local Process.Start attempt.
         public static JsonDocument? AckOpenUrlOnDevice(string requesterDeviceId, bool success, string? error = null)

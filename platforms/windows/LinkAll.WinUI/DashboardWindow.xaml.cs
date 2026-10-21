@@ -218,6 +218,7 @@ namespace LinkAll.WinUI
         {
             if (args.SelectedItem is NavigationViewItem item)
             {
+                ShowBack(false);
                 var tag = item.Tag as string;
                 TraceLog.Write("NavView_SelectionChanged: " + tag);
                 try
@@ -230,6 +231,7 @@ namespace LinkAll.WinUI
                         "Transfers" => typeof(TransfersView),
                         "Settings" => typeof(SettingsView),
                         "Activity" => typeof(ActivityView),
+                        "Scratchpad" => typeof(ScratchpadView),
                         _ => typeof(DevicesView)
                     };
 
@@ -277,12 +279,13 @@ namespace LinkAll.WinUI
 
             PageTitleText.Text = tag switch
             {
-                "DevicePeer" => "Remote files",
+                "DevicePeer" => "Browse files",
                 "Clipboard" => "Clipboard",
-                "Transfers" => "Transfers",
+                "Transfers" => "Files",
                 "Activity" => "Activity",
+                "Scratchpad" => "Notes",
                 "Settings" => "Settings",
-                _ => "Devices",
+                _ => "Home",
             };
         }
 
@@ -317,10 +320,41 @@ namespace LinkAll.WinUI
         {
             var item = NavView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag)
                        ?? NavView.FooterMenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == tag);
-            if (item != null && NavView.SelectedItem != item)
+            if (item != null)
             {
-                NavView.SelectedItem = item;
+                if (NavView.SelectedItem != item) NavView.SelectedItem = item;
+                return;
             }
+            // Notes and a device's files have no sidebar entry: they open from
+            // Home and Files, over the sidebar's current choice, with Back.
+            Type? pageType = tag switch
+            {
+                "DevicePeer" => typeof(RemoteExplorerView),
+                "Scratchpad" => typeof(ScratchpadView),
+                _ => null,
+            };
+            if (pageType == null) return;
+            // Nothing stays selected, so any sidebar entry leaves the page; Back restores the one before.
+            if (NavView.SelectedItem != null) _beforeOverlay = NavView.SelectedItem;
+            NavView.SelectedItem = null;
+            SetPageTitle(tag);
+            ContentFrame.Navigate(pageType);
+            ShowBack(true);
+        }
+
+        private object? _beforeOverlay;
+
+        private void ShowBack(bool show)
+        {
+            NavView.IsBackButtonVisible = show ? NavigationViewBackButtonVisible.Visible : NavigationViewBackButtonVisible.Collapsed;
+            NavView.IsBackEnabled = show;
+        }
+
+        private void NavView_BackRequested(NavigationView sender, NavigationViewBackRequestedEventArgs args)
+        {
+            if (ContentFrame.CanGoBack) ContentFrame.GoBack();
+            ShowBack(false);
+            NavView.SelectedItem = _beforeOverlay ?? NavDevices;
         }
 
         private void OnTitleBarScanClicked(object sender, RoutedEventArgs e)

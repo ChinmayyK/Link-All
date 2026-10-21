@@ -164,13 +164,59 @@
                             </Border>
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                                 <TextBlock Text="Let phones control this PC" Style="{StaticResource AppBodyStrong}" />
-                                <TextBlock Text="Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides"
+                                <TextBlock Text="Paired phones can press play/pause, volume and the arrow keys for slides, move the pointer and type, lock this PC, turn its screen off and make it ring"
                                            Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
                             <ToggleSwitch x:Name="RemoteControlToggle" Grid.Column="2" MinWidth="0"
                                           VerticalAlignment="Center"
                                           Toggled="OnRemoteControlToggled"
                                           AutomationProperties.Name="Let phones control this PC" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Link All Drop" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Files you put in the Link All Drop folder in your user folder are sent to your paired devices on their own"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="DropFolderToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnDropFolderToggled"
+                                          AutomationProperties.Name="Link All Drop" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE72E;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Lock when my phone leaves" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Locks this PC when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="WalkAwayToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnWalkAwayToggled"
+                                          AutomationProperties.Name="Lock when my phone leaves" />
                         </Grid>
                     </StackPanel>
                 </Border>

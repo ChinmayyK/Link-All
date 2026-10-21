@@ -120,7 +120,10 @@ fn ask(hub: &Hub, id: &str, name: &str, pin: &str) {
         if let Some(app) = gtk::gio::Application::default() {
             app.withdraw_notification("pairing");
         }
-        INCOMING.with(|m| m.borrow_mut().remove(&device));
+        // Answered on the device's page already: that sent the answer.
+        if INCOMING.with(|m| m.borrow_mut().remove(&device)).is_none() {
+            return;
+        }
         let accepted = response == "accept";
         act(
             json!({ "cmd": "respond_to_pairing", "device_id": device, "accepted": accepted }),
@@ -130,6 +133,33 @@ fn ask(hub: &Hub, id: &str, name: &str, pin: &str) {
     });
     INCOMING.with(|m| m.borrow_mut().insert(id.to_string(), dialog.clone()));
     dialog.present(Some(&win));
+}
+
+/// Answers `id`'s request to pair, from its page; closes the dialog asking the same.
+pub fn respond(hub: &Hub, id: &str, accepted: bool) {
+    if let Some(app) = gtk::gio::Application::default() {
+        app.withdraw_notification("pairing");
+    }
+    if let Some(dialog) = INCOMING.with(|m| m.borrow_mut().remove(id)) {
+        dialog.force_close();
+    }
+    act(
+        json!({ "cmd": "respond_to_pairing", "device_id": id, "accepted": accepted }),
+        None,
+        hub,
+    );
+}
+
+/// Withdraws this computer's request to pair with `id`.
+pub fn cancel(hub: &Hub, id: &str) {
+    if let Some((_, dialog, _)) = OUTGOING.with(|o| o.borrow_mut().take()) {
+        dialog.force_close();
+    }
+    act(
+        json!({ "cmd": "cancel_pairing_request", "device_id": id }),
+        None,
+        hub,
+    );
 }
 
 /// Asks a nearby device to pair and waits for it to accept.
@@ -185,7 +215,7 @@ pub async fn qr(hub: &Hub) -> Option<gdk::MemoryTexture> {
                 .unwrap_or("Linux"),
         ),
         ("token", &token),
-        ("ip", &local_ip()),
+        ("ip", &local_address()),
         (
             "port",
             &status["port"].as_u64().unwrap_or(47823).to_string(),
@@ -260,7 +290,7 @@ fn pairing_url(params: &[(&str, &str)]) -> String {
 
 /// The address phones on the LAN reach this computer at. Connecting a UDP
 /// socket sends nothing; it only picks the outgoing interface.
-fn local_ip() -> String {
+pub fn local_address() -> String {
     std::net::UdpSocket::bind("0.0.0.0:0")
         .and_then(|s| s.connect("192.0.2.1:9").map(|_| s))
         .and_then(|s| s.local_addr())
@@ -268,7 +298,7 @@ fn local_ip() -> String {
         .unwrap_or_else(|_| "127.0.0.1".into())
 }
 
-fn qr_texture(text: &str) -> Option<gdk::MemoryTexture> {
+pub(crate) fn qr_texture(text: &str) -> Option<gdk::MemoryTexture> {
     let code = qrcode::QrCode::with_error_correction_level(text, qrcode::EcLevel::M).ok()?;
     let modules = code.width();
     let colors = code.to_colors();
@@ -295,6 +325,46 @@ fn qr_texture(text: &str) -> Option<gdk::MemoryTexture> {
         &glib::Bytes::from_owned(pixels),
         side * 4,
     ))
+}
+
+/// Connects to a device by IP address or host name, for networks where discovery is blocked.
+pub fn add_by_address(hub: &Hub) {
+    let entry = adw::EntryRow::builder()
+        .title("IP address or host name")
+        .build();
+    let list = gtk::ListBox::builder()
+        .css_classes(["boxed-list"])
+        .selection_mode(gtk::SelectionMode::None)
+        .build();
+    list.append(&entry);
+    let dialog = adw::AlertDialog::builder()
+        .heading("Add by IP Address")
+        .body("For a device on another part of your network. Link All must be open on it.")
+        .extra_child(&list)
+        .close_response("cancel")
+        .default_response("connect")
+        .build();
+    dialog.add_responses(&[("cancel", "Cancel"), ("connect", "Connect")]);
+    dialog.set_response_appearance("connect", adw::ResponseAppearance::Suggested);
+    let hub = hub.clone();
+    dialog.connect_response(Some("connect"), move |_, _| {
+        let text = entry.text().trim().to_string();
+        let (host, port) = match text.rsplit_once(':') {
+            Some((h, p)) if p.parse::<u16>().is_ok() && !h.contains(':') => {
+                (h.to_string(), p.parse::<u16>().ok())
+            }
+            _ => (text.clone(), None),
+        };
+        if host.is_empty() {
+            return toast("Enter an address");
+        }
+        act(
+            json!({ "cmd": "connect_manual", "host": host, "port": port }),
+            Some("Connecting…"),
+            &hub,
+        );
+    });
+    dialog.present(window().as_ref());
 }
 
 #[cfg(test)]

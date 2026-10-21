@@ -278,6 +278,28 @@ pub enum EngineEvent {
         from_device: Uuid,
         ring: bool,
     },
+    /// A paired computer asked this phone to take a picture ("photo" or "document").
+    CaptureRequested {
+        from_device: Uuid,
+        from_name: String,
+        mode: String,
+    },
+    /// A paired device is playing something new, or stopped.
+    NowPlayingChanged,
+    /// A paired device asked this one to control its player.
+    MediaCommandReceived {
+        from_device: Uuid,
+        action: String,
+        value: i64,
+    },
+    /// The Scratchpad changed, here or on a paired device.
+    ScratchpadChanged,
+    /// A paired computer offered to call a number from this phone.
+    DialRequested {
+        from_device: Uuid,
+        from_name: String,
+        number: String,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,
@@ -508,6 +530,15 @@ pub struct QrAuthToken {
 #[derive(Clone)]
 pub(crate) struct EngineShared {
     pub(crate) config: EngineConfig,
+    /// What this device last told the others it was playing.
+    pub(crate) now_playing_sent: crate::engine::now_playing_ops::SentSlot,
+    /// What the other devices are playing, with when it arrived.
+    pub(crate) now_playing_remote:
+        Arc<dashmap::DashMap<Uuid, (crate::now_playing::NowPlaying, Instant)>>,
+    /// The running Guest Drop session, if any.
+    pub(crate) guest: Arc<std::sync::Mutex<Option<crate::guest_drop::GuestHandle>>>,
+    /// Notes shared between your own devices.
+    pub(crate) scratchpad: Arc<std::sync::Mutex<crate::scratchpad::Scratchpad>>,
     pub(crate) trust: Arc<Mutex<TrustStore>>,
     pub(crate) peer_manager: Arc<PeerManager>,
     pub(crate) event_tx: mpsc::Sender<EngineEvent>,

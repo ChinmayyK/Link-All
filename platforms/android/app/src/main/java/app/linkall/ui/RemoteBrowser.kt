@@ -20,13 +20,10 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -35,7 +32,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +41,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.linkall.LinkAllJni
@@ -234,7 +229,7 @@ internal fun RemoteBrowserScreen(isDark: Boolean, peer: PeerSnapshot, onClose: (
                 Icon(osIcon(peer.platform, peer.name), contentDescription = null, tint = c.accent, modifier = Modifier.size(22.dp))
             }
             Spacer(Modifier.height(16.dp))
-            SearchField(c, query) { query = it }
+            SearchField(c, query, "Search files") { query = it }
         }
         Spacer(Modifier.height(12.dp))
         Row(
@@ -284,41 +279,6 @@ internal fun RemoteBrowserScreen(isDark: Boolean, peer: PeerSnapshot, onClose: (
                     if (loadingMore) item { MoreSpinner(c) }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun SearchField(c: DdColors, value: String, onChange: (String) -> Unit) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(48.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .background(c.surface)
-            .border(1.dp, c.line, RoundedCornerShape(16.dp))
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(Icons.Outlined.Search, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(10.dp))
-        Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text("Search files", style = DdType.body, color = c.textMuted)
-            BasicTextField(
-                value = value,
-                onValueChange = onChange,
-                singleLine = true,
-                textStyle = DdType.body.copy(color = c.text),
-                cursorBrush = SolidColor(c.accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-        if (value.isNotEmpty()) {
-            Icon(
-                Icons.Rounded.Close, contentDescription = "Clear search", tint = c.textMuted,
-                modifier = Modifier.size(20.dp).clickable { onChange("") }
-            )
         }
     }
 }

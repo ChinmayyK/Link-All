@@ -155,6 +155,10 @@ dependencies {
     // Coil for Image/Video Loading
     implementation 'io.coil-kt:coil-compose:2.5.0'
     implementation 'io.coil-kt:coil-video:2.5.0'
+
+    // Document scanning for "Insert from Phone": finds the page's edges, straightens and cleans it.
+    // Needs Google Play services; without them the phone's camera is used instead.
+    implementation 'com.google.android.gms:play-services-mlkit-document-scanner:16.0.0-beta1'
 }
 
 // The APK ships whatever liblinkall_core.so is in src/main/jniLibs; Gradle

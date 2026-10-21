@@ -10,6 +10,7 @@ enum MenuBarPopoverAction {
     case scan
     case connectByIP
     case diagnostics
+    case scratchpad
     case quit
 }
 
@@ -17,6 +18,7 @@ struct MenuBarPopoverView: View {
     @ObservedObject var store: LinkAllStore
     var onAction: (MenuBarPopoverAction) -> Void
     @Environment(\.colorScheme) var scheme
+    @StateObject private var nowPlaying = NowPlayingModel()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -54,6 +56,17 @@ struct MenuBarPopoverView: View {
                     
                     Spacer()
                     
+                    Button(action: { onAction(.scratchpad) }) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary.opacity(0.7))
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.05), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Notes")
+                    .crHoverScale()
+
                     Button(action: { onAction(.diagnostics) }) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 14, weight: .semibold))
@@ -79,7 +92,16 @@ struct MenuBarPopoverView: View {
             .padding(.vertical, 16)
             
             Divider().opacity(0.5)
-            
+
+            // What another device is playing, with its cover and controls.
+            if let item = nowPlaying.items.first {
+                NowPlayingCard(item: item) { action, value in
+                    nowPlaying.send(item, action, value: value)
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+            }
+
             // Actions Grid
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
                 PopoverActionButton(
@@ -165,6 +187,12 @@ struct MenuBarPopoverView: View {
             .overlay(Rectangle().fill(scheme == .light ? CRTheme.stroke : Color.primary.opacity(0.05)).frame(height: 1), alignment: .top)
         }
         .frame(width: 320)
+        .onAppear { nowPlaying.start() }
+        .onDisappear { nowPlaying.stop() }
+        .onChange(of: nowPlaying.items.isEmpty) { _ in
+            // The panel grows or shrinks to fit the player card.
+            NotificationCenter.default.post(name: .linkAllPopoverContentChanged, object: nil)
+        }
         .background {
             ZStack {
                 CRVisualEffect(material: .menu)

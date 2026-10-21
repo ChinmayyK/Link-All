@@ -95,6 +95,18 @@ class LinkAllNotificationListener : NotificationListenerService() {
         val content = "$title\u0000$text"
         if (lastSentContent[id] == content) return
         lastSentContent[id] = content
+
+        // A verification code in a text goes to the computers' clipboards, when
+        // the user turned that on. The text itself is not logged anywhere.
+        if (getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE).getBoolean("share_verification_codes", false)) {
+            VerificationCode.find("$title $text")?.let { code ->
+                relay(Intent(this, LinkAllService::class.java).apply {
+                    action = LinkAllService.ACTION_PUSH_VERIFICATION_CODE
+                    putExtra(LinkAllService.EXTRA_VERIFICATION_CODE, code)
+                    putExtra(LinkAllService.EXTRA_VERIFICATION_FROM, title.trim().take(40))
+                })
+            }
+        }
         
         // Never log the content: it holds messages and one-time codes.
         Log.d(TAG, "Notification posted: pkg=$pkg")

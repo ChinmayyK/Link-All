@@ -60,6 +60,13 @@
             <uap:DisplayName>Link All</uap:DisplayName>
           </uap:Protocol>
         </uap:Extension>
+        <!-- tel: links, once the user picks Link All for them in Default apps: the number is
+             offered to a paired phone, which opens its dialer when its owner taps. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="tel">
+            <uap:DisplayName>Call from your phone with Link All</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
         <!-- "Start with Windows" in Settings turns this on (StartupRegistration.cs).
              It starts the app with no arguments; App treats that as a tray-only launch. -->
         <desktop:Extension Category="windows.startupTask">

@@ -604,6 +604,73 @@ pub enum AppMessage {
         success: bool,
         error: Option<String>,
     },
+    /// Phone -> computer, streamed while a finger is on the trackpad: move the
+    /// pointer by this much. Needs "Remote control" on at the computer; sent
+    /// only to computers that report 2.1.0 or later.
+    RemotePointerMove {
+        dx: i16,
+        dy: i16,
+    },
+    /// Press (`down`) or release a mouse button: 0 left, 1 right, 2 middle.
+    RemotePointerButton {
+        button: u8,
+        down: bool,
+    },
+    /// Scroll by this much (pixel-like units).
+    RemotePointerScroll {
+        dx: i16,
+        dy: i16,
+    },
+    /// Type these characters.
+    RemoteTypeText {
+        text: String,
+    },
+    /// Press one key from a fixed list (see `remote_input::Key`).
+    RemoteKeyPress {
+        key: String,
+    },
+    /// Computer -> phone: offer to call this number. The phone shows a
+    /// notification, and the dialer opens with the number filled in only
+    /// when its owner taps it; nothing is dialled on its own.
+    DialNumber {
+        number: String,
+    },
+    /// One Scratchpad note, sent when it changes and when two devices connect.
+    /// The newest `updated_at_ms` wins; `deleted` leaves an empty marker.
+    ScratchpadNote {
+        id: Uuid,
+        text: String,
+        pinned: bool,
+        updated_at_ms: u64,
+        deleted: bool,
+    },
+    /// Computer -> phone: open the camera and send the picture back. `mode` is
+    /// "photo" or "document". The phone shows a notification to tap; nothing
+    /// is captured without its owner taking the picture.
+    CaptureRequest {
+        mode: String,
+    },
+    /// Phone -> computer: run a named shortcut (see `remote_input::Shortcut`),
+    /// spelled the way the computer's system spells it.
+    RemoteShortcut {
+        name: String,
+    },
+    /// Phone -> computer: hold (`down`) or release a modifier: shift, ctrl,
+    /// alt or meta. Released on its own after 30 seconds.
+    RemoteModifier {
+        modifier: String,
+        down: bool,
+    },
+    /// What the sender is playing, with cover art once per track; an empty
+    /// title means nothing is playing any more. Sent to paired devices.
+    NowPlaying {
+        info: crate::now_playing::NowPlaying,
+    },
+    /// Play, pause, skip or seek the receiver's player (see `now_playing::MediaAction`).
+    MediaCommand {
+        action: String,
+        value: i64,
+    },
 }
 
 impl AppMessage {

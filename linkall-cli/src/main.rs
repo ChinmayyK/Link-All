@@ -60,6 +60,39 @@ async fn run() -> Result<()> {
         ["devices"] | ["devices", "list"] => cmd_devices_list(),
         ["find", "stop", id] => cmd_find(id, false).await,
         ["find", id] => cmd_find(id, true).await,
+        ["call", id, number] => cmd_call(id, number).await,
+        ["nowplaying"] => cmd_nowplaying().await,
+        ["media", id, action] => cmd_media(id, action, 0).await,
+        ["media", id, "seek", seconds] => {
+            cmd_media(
+                id,
+                "seek",
+                (seconds.parse::<f64>().context("bad seconds")? * 1000.0) as i64,
+            )
+            .await
+        }
+        ["guest"] => cmd_guest(true).await,
+        ["guest", "stop"] => cmd_guest(false).await,
+        ["capture", id] => cmd_capture(id, "photo").await,
+        ["capture", id, mode] => cmd_capture(id, mode).await,
+        ["scratch"] | ["scratch", "list"] => cmd_scratch_list().await,
+        ["scratch", "add", words @ ..] if !words.is_empty() => {
+            cmd_scratch_save(None, &words.join(" ")).await
+        }
+        ["scratch", "rm", id] => {
+            cmd_scratch_simple(
+                IpcRequest::ScratchpadDelete { id: id.to_string() },
+                "Deleted",
+            )
+            .await
+        }
+        ["scratch", "clear"] => {
+            cmd_scratch_simple(
+                IpcRequest::ScratchpadClear,
+                "Cleared the notes that aren't pinned",
+            )
+            .await
+        }
         ["devices", "choose", purpose] => cmd_devices_choose(purpose, None).await,
         ["devices", "choose", purpose, last] => cmd_devices_choose(purpose, Some(last)).await,
         ["devices", "show", id] => cmd_devices_show(id).await,
@@ -264,6 +297,165 @@ async fn cmd_push(text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+/// What the paired devices are playing.
+async fn cmd_nowplaying() -> Result<()> {
+    match ipc(&IpcRequest::NowPlayingList).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            let list = data.as_array().cloned().unwrap_or_default();
+            if list.is_empty() {
+                println!("Nothing is playing on your other devices");
+            }
+            for n in list {
+                println!(
+                    "{} {} — {} ({}) on {}  [{}]",
+                    if n["playing"].as_bool().unwrap_or(false) {
+                        "▶"
+                    } else {
+                        "⏸"
+                    },
+                    n["title"].as_str().unwrap_or("?"),
+                    n["artist"].as_str().unwrap_or("?"),
+                    n["app"].as_str().unwrap_or("?"),
+                    n["device_name"].as_str().unwrap_or("?"),
+                    n["device_id"].as_str().unwrap_or("?"),
+                );
+            }
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => Ok(()),
+    }
+}
+
+/// Plays, pauses, skips or seeks a paired device's player.
+async fn cmd_media(id: &str, action: &str, value: i64) -> Result<()> {
+    match ipc(&IpcRequest::MediaCommand {
+        target: id.to_string(),
+        action: action.to_string(),
+        value,
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Sent");
+            Ok(())
+        }
+    }
+}
+
+/// Starts a Guest Drop session (a link and PIN for someone who isn't paired), or stops it.
+async fn cmd_guest(start: bool) -> Result<()> {
+    if !start {
+        ipc(&IpcRequest::GuestDropStop).await?;
+        println!("Guest Drop stopped");
+        return Ok(());
+    }
+    match ipc(&IpcRequest::GuestDropStart).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            println!(
+                "Open this on the other device:  {}",
+                data["url"].as_str().unwrap_or("?")
+            );
+            println!(
+                "PIN:                            {}",
+                data["pin"].as_str().unwrap_or("?")
+            );
+            println!(
+                "It works for {} minutes.",
+                data["expires_in_secs"].as_u64().unwrap_or(300) / 60
+            );
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => Ok(()),
+    }
+}
+
+/// Asks a paired phone to take a picture ("photo" or "document") and send it back.
+async fn cmd_capture(id: &str, mode: &str) -> Result<()> {
+    match ipc(&IpcRequest::CaptureRequest {
+        target: id.to_string(),
+        mode: mode.to_string(),
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Asked the phone to take a picture");
+            Ok(())
+        }
+    }
+}
+
+/// Lists the Scratchpad notes, pinned first.
+async fn cmd_scratch_list() -> Result<()> {
+    match ipc(&IpcRequest::ScratchpadList).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            let notes = data.as_array().cloned().unwrap_or_default();
+            if notes.is_empty() {
+                println!("No notes");
+            }
+            for note in notes {
+                let pin = if note["pinned"].as_bool().unwrap_or(false) {
+                    "*"
+                } else {
+                    " "
+                };
+                let text = note["text"].as_str().unwrap_or("").replace('\n', " ");
+                println!("{pin} {}  {}", note["id"].as_str().unwrap_or("?"), text);
+            }
+            Ok(())
+        }
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => Ok(()),
+    }
+}
+
+/// Adds a note (`id` None) or replaces the text of one.
+async fn cmd_scratch_save(id: Option<String>, text: &str) -> Result<()> {
+    match ipc(&IpcRequest::ScratchpadSave {
+        id,
+        text: text.to_string(),
+        pinned: false,
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Saved");
+            Ok(())
+        }
+    }
+}
+
+async fn cmd_scratch_simple(request: IpcRequest, done: &str) -> Result<()> {
+    match ipc(&request).await? {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("{done}");
+            Ok(())
+        }
+    }
+}
+
+/// Offers a paired phone a call to `number`: it shows a notification, and
+/// the dialer opens when its owner taps it.
+async fn cmd_call(id: &str, number: &str) -> Result<()> {
+    match ipc(&IpcRequest::DialNumber {
+        target: id.to_string(),
+        number: number.to_string(),
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!("Offered the call to the phone");
+            Ok(())
+        }
+    }
 }
 
 /// Makes a paired phone ring, or stop ringing. `id` is its full device ID
@@ -1344,6 +1536,12 @@ DAEMON CONTROL
   push "<text>"                   Push text to all connected peers
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
   find [stop] <uuid>              Make a paired phone ring (or stop) so you can find it
+  call <uuid> <number>            Offer a paired phone a call (it opens the dialer when tapped)
+  capture <uuid> [document]       Ask a paired phone to take a picture and send it back
+  guest [stop]                    Take a file from someone who isn't paired (link + PIN)
+  nowplaying                      What your other devices are playing
+  media <uuid> play_pause|next|previous|seek <seconds>   Control a device's player
+  scratch [add <text> | rm <id> | clear]  Notes shared between your devices
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it
   pause <transfer-id>             Pause a file transfer

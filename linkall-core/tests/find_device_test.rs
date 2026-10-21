@@ -8,7 +8,7 @@ use common::{connect, start_pair};
 use tempfile::TempDir;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn a_computer_says_only_a_phone_can_ring() {
+async fn a_computer_with_remote_control_off_says_so_and_does_not_ring() {
     let tmp = TempDir::new().unwrap();
     let (asker, other) = start_pair(&tmp, true, true).await;
     connect(&asker, &other).await;
@@ -18,7 +18,7 @@ async fn a_computer_says_only_a_phone_can_ring() {
         .send_find_device(other.id, true)
         .await
         .unwrap_err();
-    assert!(err.contains("phone"));
+    assert!(err.contains("Remote control is off"), "{err}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

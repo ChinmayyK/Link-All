@@ -7,7 +7,7 @@ struct RootContainerView: View {
     var body: some View {
         Group {
             if hasCompletedOnboarding {
-                CommandCenterRootView(store: store)
+                MainWindowView(store: store)
             } else {
                 OnboardingView(store: store, onComplete: {
                     withAnimation(.crSpring) {

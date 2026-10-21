@@ -100,7 +100,6 @@ fn fixed_items(hub: &Hub) -> Vec<Item> {
         let id = p["id"].as_str().unwrap_or_default().to_string();
         let name = p["friendly_name"].as_str().unwrap_or("Device").to_string();
         let connected = p["status"] == "connected";
-        let hub = hub.clone();
         add(
             theme::os_icon(p["platform"].as_str().unwrap_or_default()),
             if connected { "blue" } else { "" },
@@ -110,7 +109,7 @@ fn fixed_items(hub: &Hub) -> Vec<Item> {
             } else {
                 "Device"
             },
-            Rc::new(move || super::devices::open_device(&hub, &id)),
+            Rc::new(move || super::device::open(&id)),
         );
     }
     items

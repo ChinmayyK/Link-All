@@ -20,6 +20,27 @@ pub enum Incoming {
 
 pub type ClipboardTx = mpsc::Sender<Incoming>;
 
+/// When a picture was last asked of a phone (seconds since 1970, 0 for never). A
+/// picture that arrives within ten minutes is put on the clipboard and pasted.
+pub static PENDING_CAPTURE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+pub fn mark_capture_asked() {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    PENDING_CAPTURE.store(now, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn capture_is_pending() -> bool {
+    let asked = PENDING_CAPTURE.load(std::sync::atomic::Ordering::Relaxed);
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    asked != 0 && now.saturating_sub(asked) < 600
+}
+
 fn hash_of(data: impl Hash) -> u64 {
     let mut h = DefaultHasher::new();
     data.hash(&mut h);
@@ -111,7 +132,7 @@ fn to_png(img: &arboard::ImageData) -> Option<Vec<u8>> {
 
 /// Reacts to activity and calls with clipboard writes and notifications.
 pub fn start(app: &adw::Application, hub: &Hub, clipboard: ClipboardTx) {
-    install_actions(app, hub);
+    install_actions(app, hub, &clipboard);
     watch_incoming_files(app, hub);
     watch_speed_tests(hub);
     report_power_and_storage();
@@ -165,10 +186,82 @@ pub fn start(app: &adw::Application, hub: &Hub, clipboard: ClipboardTx) {
             "remote_notification" => {
                 let title = entry["file_name"].as_str().unwrap_or(&device).to_string();
                 let text = entry["text_preview"].as_str().unwrap_or_default();
+                // A one-time code from the phone's texts gets a popup of its own.
+                if let Some(code) = linkall_core::remote_input::verification_code(&title, text) {
+                    let n = gio::Notification::new(&format!("Verification code: {code}"));
+                    n.set_body(Some(&format!(
+                        "{}\n{device}",
+                        title
+                            .trim_start_matches("Verification code")
+                            .trim_start_matches(" from ")
+                    )));
+                    n.set_priority(gio::NotificationPriority::Urgent);
+                    n.add_button_with_target_value(
+                        "Copy Code",
+                        "app.copy-code",
+                        Some(&code.to_variant()),
+                    );
+                    n.add_button_with_target_value(
+                        "Paste",
+                        "app.paste-code",
+                        Some(&code.to_variant()),
+                    );
+                    n.set_default_action_and_target_value(
+                        "app.copy-code",
+                        Some(&code.to_variant()),
+                    );
+                    app_ref.send_notification(Some(&format!("code-{id}")), &n);
+                    return;
+                }
                 let n = gio::Notification::new(&title);
                 n.set_body(Some(&format!("{}\n{device}", preview(text))));
                 n.set_default_action("app.show");
                 app_ref.send_notification(Some(&format!("phone-{id}")), &n);
+            }
+            // A picture asked of the phone with "Take Photo with Phone" is pasted where
+            // you were typing.
+            "file_transfer_complete"
+                if from_other
+                    && entry["file_name"]
+                        .as_str()
+                        .is_some_and(|n| n.starts_with("LinkAll Capture "))
+                    && capture_is_pending() =>
+            {
+                PENDING_CAPTURE.store(0, std::sync::atomic::Ordering::Relaxed);
+                let Some(path) = entry["dest_path"].as_str().map(str::to_string) else {
+                    return;
+                };
+                let clipboard = clipboard.clone();
+                let (tx, rx) = async_channel::bounded::<bool>(1);
+                std::thread::spawn(move || {
+                    let Some(png) = image::open(&path).ok().and_then(|img| {
+                        let mut out = std::io::Cursor::new(Vec::new());
+                        img.write_to(&mut out, image::ImageFormat::Png).ok()?;
+                        Some(out.into_inner())
+                    }) else {
+                        return;
+                    };
+                    let _ = clipboard.send(Incoming::Png(png));
+                    // Give the clipboard a moment to take the picture first.
+                    std::thread::sleep(std::time::Duration::from_millis(500));
+                    let _ = tx.send_blocking(linkall_core::remote_input::paste().is_ok());
+                });
+                let app = app_ref.clone();
+                glib::spawn_future_local(async move {
+                    if let Ok(pasted) = rx.recv().await {
+                        let n = gio::Notification::new(if pasted {
+                            "Picture inserted"
+                        } else {
+                            "Picture copied"
+                        });
+                        n.set_body(Some(if pasted {
+                            "Pasted into the app you were using"
+                        } else {
+                            "Paste it with Ctrl+V"
+                        }));
+                        app.send_notification(Some("capture"), &n);
+                    }
+                });
             }
             "file_transfer_complete" | "folder_transfer_complete" if from_other => {
                 let Some(path) = entry["dest_path"].as_str() else {
@@ -250,7 +343,28 @@ fn preview(text: &str) -> String {
 }
 
 /// Actions notification buttons point at.
-fn install_actions(app: &adw::Application, hub: &Hub) {
+fn install_actions(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) {
+    // Verification codes: "Copy Code" puts just the code on the clipboard, and
+    // "Paste" also presses Control-V in the app that has focus.
+    for (name, paste) in [("copy-code", false), ("paste-code", true)] {
+        let action = gio::SimpleAction::new(name, Some(glib::VariantTy::STRING));
+        let clipboard = clipboard.clone();
+        action.connect_activate(move |_, code| {
+            let Some(code) = code.and_then(|c| c.str()) else {
+                return;
+            };
+            let _ = clipboard.send(Incoming::Text(code.to_string()));
+            if paste {
+                // Give the clipboard a moment to take the code first.
+                std::thread::spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(300));
+                    let _ = linkall_core::remote_input::paste();
+                });
+            }
+        });
+        app.add_action(&action);
+    }
+
     let open = gio::SimpleAction::new("open-path", Some(glib::VariantTy::STRING));
     open.connect_activate(|_, path| {
         if let Some(path) = path.and_then(|p| p.str()) {

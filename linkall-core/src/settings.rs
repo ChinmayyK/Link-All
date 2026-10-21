@@ -132,6 +132,14 @@ pub struct Settings {
     /// Let a paired computer make this phone ring so it can be found. Only a
     /// phone acts on it. Off until the user turns it on.
     pub allow_find_device: bool,
+    /// Send what is dropped into the Link All Drop folder to paired devices.
+    /// Off until the user turns it on.
+    #[serde(default)]
+    pub drop_folder_enabled: bool,
+    /// Lock this computer when the paired phone that was linked to it stays
+    /// away for 30 seconds. Off until the user turns it on.
+    #[serde(default)]
+    pub lock_when_phone_leaves: bool,
 
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start Link All automatically on login.
@@ -232,6 +240,8 @@ impl Default for Settings {
             allow_file_browsing: false,
             allow_remote_control: false,
             allow_find_device: false,
+            drop_folder_enabled: false,
+            lock_when_phone_leaves: false,
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,

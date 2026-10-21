@@ -14,7 +14,7 @@ use jni::sys::{jboolean, jbyteArray, jint, jlong, jstring};
 use jni::JNIEnv;
 
 use crate::engine::{Engine, EngineConfig};
-use crate::protocol::ClipboardContent;
+use crate::protocol::{AppMessage, ClipboardContent};
 use std::path::PathBuf;
 use std::sync::OnceLock;
 use tokio::runtime::Runtime;
@@ -493,6 +493,11 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         OpenUrlOnDeviceAckReceived { .. } => 39,
         RemoteControlAckReceived { .. } => 42,
         FindDeviceRequested { .. } => 43,
+        DialRequested { .. } => 44,
+        ScratchpadChanged => 45,
+        CaptureRequested { .. } => 46,
+        NowPlayingChanged => 47,
+        MediaCommandReceived { .. } => 48,
     }
 }
 
@@ -537,6 +542,24 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventText(
         crate::engine::EngineEvent::RemoteFileActionRequestReceived { action, .. } => {
             return env
                 .new_string(action)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::MediaCommandReceived { action, value, .. } => {
+            return env
+                .new_string(format!("{action}:{value}"))
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::CaptureRequested { mode, .. } => {
+            return env
+                .new_string(mode)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::DialRequested { number, .. } => {
+            return env
+                .new_string(number)
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
@@ -618,6 +641,8 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceName(
         PeerConnected { device_name, .. } => Some(device_name.as_str()),
         PeerDisconnected { device_name, .. } => device_name.as_deref(),
         OpenUrlOnDeviceRequested { from_name, .. } => Some(from_name.as_str()),
+        DialRequested { from_name, .. } => Some(from_name.as_str()),
+        CaptureRequested { from_name, .. } => Some(from_name.as_str()),
         FolderTransferComplete { peer_name, .. } => Some(peer_name.as_str()),
         _ => None,
     };
@@ -667,6 +692,9 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceId(
         OpenUrlOnDeviceAckReceived { from_device, .. } => Some(*from_device),
         RemoteControlAckReceived { from_device, .. } => Some(*from_device),
         FindDeviceRequested { from_device, .. } => Some(*from_device),
+        DialRequested { from_device, .. } => Some(*from_device),
+        CaptureRequested { from_device, .. } => Some(*from_device),
+        MediaCommandReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -2979,4 +3007,396 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_pullRemoteFile(
         file_id as u64,
     ));
     0
+}
+
+/// Reads a device id passed from Kotlin; None when it isn't one.
+fn target_uuid(env: &mut JNIEnv, id: &JString) -> Option<uuid::Uuid> {
+    let id = env.get_string(id).map(String::from).ok()?;
+    uuid::Uuid::parse_str(&id).ok()
+}
+
+/// Rings (`ring` != 0) or stops a computer so its owner can find it. Waits for
+/// the answer; returns null when it will, otherwise why it won't.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendFindDevice(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    ring: jboolean,
+) -> jstring {
+    let say = |env: &mut JNIEnv, message: &str| {
+        env.new_string(message)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut())
+    };
+    if handle == 0 {
+        return say(&mut env, "Link All isn't running.");
+    }
+    let Some(target) = target_uuid(&mut env, &target_device_id) else {
+        return say(&mut env, "That device isn't known.");
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_find_device(target, ring != 0)) {
+        Ok(()) => std::ptr::null_mut(),
+        Err(message) => say(&mut env, &message),
+    }
+}
+
+/// Moves a computer's pointer by (dx, dy). Returns 0 when sent, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendPointerMove(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    dx: jint,
+    dy: jint,
+) -> jint {
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemotePointerMove {
+            dx: dx.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+            dy: dy.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+        }
+    })
+}
+
+/// Presses or releases a computer's mouse button (0 left, 1 right, 2 middle).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendPointerButton(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    button: jint,
+    down: jboolean,
+) -> jint {
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemotePointerButton {
+            button: button.clamp(0, 255) as u8,
+            down: down != 0,
+        }
+    })
+}
+
+/// Scrolls a computer by (dx, dy).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendPointerScroll(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    dx: jint,
+    dy: jint,
+) -> jint {
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemotePointerScroll {
+            dx: dx.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+            dy: dy.clamp(i16::MIN as i32, i16::MAX as i32) as i16,
+        }
+    })
+}
+
+/// Types text on a computer.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendTypeText(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    text: JString,
+) -> jint {
+    let Ok(text) = env.get_string(&text).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteTypeText { text }
+    })
+}
+
+/// Presses a named key (backspace, enter, escape, tab, left, right, up, down).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendKeyPress(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    key: JString,
+) -> jint {
+    let Ok(key) = env.get_string(&key).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteKeyPress { key }
+    })
+}
+
+fn send_input(
+    env: &mut JNIEnv,
+    handle: jlong,
+    target_device_id: &JString,
+    message: impl FnOnce() -> AppMessage,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(target) = target_uuid(env, target_device_id) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match h.engine.send_remote_input(target, message()) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// The Scratchpad notes as JSON (an array, pinned first), or null on error.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadListJson(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match serde_json::to_string(&h.engine.scratchpad_list()) {
+        Ok(json) => env
+            .new_string(json)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Creates a note (`id` null) or edits one. Returns 0 on success, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadSave(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    id: JString,
+    text: JString,
+    pinned: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let id = if id.is_null() {
+        None
+    } else {
+        match target_uuid(&mut env, &id) {
+            Some(id) => Some(id),
+            None => return -1,
+        }
+    };
+    let Ok(text) = env.get_string(&text).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.scratchpad_save(id, &text, pinned != 0)) {
+        Ok(_) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// Deletes a note. Returns 0 on success, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadDelete(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    id: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(id) = target_uuid(&mut env, &id) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.scratchpad_delete(id));
+    0
+}
+
+/// Deletes every note that isn't pinned.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadClear(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    rt().block_on(h.engine.scratchpad_clear());
+    0
+}
+
+/// Runs a named shortcut (copy, paste, back, ...) on a computer.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendShortcut(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    name: JString,
+) -> jint {
+    let Ok(name) = env.get_string(&name).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteShortcut { name }
+    })
+}
+
+/// Holds or releases a modifier (shift, ctrl, alt, meta) on a computer.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendModifier(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    modifier: JString,
+    down: jboolean,
+) -> jint {
+    let Ok(modifier) = env.get_string(&modifier).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteModifier {
+            modifier,
+            down: down != 0,
+        }
+    })
+}
+
+/// Tells the engine what this phone is playing; paired devices show it. Positions in ms.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_setNowPlaying(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    title: JString,
+    artist: JString,
+    album: JString,
+    app: JString,
+    playing: jboolean,
+    position_ms: jlong,
+    duration_ms: jlong,
+    art: JByteArray,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let read =
+        |env: &mut JNIEnv, s: &JString| env.get_string(s).map(String::from).unwrap_or_default();
+    let info = crate::now_playing::NowPlaying {
+        title: read(&mut env, &title),
+        artist: read(&mut env, &artist),
+        album: read(&mut env, &album),
+        app: read(&mut env, &app),
+        playing: playing != 0,
+        position_ms: position_ms.max(0) as u64,
+        duration_ms: duration_ms.max(0) as u64,
+        art: if art.is_null() {
+            None
+        } else {
+            env.convert_byte_array(&art).ok()
+        },
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    h.engine.set_now_playing(Some(info));
+    0
+}
+
+/// Tells the engine nothing is playing on this phone any more.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_clearNowPlaying(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    h.engine.set_now_playing(None);
+    0
+}
+
+/// What the paired devices are playing, as JSON without the cover art (see nowPlayingArt).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_nowPlayingJson(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let mut list = h.engine.now_playing_list();
+    for item in &mut list {
+        item.art_base64 = None;
+    }
+    match serde_json::to_string(&list) {
+        Ok(json) => env
+            .new_string(json)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// The cover art of what a device is playing, or null.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_nowPlayingArt(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id: JString,
+) -> jbyteArray {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let Some(id) = target_uuid(&mut env, &device_id) else {
+        return std::ptr::null_mut();
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match h.engine.now_playing_art(id) {
+        Some(bytes) => env
+            .byte_array_from_slice(&bytes)
+            .map(|a| a.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// Plays, pauses, skips or seeks a paired device's player. 0 when sent, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendMediaCommand(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id: JString,
+    action: JString,
+    value: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(id) = target_uuid(&mut env, &device_id) else {
+        return -1;
+    };
+    let Ok(action) = env.get_string(&action).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_media_command(id, &action, value)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
 }

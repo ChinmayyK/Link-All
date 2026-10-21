@@ -30,10 +30,11 @@ namespace LinkAll.WinUI.Services
 
             foreach (var (tag, glyph, name, hint) in new[]
             {
-                ("Devices", "", "Devices", "Your paired devices and what's nearby"),
+                ("Devices", "", "Home", "Your devices, what they play, and what's nearby"),
                 ("Clipboard", "", "Clipboard", "Everything you copied on any device"),
-                ("DevicePeer", "", "Remote files", "Browse a device's files"),
-                ("Transfers", "", "Transfers", "Files and folders moving now, and finished ones"),
+                ("DevicePeer", "", "Browse files", "Browse a device's files"),
+                ("Transfers", "", "Files", "Send, browse, and files moving now or finished"),
+                ("Scratchpad", "\uE70B", "Notes", "Notes shared with your devices"),
                 ("Activity", "", "Activity", "What crossed between your devices"),
                 ("Settings", "", "Settings", "Startup, transfers, security"),
             })

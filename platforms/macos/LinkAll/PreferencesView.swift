@@ -110,6 +110,7 @@ struct PreferencesView: View {
     @ViewBuilder private var pane: some View {
         switch tab {
         case .general:       GeneralPane(copy: $copy)
+        case .continuity:    ContinuityPane(copy: $copy)
         case .sync:          SyncPane(copy: $copy, patternDraft: $patternDraft)
         case .notifications: NotificationsPane()
         case .network:       NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
@@ -125,12 +126,13 @@ struct PreferencesView: View {
 // MARK: - Tab Bar
 
 private enum SettingsTab: String, CaseIterable, Identifiable {
-    case general, sync, notifications, network, security
+    case general, continuity, sync, notifications, network, security
     var id: String { rawValue }
     var label: String { rawValue.capitalized }
     var icon:  String {
         switch self {
         case .general:       return "switch.2"
+        case .continuity:    return "iphone.and.arrow.forward"
         case .sync:          return "arrow.triangle.2.circlepath"
         case .notifications: return "bell.badge"
         case .network:       return "network"
@@ -140,6 +142,7 @@ private enum SettingsTab: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general:       return CRTheme.accentBlue
+        case .continuity:    return CRTheme.accentPurple
         case .sync:          return CRTheme.accentGreen
         case .notifications: return CRTheme.accentPurple
         case .network:       return CRTheme.accentIndigo
@@ -312,13 +315,68 @@ private struct NotificationsPane: View {
 
 // MARK: - General Pane
 
+/// What this Mac does with its paired devices beyond the clipboard: files,
+/// remote control, Drop, walk-away lock, screenshots and notifications.
+private struct ContinuityPane: View {
+    @Binding var copy: LinkAllSettingsSnapshot
+    @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
+    @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
+    @AppStorage("magicClipboardEnabled") private var magicClipboardEnabled: Bool = false
+
+    var body: some View {
+        PrefsSection(title: "File Browsing", icon: "folder.badge.person.crop", tint: CRTheme.accentIndigo) {
+            PrefsRow(icon: "folder.fill", label: "Let devices browse files",
+                     description: "Paired phones can list, preview and fetch files from this Mac's Documents, Downloads, Pictures, Movies and Music folders.") {
+                Toggle("", isOn: $copy.allowFileBrowsing).labelsHidden()
+            }
+        }
+
+        PrefsSection(title: "Walk-Away Lock", icon: "figure.walk", tint: CRTheme.accentPurple) {
+            PrefsRow(icon: "lock.fill", label: "Lock when my phone leaves",
+                     description: "Locks this Mac when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone.") {
+                Toggle("", isOn: $copy.lockWhenPhoneLeaves).labelsHidden()
+            }
+        }
+
+        PrefsSection(title: "Link All Drop", icon: "tray.and.arrow.up.fill", tint: CRTheme.accentIndigo) {
+            PrefsRow(icon: "folder.fill.badge.plus", label: "Send files dropped in ~/Link All Drop",
+                     description: "Anything you put in the Link All Drop folder in your home folder is sent to your paired devices on its own.") {
+                Toggle("", isOn: $copy.dropFolderEnabled).labelsHidden()
+            }
+        }
+
+        PrefsSection(title: "Remote Control", icon: "dial.medium.fill", tint: CRTheme.accentPurple) {
+            PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Let phones control this Mac",
+                     description: "Paired phones can press play/pause, volume and the arrow keys for slides, move the pointer and type, lock this Mac, turn its screen off and make it ring.") {
+                Toggle("", isOn: $copy.allowRemoteControl).labelsHidden()
+            }
+        }
+
+        PrefsSection(title: "Ambient Continuity", icon: "star.fill", tint: CRTheme.accentYellow) {
+            PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
+                     description: "Instantly sends Mac screenshots to connected Android devices.") {
+                Toggle("", isOn: $autoForwardMacScreenshots).labelsHidden()
+            }
+            PrefsDivider()
+            PrefsRow(icon: "doc.on.clipboard.fill", label: "Magic Clipboard",
+                     description: "Silently auto-sync Mac clipboard to connected devices in the background.") {
+                Toggle("", isOn: $magicClipboardEnabled).labelsHidden()
+            }
+        }
+
+        PrefsSection(title: "Notifications", icon: "app.badge.fill", tint: CRTheme.accentOrange) {
+            PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Mirror Android Notifications",
+                     description: "Receive notifications from connected Android devices.") {
+                Toggle("", isOn: $mirrorAndroidNotifications).labelsHidden()
+            }
+        }
+    }
+}
+
 private struct GeneralPane: View {
     @Binding var copy: LinkAllSettingsSnapshot
     @State private var checkForUpdates = UpdateChecker.shared.isEnabled
     @AppStorage("cr_app_theme") private var appTheme: String = "system"
-    @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
-    @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
-    @AppStorage("magicClipboardEnabled") private var magicClipboardEnabled: Bool = false
 
     var body: some View {
         PrefsSection(title: "Identity", icon: "person.crop.circle.fill", tint: CRTheme.accentBlue) {
@@ -347,39 +405,6 @@ private struct GeneralPane: View {
             }
         }
 
-        PrefsSection(title: "File Browsing", icon: "folder.badge.person.crop", tint: CRTheme.accentIndigo) {
-            PrefsRow(icon: "folder.fill", label: "Let devices browse files",
-                     description: "Paired phones can list, preview and fetch files from this Mac's Documents, Downloads, Pictures, Movies and Music folders.") {
-                Toggle("", isOn: $copy.allowFileBrowsing).labelsHidden()
-            }
-        }
-
-        PrefsSection(title: "Remote Control", icon: "dial.medium.fill", tint: CRTheme.accentPurple) {
-            PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Let phones control this Mac",
-                     description: "Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides.") {
-                Toggle("", isOn: $copy.allowRemoteControl).labelsHidden()
-            }
-        }
-
-        PrefsSection(title: "Ambient Continuity", icon: "star.fill", tint: CRTheme.accentYellow) {
-            PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
-                     description: "Instantly sends Mac screenshots to connected Android devices.") {
-                Toggle("", isOn: $autoForwardMacScreenshots).labelsHidden()
-            }
-            PrefsDivider()
-            PrefsRow(icon: "doc.on.clipboard.fill", label: "Magic Clipboard",
-                     description: "Silently auto-sync Mac clipboard to connected devices in the background.") {
-                Toggle("", isOn: $magicClipboardEnabled).labelsHidden()
-            }
-        }
-
-        PrefsSection(title: "Notifications", icon: "app.badge.fill", tint: CRTheme.accentOrange) {
-            PrefsRow(icon: "iphone.radiowaves.left.and.right", label: "Mirror Android Notifications",
-                     description: "Receive notifications from connected Android devices.") {
-                Toggle("", isOn: $mirrorAndroidNotifications).labelsHidden()
-            }
-        }
-        
         PrefsSection(title: "Appearance", icon: "circle.lefthalf.filled", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "sun.max.fill", label: "Light",
                      description: "Classic clean look with light backgrounds.") {

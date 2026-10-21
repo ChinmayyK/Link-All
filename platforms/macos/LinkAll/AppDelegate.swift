@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var menuBarDropView: MenuBarDropView?
     private var quickAccessWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
+    private var scratchpadWindow: NSWindow?
     private var fileBannerManager: FileBannerWindowManager!
     private var previousConnectedDeviceIDs: Set<String> = []
     /// Incoming pairing requests already notified, with the code each showed.
@@ -145,7 +146,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             name: .linkallEnsureDaemon,
             object: nil
         )
+        // Notes, Diagnostics and the main window, asked for from inside the views.
+        NotificationCenter.default.addObserver(self, selector: #selector(openScratchpad), name: .linkallOpenNotes, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openDiagnosticsFromStore), name: .linkallOpenDiagnostics, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(openDashboard), name: .linkallShowMainWindow, object: nil)
     }
+
+    @objc private func openDiagnosticsFromStore() { openDiagnostics() }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let token = activityToken {
@@ -158,6 +165,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     @objc private func ensureDaemonResponsiveFromStore() {
         DaemonManager.shared.ensureDaemonResponsiveFromStore()
+    }
+
+    @objc private func openScratchpad() {
+        if scratchpadWindow == nil {
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered, defer: false
+            )
+            win.title = "Notes"
+            win.center()
+            win.contentViewController = NSHostingController(rootView: ScratchpadView())
+            win.isReleasedWhenClosed = false
+            win.setFrameAutosaveName("LinkAllScratchpad")
+            scratchpadWindow = win
+        }
+        scratchpadWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func openDiagnostics() {
@@ -264,6 +289,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             self?.handlePopoverAction(action)
         }))
         menuPanel = panel
+        NotificationCenter.default.addObserver(forName: .linkAllPopoverContentChanged, object: nil, queue: .main) { [weak self] _ in
+            self?.fitMenuPanel()
+        }
+    }
+
+    /// Keeps the menu-bar panel's top edge in place while its height follows its content.
+    private func fitMenuPanel() {
+        guard let panel = menuPanel, panel.isVisible,
+              let fitted = panel.contentViewController?.view.fittingSize.height else { return }
+        let height = max(350, fitted)
+        var frame = panel.frame
+        guard abs(frame.height - height) > 1 else { return }
+        frame.origin.y += frame.height - height
+        frame.size.height = height
+        panel.setFrame(frame, display: true, animate: true)
     }
 
     private func handlePopoverAction(_ action: MenuBarPopoverAction) {
@@ -278,6 +318,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .scan: scanDevices()
         case .connectByIP: connectManually()
         case .diagnostics: openDiagnostics()
+        case .scratchpad: openScratchpad()
         case .quit: quitApp()
         }
     }
@@ -330,6 +371,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         windowMenuItem.submenu = windowMenu
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(NSMenuItem.separator())
+        let scratchpad = windowMenu.addItem(withTitle: "Notes", action: #selector(openScratchpad), keyEquivalent: "n")
+        scratchpad.keyEquivalentModifierMask = [.command, .shift]
+        scratchpad.target = self
+        let guest = windowMenu.addItem(withTitle: "Receive from Guest", action: #selector(receiveFromGuest), keyEquivalent: "g")
+        guest.keyEquivalentModifierMask = [.command, .shift]
+        guest.target = self
+        let call = windowMenu.addItem(withTitle: "Call from Phone…", action: #selector(callFromPhone), keyEquivalent: "c")
+        call.keyEquivalentModifierMask = [.command, .shift]
+        call.target = self
+        let insert = windowMenu.addItem(withTitle: "Insert Photo from Phone", action: #selector(insertPhotoFromPhone), keyEquivalent: "i")
+        insert.keyEquivalentModifierMask = [.command, .shift]
+        insert.target = self
+        let scan = windowMenu.addItem(withTitle: "Scan Document with Phone", action: #selector(scanDocumentWithPhone), keyEquivalent: "d")
+        scan.keyEquivalentModifierMask = [.command, .shift]
+        scan.target = self
 
         NSApp.mainMenu = mainMenu
     }
@@ -680,6 +737,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             guard let destPath = entry.dest_path else { return }
             
             let fileName = entry.file_name ?? URL(fileURLWithPath: destPath).lastPathComponent
+            // A picture asked of the phone with "Insert from Phone" is pasted where you were typing.
+            if fileName.hasPrefix("LinkAll Capture "),
+               let asked = store.pendingCaptureAt, Date().timeIntervalSince(asked) < 600 {
+                store.pendingCaptureAt = nil
+                insertPicture(at: URL(fileURLWithPath: destPath))
+                return
+            }
             let isScreenshot = fileName.lowercased().contains("screenshot")
 
             if isScreenshot {
@@ -759,6 +823,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             }
 
         case "remote_notification":
+            // A one-time code from the phone's texts gets its own popup, whether or
+            // not ordinary notifications are mirrored.
+            if let code = Self.verificationCode(title: entry.file_name ?? "", text: entry.text_preview ?? "") {
+                let from = (entry.file_name ?? "")
+                    .replacingOccurrences(of: "Verification code", with: "")
+                    .replacingOccurrences(of: " from ", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                store.showToast(
+                    title: "Verification code: \(code)",
+                    body: from.isEmpty ? "From \(entry.device_name)" : "\(from) · \(entry.device_name)",
+                    tint: CRTheme.accentBlue,
+                    systemImage: "number.square.fill",
+                    ttl: 45.0,
+                    primaryAction: ToastAction(title: "Copy Code", role: .primary) { [weak self] in
+                        self?.copyCode(code)
+                    },
+                    secondaryAction: ToastAction(title: "Paste", role: .secondary) { [weak self] in
+                        self?.pasteCode(code)
+                    }
+                )
+                sendSystemNotification(title: "Verification code: \(code)", body: from.isEmpty ? entry.device_name : from)
+                return
+            }
             // Respect the user's toggle for Android Notification Mirroring
             let mirrorEnabled = UserDefaults.standard.object(forKey: "mirrorAndroidNotifications") as? Bool ?? true
             guard mirrorEnabled else { return }
@@ -777,6 +864,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+
+    /// The code in a phone notification Link All sent for a verification code: the
+    /// title starts "Verification code" and the text is just 4 to 8 digits.
+    static func verificationCode(title: String, text: String) -> String? {
+        let code = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard title.hasPrefix("Verification code"),
+              (4...8).contains(code.count),
+              code.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+        return code
+    }
+
+    private func copyCode(_ code: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+    }
+
+    /// Puts the code on the clipboard and presses Command-V in the app that has focus.
+    /// Pressing keys needs Accessibility; without it the code is only copied.
+    private func pasteCode(_ code: String) {
+        copyCode(code)
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else {
+            store.showToast(title: "Code copied", body: "Allow Link All in Privacy & Security › Accessibility to paste it for you.", tint: CRTheme.inkSoft, systemImage: "doc.on.clipboard", ttl: 6.0)
+            return
+        }
+        // Let the popup give focus back first.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: down)
+                event?.flags = .maskCommand
+                event?.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
+    @objc private func receiveFromGuest() { store.receiveFromGuest() }
+    @objc private func callFromPhone() { store.callFromPhone(number: nil) }
+
+    /// A tel: link, once Link All is chosen for them: the number is offered to a paired phone.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "tel" {
+            let number = url.absoluteString.dropFirst("tel:".count).removingPercentEncoding ?? ""
+            let valid = (3...32).contains(number.count)
+                && number.allSatisfy { $0.isASCII && ($0.isNumber || "+-().*# ".contains($0)) }
+            if valid {
+                store.callFromPhone(number: number)
+            } else {
+                store.showToast(title: "Can't call that", body: "It doesn't look like a phone number.", tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 4.0)
+            }
+        }
+    }
+    @objc private func insertPhotoFromPhone() { store.captureFromPhone(mode: "photo") }
+    @objc private func scanDocumentWithPhone() { store.captureFromPhone(mode: "document") }
+
+    /// Puts the picture on the clipboard and presses Command-V in the app that has
+    /// focus. Pressing keys needs Accessibility; without it the picture is only copied.
+    private func insertPicture(at url: URL) {
+        guard let image = NSImage(contentsOf: url) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.writeObjects([image])
+        let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        guard AXIsProcessTrustedWithOptions(options) else {
+            store.showToast(title: "Picture copied", body: "Paste it with ⌘V. Allow Link All in Accessibility to paste it for you.", tint: CRTheme.accentGreen, systemImage: "photo", ttl: 6.0)
+            return
+        }
+        store.showToast(title: "Picture inserted", body: url.lastPathComponent, tint: CRTheme.accentGreen, systemImage: "photo", ttl: 3.0)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            for down in [true, false] {
+                let event = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: down)
+                event?.flags = .maskCommand
+                event?.post(tap: .cghidEventTap)
+            }
+        }
+    }
 
     @objc private func handleSystemWake() {
         Task { @MainActor [weak self] in
@@ -1203,7 +1364,7 @@ extension AppDelegate: MenuBarDropViewDelegate {
             let screenRect = window.frame
             
             let panelWidth: CGFloat = 320
-            let panelHeight: CGFloat = 350
+            let panelHeight: CGFloat = max(350, menuPanel.contentViewController?.view.fittingSize.height ?? 350)
             var x = screenRect.midX - (panelWidth / 2)
             
             // Keep panel fully on-screen (prevent overflowing off right or left edge)

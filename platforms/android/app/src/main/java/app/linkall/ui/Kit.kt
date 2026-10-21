@@ -3,6 +3,12 @@
 package app.linkall.ui
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -52,7 +58,7 @@ import app.linkall.ui.theme.crPressScale
 // No gradients or ambient effects. Shape rule: panels 24dp, icon wells and
 // PIN tiles 12dp, buttons full pill.
 
-internal class DdColors(isDark: Boolean) {
+internal class DdColors(val isDark: Boolean) {
     val page = if (isDark) Color(0xFF000000) else Color(0xFFF5F6FA)
     val surface = if (isDark) Color(0xFF131316) else Color(0xFFFFFFFF)
     val surfaceSunk = if (isDark) Color(0xFF1C1C21) else Color(0xFFF1F2F5)
@@ -69,6 +75,28 @@ internal class DdColors(isDark: Boolean) {
 
 @Composable
 internal fun rememberDdColors(isDark: Boolean) = remember(isDark) { DdColors(isDark) }
+
+/**
+ * A colour family for icon tiles, so a page of actions reads at a glance:
+ * sharing is blue, control violet, media teal, finding amber, files green,
+ * anything destructive rose. The same values as the Linux app's palette.
+ */
+internal enum class Tone { Blue, Green, Violet, Amber, Teal, Rose, Neutral }
+
+/** The tone's foreground and its soft tile background. */
+internal fun DdColors.tone(t: Tone): Pair<Color, Color> {
+    val fg = when (t) {
+        Tone.Blue -> accent
+        Tone.Green -> if (isDark) Color(0xFF3DD68C) else Color(0xFF14935A)
+        Tone.Violet -> if (isDark) Color(0xFF9D8BFF) else Color(0xFF6A52E8)
+        Tone.Amber -> if (isDark) Color(0xFFF2B544) else Color(0xFFB7791F)
+        Tone.Teal -> if (isDark) Color(0xFF3CC6D8) else Color(0xFF0F8FA3)
+        Tone.Rose -> if (isDark) Color(0xFFFF5D73) else Color(0xFFD93A52)
+        Tone.Neutral -> textMuted
+    }
+    val bg = if (t == Tone.Neutral) surfaceSunk else fg.copy(alpha = if (isDark) 0.16f else 0.10f)
+    return fg to bg
+}
 
 internal object DdType {
     val display = TextStyle(fontFamily = OutfitFontFamily, fontWeight = FontWeight.Bold, fontSize = 32.sp, lineHeight = 36.sp, letterSpacing = (-0.8).sp)
@@ -143,9 +171,95 @@ internal fun Panel(c: DdColors, modifier: Modifier = Modifier, content: @Composa
     )
 }
 
+/** A small capitalised label above a group of tiles or rows. */
 @Composable
-internal fun Hairline(c: DdColors) {
-    Box(Modifier.padding(start = 70.dp).fillMaxWidth().height(1.dp).background(c.line))
+internal fun GroupLabel(c: DdColors, text: String, modifier: Modifier = Modifier) {
+    Text(
+        text.uppercase(),
+        style = DdType.small.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.9.sp),
+        color = c.textMuted,
+        modifier = modifier.padding(start = 4.dp, top = 24.dp, bottom = 10.dp),
+    )
+}
+
+/** One action on a page of actions: a tinted icon over its label. */
+internal data class TileSpec(
+    val icon: ImageVector,
+    val label: String,
+    val tone: Tone = Tone.Blue,
+    val enabled: Boolean = true,
+    val onClick: () -> Unit,
+)
+
+/** Action tiles, [columns] to a row; a short last row keeps the tiles the same width. */
+@Composable
+internal fun TileGrid(c: DdColors, tiles: List<TileSpec>, columns: Int = 3) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        tiles.chunked(columns).forEach { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { ActionTile(c, it) }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.ActionTile(c: DdColors, tile: TileSpec) {
+    val haptic = LocalHapticFeedback.current
+    val (fg, bg) = c.tone(tile.tone)
+    val shape = RoundedCornerShape(20.dp)
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(shape)
+            .background(c.surface)
+            .border(1.dp, c.line, shape)
+            .graphicsLayer { alpha = if (tile.enabled) 1f else 0.45f }
+            .crPressScale(0.96f) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                tile.onClick()
+            }
+            .semantics(mergeDescendants = true) { role = Role.Button }
+            .padding(horizontal = 8.dp, vertical = 14.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(bg), contentAlignment = Alignment.Center) {
+            Icon(tile.icon, contentDescription = null, tint = fg, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            tile.label,
+            style = DdType.small.copy(fontWeight = FontWeight.Medium),
+            color = c.text,
+            maxLines = 2,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** A round icon button for a page's top bar. */
+@Composable
+internal fun TopIconButton(c: DdColors, icon: ImageVector, label: String, onClick: () -> Unit) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(c.surface)
+            .border(1.dp, c.line, CircleShape)
+            .crPressScale(0.92f) { onClick() }
+            .semantics { contentDescription = label; role = Role.Button },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = c.text, modifier = Modifier.size(22.dp))
+    }
+}
+
+/** A divider inside a panel, starting where the rows' text starts ([inset]). */
+@Composable
+internal fun Hairline(c: DdColors, inset: androidx.compose.ui.unit.Dp = 70.dp) {
+    Box(Modifier.padding(start = inset).fillMaxWidth().height(1.dp).background(c.line))
 }
 
 @Composable
@@ -345,14 +459,13 @@ internal fun PinTiles(c: DdColors, pin: String?, modifier: Modifier = Modifier) 
 
 /**
  * One activity entry. Tap applies it (copy again / open); long-press offers
- * resend and remove when the caller supports them.
+ * pin and remove when the caller supports them.
  */
 @Composable
 internal fun ActivityRow(
     c: DdColors,
     entry: ActivityEntry,
     onApply: () -> Unit,
-    onResend: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
     onTogglePin: (() -> Unit)? = null,
     showClockTime: Boolean = false
@@ -373,7 +486,7 @@ internal fun ActivityRow(
     }
     val showPreview = entry.preview.isNotBlank() &&
         entry.kind != ActivityKind.PEER_CONNECTED && entry.kind != ActivityKind.PEER_DISCONNECTED
-    val hasMenu = onResend != null || onDelete != null || onTogglePin != null
+    val hasMenu = onDelete != null || onTogglePin != null
 
     Box {
         Row(
@@ -432,7 +545,6 @@ internal fun ActivityRow(
                         if (entry.isPinned) SheetAction(Icons.Outlined.PushPin, "Unpin", "Let it age out with the rest", onClick = onTogglePin)
                         else SheetAction(Icons.Outlined.PushPin, "Pin to the top", "Kept above everything else, never cleared", onClick = onTogglePin)
                     )
-                    if (onResend != null) add(SheetAction(Icons.Outlined.Replay, "Resend", onClick = onResend))
                     if (onDelete != null) add(SheetAction(Icons.Outlined.DeleteOutline, "Remove", danger = true, onClick = onDelete))
                 },
                 onDismiss = { menuOpen = false }
@@ -574,5 +686,41 @@ internal fun agoLabel(unixSecs: Long?): String? {
         ago < 3600 -> "${ago / 60}m ago"
         ago < 86_400 -> "${ago / 3600}h ago"
         else -> "${ago / 86_400}d ago"
+    }
+}
+
+/** A rounded search box with a clear button once something is typed. */
+@Composable
+internal fun SearchField(c: DdColors, value: String, placeholder: String, modifier: Modifier = Modifier, onChange: (String) -> Unit) {
+    Row(
+        modifier
+            .fillMaxWidth()
+            .height(48.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .background(c.surface)
+            .border(1.dp, c.line, RoundedCornerShape(16.dp))
+            .padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Outlined.Search, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(20.dp))
+        Spacer(Modifier.width(10.dp))
+        Box(Modifier.weight(1f)) {
+            if (value.isEmpty()) Text(placeholder, style = DdType.body, color = c.textMuted)
+            BasicTextField(
+                value = value,
+                onValueChange = onChange,
+                singleLine = true,
+                textStyle = DdType.body.copy(color = c.text),
+                cursorBrush = SolidColor(c.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+        if (value.isNotEmpty()) {
+            Icon(
+                Icons.Rounded.Close, contentDescription = "Clear search", tint = c.textMuted,
+                modifier = Modifier.size(20.dp).clickable { onChange("") }
+            )
+        }
     }
 }

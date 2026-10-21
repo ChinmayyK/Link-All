@@ -51,6 +51,16 @@ object LinkAllJni {
     const val CR_EVENT_REMOTE_CONTROL_ACK      = 42
     /** A paired computer asked this phone to start or stop ringing; see [eventFindRing]. */
     const val CR_EVENT_FIND_DEVICE_REQUESTED   = 43
+    /** A paired computer offered to call a number from this phone; the number is [eventText]. */
+    const val CR_EVENT_DIAL_REQUESTED          = 44
+    /** The Scratchpad changed, here or on a paired device. */
+    const val CR_EVENT_SCRATCHPAD_CHANGED      = 45
+    /** A paired computer asked this phone to take a picture; the mode ("photo" or "document") is [eventText]. */
+    const val CR_EVENT_CAPTURE_REQUESTED       = 46
+    /** What a paired device plays changed; see [nowPlayingJson]. */
+    const val CR_EVENT_NOW_PLAYING_CHANGED     = 47
+    /** A computer asked this phone's player to do something; [eventText] is "action:value". */
+    const val CR_EVENT_MEDIA_COMMAND           = 48
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)
@@ -70,6 +80,36 @@ object LinkAllJni {
     /** Why [remoteControl] could not send, as a sentence, or null. */
     @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
     @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean
+    // Now Playing: what this phone plays, and what the paired computers play.
+    @JvmStatic external fun setNowPlaying(handle: Long, title: String, artist: String, album: String, app: String, playing: Boolean, positionMs: Long, durationMs: Long, art: ByteArray?): Int
+    @JvmStatic external fun clearNowPlaying(handle: Long): Int
+    /** What the paired devices play, as a JSON array without cover art. */
+    @JvmStatic external fun nowPlayingJson(handle: Long): String?
+    @JvmStatic external fun nowPlayingArt(handle: Long, deviceId: String): ByteArray?
+    /** [action]: play, pause, play_pause, next, previous or seek (with [value] in ms). */
+    @JvmStatic external fun sendMediaCommand(handle: Long, deviceId: String, action: String, value: Long): Int
+    // Scratchpad: notes shared between your devices.
+    /** The notes as a JSON array, pinned first; each has id, text, pinned, updated_at_ms. */
+    @JvmStatic external fun scratchpadListJson(handle: Long): String?
+    /** Creates a note ([id] null) or edits one. 0 when saved, -1 when not. */
+    @JvmStatic external fun scratchpadSave(handle: Long, id: String?, text: String, pinned: Boolean): Int
+    @JvmStatic external fun scratchpadDelete(handle: Long, id: String): Int
+    /** Deletes every note that isn't pinned. */
+    @JvmStatic external fun scratchpadClear(handle: Long): Int
+    /** Rings or stops a computer; waits for its answer. Null when it will, otherwise why it won't. */
+    @JvmStatic external fun sendFindDevice(handle: Long, targetDeviceId: String, ring: Boolean): String?
+    // Trackpad and keyboard for a computer. Each returns 0 when sent, -1 when it could not be.
+    @JvmStatic external fun sendPointerMove(handle: Long, targetDeviceId: String, dx: Int, dy: Int): Int
+    /** [button]: 0 left, 1 right, 2 middle, 3 back, 4 forward. */
+    @JvmStatic external fun sendPointerButton(handle: Long, targetDeviceId: String, button: Int, down: Boolean): Int
+    @JvmStatic external fun sendPointerScroll(handle: Long, targetDeviceId: String, dx: Int, dy: Int): Int
+    @JvmStatic external fun sendTypeText(handle: Long, targetDeviceId: String, text: String): Int
+    /** [key]: backspace, enter, escape, tab, left, right, up or down. */
+    @JvmStatic external fun sendKeyPress(handle: Long, targetDeviceId: String, key: String): Int
+    /** A named shortcut: copy, paste, undo, back, switch_app, overview ... the computer spells it its own way. */
+    @JvmStatic external fun sendShortcut(handle: Long, targetDeviceId: String, name: String): Int
+    /** Holds or releases shift, ctrl, alt or meta on the computer. */
+    @JvmStatic external fun sendModifier(handle: Long, targetDeviceId: String, modifier: String, down: Boolean): Int
     /** True when a [CR_EVENT_FIND_DEVICE_REQUESTED] says to start ringing, false to stop. */
     @JvmStatic external fun eventFindRing(event: Long): Boolean
     /** Whether paired computers may make this phone ring. Returns 0 on success. */

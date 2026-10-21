@@ -31,6 +31,14 @@ struct IpcPeerRecord: Codable {
     let pairing_outcome: String?
     /// The phone said its battery settings may pause Link All in the background.
     let background_restricted: Bool?
+    /// The device's addresses; `ip` above is never sent, the first of these is the one in use.
+    let ips: [String]?
+    /// The Link All version it sent in its last handshake; empty from builds before that.
+    let app_version: String?
+    /// Seconds left on a pairing request, in either direction.
+    let pairing_expires_in_secs: UInt64?
+    /// Its key fingerprint, formatted; only for paired devices.
+    let fingerprint_display: String?
 }
 
 struct IpcStatusResponse: Codable {
@@ -199,6 +207,27 @@ struct IpcDeviceChoices: Codable {
 
 struct IpcEmpty: Codable {}
 
+struct IpcNowPlaying: Codable, Identifiable, Equatable {
+    var id: String { device_id }
+    let device_id: String
+    let device_name: String
+    let platform: String?
+    let title: String
+    let artist: String
+    let album: String
+    let app: String
+    let playing: Bool
+    let position_ms: UInt64
+    let duration_ms: UInt64
+    let art_base64: String?
+}
+
+struct IpcGuestSession: Codable {
+    let url: String
+    let pin: String
+    let expires_in_secs: Int
+}
+
 struct IpcDiagnosticReport: Codable {
     let text: String
 }
@@ -235,6 +264,8 @@ struct IpcSettings: Codable {
     // Optional so an older daemon's reply still decodes.
     let allow_file_browsing: Bool?
     let allow_remote_control: Bool?
+    let drop_folder_enabled: Bool?
+    let lock_when_phone_leaves: Bool?
 }
 
 struct IpcResponse<T: Codable>: Codable {
@@ -554,6 +585,46 @@ final class LinkAllIPCClient {
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
     }
 
+    /// Asks a paired phone to take a picture ("photo" or "document") and send it back.
+    func captureRequest(target: String, mode: String) async throws {
+        let raw = try await send(cmd: ["cmd": "capture_request", "target": target, "mode": mode])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    /// Offers a paired phone a call; its owner taps a notification to open the dialer.
+    func dialNumber(target: String, number: String) async throws {
+        let raw = try await send(cmd: ["cmd": "dial_number", "target": target, "number": number])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    /// What the paired devices are playing.
+    func nowPlayingList() async throws -> [IpcNowPlaying] {
+        let raw = try await send(cmd: ["cmd": "now_playing_list"])
+        let resp = try await decode(IpcResponse<[IpcNowPlaying]>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        return resp.data ?? []
+    }
+
+    /// Plays, pauses, skips or seeks a paired device's player (`seek` takes a position in ms).
+    func mediaCommand(target: String, action: String, value: Int = 0) async {
+        _ = try? await send(cmd: ["cmd": "media_command", "target": target, "action": action, "value": value])
+    }
+
+    /// Starts a Guest Drop session: a link and PIN for someone who isn't paired.
+    func guestDropStart() async throws -> IpcGuestSession {
+        let raw = try await send(cmd: ["cmd": "guest_drop_start"])
+        let resp = try await decode(IpcResponse<IpcGuestSession>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        guard let data = resp.data else { throw LinkAllIPCError.noData }
+        return data
+    }
+
+    func guestDropStop() async {
+        _ = try? await send(cmd: ["cmd": "guest_drop_stop"])
+    }
+
     /// The daemon's redacted problem report; `header` is what only the app knows.
     func diagnosticReport(header: String) async throws -> String {
         let raw = try await send(cmd: ["cmd": "diagnostic_report", "header": header])
@@ -748,7 +819,9 @@ extension LinkAllIPCClient {
             smartSyncDebounceMs: s.smart_sync_debounce_ms,
             startOnLogin: false,
             allowFileBrowsing: s.allow_file_browsing ?? false,
-            allowRemoteControl: s.allow_remote_control ?? false
+            allowRemoteControl: s.allow_remote_control ?? false,
+            dropFolderEnabled: s.drop_folder_enabled ?? false,
+            lockWhenPhoneLeaves: s.lock_when_phone_leaves ?? false
         )
     }
 
@@ -776,6 +849,8 @@ extension LinkAllIPCClient {
             "ignore_patterns":                  snapshot.ignorePatterns,
             "allow_file_browsing":              snapshot.allowFileBrowsing,
             "allow_remote_control":             snapshot.allowRemoteControl,
+            "drop_folder_enabled":              snapshot.dropFolderEnabled,
+            "lock_when_phone_leaves":           snapshot.lockWhenPhoneLeaves,
         ]
         _ = try await send(cmd: cmd)
     }
@@ -786,5 +861,46 @@ extension LinkAllIPCClient {
             "duration_secs": durationSecs
         ]
         _ = try await send(cmd: cmd)
+    }
+}
+
+// ── Scratchpad ────────────────────────────────────────────────────────────────
+
+struct IpcScratchNote: Codable, Identifiable, Equatable {
+    let id: String
+    let text: String
+    let pinned: Bool
+    let updated_at_ms: UInt64
+}
+
+extension LinkAllIPCClient {
+    /// The Scratchpad notes, pinned first.
+    func scratchpadList() async throws -> [IpcScratchNote] {
+        let raw = try await send(cmd: ["cmd": "scratchpad_list"])
+        let resp = try await decode(IpcResponse<[IpcScratchNote]>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        return resp.data ?? []
+    }
+
+    /// Creates a note (`id` nil) or edits one.
+    func scratchpadSave(id: String?, text: String, pinned: Bool) async throws {
+        var cmd: [String: Any] = ["cmd": "scratchpad_save", "text": text, "pinned": pinned]
+        if let id { cmd["id"] = id }
+        let raw = try await send(cmd: cmd)
+        let resp = try await decode(IpcResponse<IpcScratchNote>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    func scratchpadDelete(id: String) async throws {
+        let raw = try await send(cmd: ["cmd": "scratchpad_delete", "id": id])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    /// Deletes every note that isn't pinned.
+    func scratchpadClear() async throws {
+        let raw = try await send(cmd: ["cmd": "scratchpad_clear"])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
     }
 }

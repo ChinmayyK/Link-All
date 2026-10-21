@@ -92,7 +92,9 @@ fn spin(
     });
 }
 
-pub fn page(hub: &Hub) -> adw::PreferencesPage {
+/// Settings: this computer's name on top, then a short list of categories,
+/// each opening its own page. Returns the list and the pages it opens.
+pub fn page(hub: &Hub) -> (adw::PreferencesPage, Vec<adw::NavigationPage>) {
     let page = adw::PreferencesPage::new();
     let syncing = Rc::new(Cell::new(false));
 
@@ -140,7 +142,6 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         crate::theme::apply_scheme(scheme);
     });
     look.add(&theme);
-    page.add(&look);
 
     let sync = adw::PreferencesGroup::builder().title("Sync").build();
     switch(
@@ -154,7 +155,6 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
     switch(hub, &sync, "sync_text", "Text", "", &syncing);
     switch(hub, &sync, "sync_images", "Images", "", &syncing);
     switch(hub, &sync, "sync_files", "Files", "", &syncing);
-    page.add(&sync);
 
     let clip = adw::PreferencesGroup::builder().title("Clipboard").build();
     switch(
@@ -181,7 +181,6 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         "",
         &syncing,
     );
-    page.add(&clip);
 
     let files = adw::PreferencesGroup::builder().title("Files").build();
     switch(
@@ -200,7 +199,6 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         "Files from paired devices are saved to Downloads",
         &syncing,
     );
-    page.add(&files);
 
     let remote = adw::PreferencesGroup::builder()
         .title("Remote Control")
@@ -210,10 +208,33 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         &remote,
         "allow_remote_control",
         "Let Phones Control This Computer",
-        "Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides. Uses playerctl, wpctl or pactl, and xdotool or wtype when installed",
+        "Paired phones can press play/pause, volume and the arrow keys for slides, move the pointer and type, lock this computer, turn its screen off and make it ring. Uses playerctl, wpctl or pactl, loginctl, xset, xdotool or wtype and /dev/uinput when available",
         &syncing,
     );
-    page.add(&remote);
+
+    let drop = adw::PreferencesGroup::builder()
+        .title("Link All Drop")
+        .build();
+    switch(
+        hub,
+        &drop,
+        "drop_folder_enabled",
+        "Send Files Dropped in Link All Drop",
+        "Files you put in the Link All Drop folder in your home folder are sent to your paired devices on their own",
+        &syncing,
+    );
+
+    let walk_away = adw::PreferencesGroup::builder()
+        .title("Walk-Away Lock")
+        .build();
+    switch(
+        hub,
+        &walk_away,
+        "lock_when_phone_leaves",
+        "Lock When My Phone Leaves",
+        "Locks this computer when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone",
+        &syncing,
+    );
 
     let startup = adw::PreferencesGroup::builder().title("Startup").build();
     let login = adw::SwitchRow::builder()
@@ -236,7 +257,6 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         prefs::set(crate::update::ENABLED, r.is_active().into());
     });
     startup.add(&updates);
-    page.add(&startup);
 
     let advanced = adw::PreferencesGroup::builder().title("Advanced").build();
     spin(
@@ -292,7 +312,6 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
     diagnostics.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
     diagnostics.connect_activated(|_| show_diagnostics());
     advanced.add(&diagnostics);
-    page.add(&advanced);
 
     let about = adw::PreferencesGroup::new();
     let version = adw::ActionRow::builder()
@@ -303,8 +322,83 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
         ))
         .build();
     about.add(&version);
+
+    let preferences = adw::PreferencesGroup::builder()
+        .title("Preferences")
+        .build();
+    let system = adw::PreferencesGroup::builder().title("System").build();
+    let mut pages = Vec::new();
+    for (group, tag, title, subtitle, icon, groups) in [
+        (
+            &preferences,
+            "sync",
+            "Sync & Clipboard",
+            "What crosses between your devices",
+            "emblem-synchronizing-symbolic",
+            vec![&sync, &clip],
+        ),
+        (
+            &preferences,
+            "files",
+            "Files",
+            "Received files and folders",
+            "folder-symbolic",
+            vec![&files],
+        ),
+        (
+            &preferences,
+            "continuity",
+            "Continuity",
+            "Remote control, Drop and walk-away lock",
+            "phone-symbolic",
+            vec![&remote, &drop, &walk_away],
+        ),
+        (
+            &preferences,
+            "appearance",
+            "Appearance",
+            "Light, dark or match the system",
+            "preferences-desktop-appearance-symbolic",
+            vec![&look],
+        ),
+        (
+            &system,
+            "startup",
+            "Startup",
+            "Start at login and update checks",
+            "system-run-symbolic",
+            vec![&startup],
+        ),
+        (
+            &system,
+            "advanced",
+            "Advanced",
+            "Scan, disconnect all, report a problem",
+            "preferences-other-symbolic",
+            vec![&advanced],
+        ),
+    ] {
+        let content = adw::PreferencesPage::new();
+        for g in groups {
+            content.add(g);
+        }
+        let (sub, _) = super::pushed_page(&format!("settings-{tag}"), title, &content);
+        let row = adw::ActionRow::builder()
+            .title(title)
+            .subtitle(subtitle)
+            .activatable(true)
+            .build();
+        row.add_prefix(&gtk::Image::from_icon_name(icon));
+        row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+        let target = sub.clone();
+        row.connect_activated(move |_| super::show_over_section(&target));
+        group.add(&row);
+        pages.push(sub);
+    }
+    page.add(&preferences);
+    page.add(&system);
     page.add(&about);
-    page
+    (page, pages)
 }
 
 /// Distro, desktop and session: what only this app knows, for the report.

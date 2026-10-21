@@ -1,15 +1,23 @@
-//! The Link All window: a sidebar of pages, each built from the shared hub.
+//! The Link All window: a sidebar of sections, and a navigation view that
+//! pushes a device's page, its files, Notes and each settings category over
+//! them, each with a back button.
 
 mod activity;
 mod clipboard;
-pub mod devices;
+mod device;
+mod extras;
 mod files;
+mod home;
+mod now_playing;
 pub mod pairing;
 pub mod palette;
-pub use devices::add_by_address;
+mod scratchpad;
 pub mod send;
 mod settings;
 mod transfers;
+
+pub use extras::{call_from_phone, receive_from_guest};
+pub use pairing::add_by_address;
 
 use crate::{agent::ClipboardTx, hub::Hub, ipc};
 use adw::prelude::*;
@@ -19,10 +27,30 @@ use std::cell::RefCell;
 use std::path::Path;
 use std::rc::Rc;
 
+/// The window's navigation: the sidebar, the sections in the root page, and
+/// the view pages are pushed onto.
+#[derive(Clone)]
+struct Nav {
+    sidebar: gtk::ListBox,
+    split: adw::NavigationSplitView,
+    view: adw::NavigationView,
+    root: adw::NavigationPage,
+    content: adw::NavigationPage,
+    stack: gtk::Stack,
+    notes: adw::NavigationPage,
+}
+
 thread_local! {
     static TOASTS: RefCell<Option<adw::ToastOverlay>> = const { RefCell::new(None) };
     static WINDOW: RefCell<Option<adw::ApplicationWindow>> = const { RefCell::new(None) };
-    static SIDEBAR: RefCell<Option<gtk::ListBox>> = const { RefCell::new(None) };
+    static NAV: RefCell<Option<Nav>> = const { RefCell::new(None) };
+}
+
+/// Runs `f` with the navigation, cloned out first so `f` may navigate again.
+fn with_nav(f: impl FnOnce(&Nav)) {
+    if let Some(nav) = NAV.with(|n| n.borrow().clone()) {
+        f(&nav);
+    }
 }
 
 /// Shows the banner while a newer Link All exists, checking at start and every
@@ -128,6 +156,19 @@ pub fn show_in_folder(path: &Path) {
     }
 }
 
+/// Opens a file in the app that handles its type.
+pub fn open_file(path: &Path) {
+    if !path.exists() {
+        return toast("Can't find this file any more");
+    }
+    if let Err(e) = gio::AppInfo::launch_default_for_uri(
+        &gio::File::for_path(path).uri(),
+        None::<&gio::AppLaunchContext>,
+    ) {
+        toast(&e.to_string());
+    }
+}
+
 pub fn human_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let mut v = bytes as f64;
@@ -161,12 +202,48 @@ pub fn ago(epoch_secs: u64) -> String {
     }
 }
 
+/// Gives an icon-only button a name screen readers read out, and the same tooltip.
+pub fn name_button(button: &impl IsA<gtk::Widget>, name: &str) {
+    let widget = button.upcast_ref::<gtk::Widget>();
+    widget.set_tooltip_text(Some(name));
+    widget.update_property(&[gtk::accessible::Property::Label(name)]);
+}
+
+/// This computer's name, as its paired devices see it.
+pub fn device_name(hub: &Hub) -> String {
+    hub.status.borrow()["device_name"]
+        .as_str()
+        .unwrap_or("This computer")
+        .to_string()
+}
+
+/// How sync stands, in a few words, with the style class that colours it.
+pub fn sync_state(hub: &Hub) -> (&'static str, &'static str) {
+    if !hub.online() {
+        ("Not running", "warning")
+    } else if hub.setting("sync_enabled") == false {
+        ("Sync paused", "warning")
+    } else if hub.connected().is_empty() {
+        ("Waiting for devices", "muted")
+    } else {
+        ("Syncing", "live-text")
+    }
+}
+
 pub fn icon_button(icon: &str, tooltip: &str) -> gtk::Button {
     let b = gtk::Button::from_icon_name(icon);
-    b.set_tooltip_text(Some(tooltip));
+    name_button(&b, tooltip);
     b.set_valign(gtk::Align::Center);
     b.add_css_class("flat");
     b
+}
+
+pub fn label(text: &str, classes: &[&str]) -> gtk::Label {
+    gtk::Label::builder()
+        .label(text)
+        .xalign(0.0)
+        .css_classes(classes.to_vec())
+        .build()
 }
 
 /// A scrolling, width-limited column for a page's content.
@@ -205,6 +282,27 @@ pub fn section(title: &str) -> (gtk::Box, gtk::ListBox) {
     (column, list)
 }
 
+/// A header's link on the right, e.g. "See all", and what it does.
+pub type HeaderAction<'a> = Option<(&'a str, Box<dyn Fn()>)>;
+
+/// A section's title, with an optional link-style action at its end ("See all").
+pub fn section_header(title: &str, action: HeaderAction) -> (gtk::Box, gtk::Label) {
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    let heading = label(title, &["section-title"]);
+    heading.set_hexpand(true);
+    row.append(&heading);
+    if let Some((text, f)) = action {
+        let b = gtk::Button::builder()
+            .label(text)
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "accent"])
+            .build();
+        b.connect_clicked(move |_| f());
+        row.append(&b);
+    }
+    (row, heading)
+}
+
 pub fn placeholder_row(text: &str) -> adw::ActionRow {
     let row = adw::ActionRow::builder()
         .title(text)
@@ -215,17 +313,88 @@ pub fn placeholder_row(text: &str) -> adw::ActionRow {
     row
 }
 
+/// A page pushed over the sections: a header bar, which shows the back
+/// button, over `content`. The header is returned for buttons of its own.
+pub fn pushed_page(
+    tag: &str,
+    title: &str,
+    content: &impl IsA<gtk::Widget>,
+) -> (adw::NavigationPage, adw::HeaderBar) {
+    let header = adw::HeaderBar::new();
+    let view = adw::ToolbarView::new();
+    view.add_top_bar(&header);
+    view.set_content(Some(content));
+    let page = adw::NavigationPage::builder()
+        .tag(tag)
+        .title(title)
+        .child(&view)
+        .build();
+    (page, header)
+}
+
+fn in_stack(view: &adw::NavigationView, page: &adw::NavigationPage) -> bool {
+    let stack = view.navigation_stack();
+    (0..stack.n_items()).any(|i| {
+        stack
+            .item(i)
+            .is_some_and(|p| p == *page.upcast_ref::<glib::Object>())
+    })
+}
+
+/// Drops whatever was pushed over the sections.
+fn back_to_sections(nav: &Nav) {
+    if nav.view.visible_page().as_ref() != Some(&nav.root) {
+        nav.view.replace(std::slice::from_ref(&nav.root));
+    }
+}
+
+/// Shows `page` over the current section, in place of anything pushed before.
+pub fn show_over_section(page: &adw::NavigationPage) {
+    with_nav(|nav| {
+        nav.split.set_show_content(true);
+        match nav.view.visible_page() {
+            Some(p) if &p == page => {}
+            Some(p) if p == nav.root => nav.view.push(page),
+            _ => nav.view.replace(&[nav.root.clone(), page.clone()]),
+        }
+    });
+}
+
+/// Pushes `page` over what is showing, e.g. a device's files over its page.
+pub fn push_over(page: &adw::NavigationPage) {
+    with_nav(|nav| {
+        nav.split.set_show_content(true);
+        if nav.view.visible_page().as_ref() == Some(page) {
+            return;
+        }
+        if in_stack(&nav.view, page) {
+            nav.view.pop_to_page(page);
+        } else {
+            nav.view.push(page);
+        }
+    });
+}
+
+/// Takes `page` away if it is pushed, e.g. the page of a device just forgotten.
+pub fn close(page: &adw::NavigationPage) {
+    with_nav(|nav| {
+        if in_stack(&nav.view, page) {
+            back_to_sections(nav);
+        }
+    });
+}
+
 struct PageSpec {
     id: &'static str,
     title: &'static str,
     icon: &'static str,
 }
 
-const PAGES: [PageSpec; 6] = [
+const PAGES: [PageSpec; 5] = [
     PageSpec {
-        id: "devices",
-        title: "Devices",
-        icon: "computer-symbolic",
+        id: "home",
+        title: "Home",
+        icon: "go-home-symbolic",
     },
     PageSpec {
         id: "clipboard",
@@ -233,13 +402,8 @@ const PAGES: [PageSpec; 6] = [
         icon: "edit-paste-symbolic",
     },
     PageSpec {
-        id: "transfers",
-        title: "Transfers",
-        icon: "folder-download-symbolic",
-    },
-    PageSpec {
         id: "files",
-        title: "Browse Files",
+        title: "Files",
         icon: "folder-symbolic",
     },
     PageSpec {
@@ -253,6 +417,47 @@ const PAGES: [PageSpec; 6] = [
         icon: "emblem-system-symbolic",
     },
 ];
+
+fn show_section(nav: &Nav, id: &str) {
+    let Some(spec) = PAGES.iter().find(|p| p.id == id) else {
+        return;
+    };
+    back_to_sections(nav);
+    if nav.stack.visible_child_name().as_deref() != Some(spec.id) {
+        nav.stack.set_visible_child_name(spec.id);
+    }
+    nav.root.set_title(spec.title);
+    nav.content.set_title(spec.title);
+    nav.split.set_show_content(true);
+}
+
+/// Opens a section by id, e.g. "activity" from "See all" on Home. Ids from
+/// before Home and Files still work: "devices" is Home, "transfers" is Files
+/// and "scratchpad" opens Notes.
+pub fn open_page(id: &str) {
+    let id = match id {
+        "devices" => "home",
+        "transfers" => "files",
+        "scratchpad" | "notes" => return open_notes(),
+        other => other,
+    };
+    with_nav(|nav| {
+        let mut i = 0;
+        while let Some(row) = nav.sidebar.row_at_index(i) {
+            if row.widget_name() == id {
+                nav.sidebar.select_row(Some(&row));
+                break;
+            }
+            i += 1;
+        }
+        show_section(nav, id);
+    });
+}
+
+/// Notes, over whatever section is showing.
+pub fn open_notes() {
+    with_nav(|nav| show_over_section(&nav.notes));
+}
 
 fn nav_row(icon: &str, title: &str, name: &str) -> gtk::ListBoxRow {
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 12);
@@ -282,12 +487,7 @@ fn sidebar_devices(hub: &Hub) -> gtk::Box {
         .build();
     column.append(&heading);
     column.append(&list);
-    {
-        let hub = hub.clone();
-        list.connect_row_activated(move |_, row| {
-            devices::open_device(&hub, row.widget_name().as_str())
-        });
-    }
+    list.connect_row_activated(|_, row| device::open(row.widget_name().as_str()));
     let signature = RefCell::new(String::new());
     hub.on_status(move |hub| {
         let paired: Vec<Value> = hub
@@ -330,80 +530,30 @@ fn sidebar_devices(hub: &Hub) -> gtk::Box {
     column
 }
 
-/// This computer, pinned to the bottom of the sidebar.
-fn this_device(hub: &Hub) -> gtk::Box {
-    let card = gtk::Box::builder()
-        .spacing(10)
-        .css_classes(["this-device"])
-        .build();
-    card.append(&crate::theme::well("computer-symbolic", "blue"));
-    let text = gtk::Box::new(gtk::Orientation::Vertical, 1);
-    text.set_valign(gtk::Align::Center);
-    let name = gtk::Label::builder()
-        .xalign(0.0)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .css_classes(["heading"])
-        .build();
-    let state = gtk::Label::builder()
-        .xalign(0.0)
-        .css_classes(["caption", "muted"])
-        .build();
-    text.append(&name);
-    text.append(&state);
-    card.append(&text);
-    hub.on_status(move |hub| {
-        let status = hub.status.borrow();
-        name.set_label(status["device_name"].as_str().unwrap_or("This computer"));
-        state.set_label(&if !hub.online() {
-            "Not running".to_string()
-        } else if hub.setting("sync_enabled") == false {
-            "Sync paused".to_string()
-        } else {
-            match hub.connected().len() {
-                0 => "Waiting for devices".to_string(),
-                1 => "1 device connected".to_string(),
-                n => format!("{n} devices connected"),
-            }
-        });
-    });
-    card
-}
-
 /// Builds the window once; later calls just return it.
 pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw::ApplicationWindow {
     if let Some(w) = window() {
         return w;
     }
 
-    // Each page sizes itself; a wide page mustn't widen the others.
+    // Each section sizes itself; a wide one mustn't widen the others.
     let stack = gtk::Stack::builder()
         .transition_type(gtk::StackTransitionType::Crossfade)
         .hhomogeneous(false)
         .vhomogeneous(false)
         .build();
-    let pages: [gtk::Widget; 6] = [
-        devices::page(hub).upcast(),
+    let (settings_root, settings_pages) = settings::page(hub);
+    let sections: [gtk::Widget; 5] = [
+        home::page(hub, clipboard).upcast(),
         clipboard::page(hub, clipboard).upcast(),
         transfers::page(hub).upcast(),
-        files::page(hub).upcast(),
         activity::page(hub).upcast(),
-        settings::page(hub).upcast(),
+        settings_root.upcast(),
     ];
-    for (spec, widget) in PAGES.iter().zip(pages) {
+    for (spec, widget) in PAGES.iter().zip(sections) {
         stack.add_named(&widget, Some(spec.id));
     }
 
-    let nav = gtk::ListBox::builder()
-        .css_classes(["navigation-sidebar"])
-        .build();
-    for spec in &PAGES {
-        nav.append(&nav_row(spec.icon, spec.title, spec.id));
-    }
-
-    let content_page = adw::NavigationPage::builder()
-        .title("Devices")
-        .tag("content")
-        .build();
     let banner = adw::Banner::builder()
         .title("Link All's background service isn't running")
         .button_label("Start")
@@ -417,32 +567,58 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
         }
     });
     let update_banner = adw::Banner::builder()
-        .button_label("See What's New")
+        .button_label("See what's new")
         .revealed(false)
         .build();
     watch_updates(&update_banner);
-    let toasts = adw::ToastOverlay::new();
-    toasts.set_child(Some(&stack));
-    let content_view = adw::ToolbarView::new();
-    let content_header = adw::HeaderBar::new();
+    let header = adw::HeaderBar::new();
     let send_button = gtk::Button::builder()
         .icon_name("document-send-symbolic")
-        .tooltip_text("Send Files")
         .action_name("app.send-files")
         .build();
-    content_header.pack_end(&send_button);
+    name_button(&send_button, "Send files");
+    header.pack_end(&send_button);
     let search_button = gtk::Button::builder()
         .icon_name("system-search-symbolic")
-        .tooltip_text("Search (Ctrl+K)")
         .action_name("app.palette")
         .build();
-    content_header.pack_start(&search_button);
-    content_view.add_top_bar(&content_header);
-    content_view.add_top_bar(&banner);
-    content_view.add_top_bar(&update_banner);
-    content_view.set_content(Some(&toasts));
-    content_page.set_child(Some(&content_view));
+    name_button(&search_button, "Search (Ctrl+K)");
+    header.pack_start(&search_button);
+    let sections_view = adw::ToolbarView::new();
+    sections_view.add_top_bar(&header);
+    sections_view.add_top_bar(&banner);
+    sections_view.add_top_bar(&update_banner);
+    sections_view.set_content(Some(&stack));
+    let root = adw::NavigationPage::builder()
+        .title("Home")
+        .tag("sections")
+        .child(&sections_view)
+        .build();
 
+    // Pages pushed over the sections stay built; showing one just fills it in.
+    let view = adw::NavigationView::new();
+    view.add(&root);
+    view.add(&device::page(hub));
+    view.add(&files::page(hub));
+    let (notes, _) = pushed_page("notes", "Notes", &scratchpad::page());
+    view.add(&notes);
+    for page in &settings_pages {
+        view.add(page);
+    }
+    let toasts = adw::ToastOverlay::new();
+    toasts.set_child(Some(&view));
+    let content_page = adw::NavigationPage::builder()
+        .title("Home")
+        .tag("content")
+        .child(&toasts)
+        .build();
+
+    let sidebar_list = gtk::ListBox::builder()
+        .css_classes(["navigation-sidebar"])
+        .build();
+    for spec in &PAGES {
+        sidebar_list.append(&nav_row(spec.icon, spec.title, spec.id));
+    }
     let sidebar_view = adw::ToolbarView::new();
     let sidebar_header = adw::HeaderBar::new();
     let brand = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -456,8 +632,8 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
     sidebar_header.set_title_widget(Some(&brand));
     let menu = gio::Menu::new();
     let actions = gio::Menu::new();
-    actions.append(Some("Send Files…"), Some("app.send-files"));
-    actions.append(Some("Pair a Phone…"), Some("app.pair-phone"));
+    actions.append(Some("Send files…"), Some("app.send-files"));
+    actions.append(Some("Pair a phone…"), Some("app.pair-phone"));
     menu.append_section(None, &actions);
     let more = gio::Menu::new();
     more.append(Some("About Link All"), Some("app.about"));
@@ -467,13 +643,13 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
         &gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .menu_model(&menu)
-            .tooltip_text("Main Menu")
+            .tooltip_text("Main menu")
             .primary(true)
             .build(),
     );
     sidebar_view.add_top_bar(&sidebar_header);
     let sidebar_column = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    sidebar_column.append(&nav);
+    sidebar_column.append(&sidebar_list);
     sidebar_column.append(&sidebar_devices(hub));
     sidebar_view.set_content(Some(
         &gtk::ScrolledWindow::builder()
@@ -482,7 +658,6 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
             .child(&sidebar_column)
             .build(),
     ));
-    sidebar_view.add_bottom_bar(&this_device(hub));
     sidebar_view.add_css_class("la-sidebar");
     let sidebar_page = adw::NavigationPage::builder()
         .title("Link All")
@@ -496,19 +671,18 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
     split.set_min_sidebar_width(230.0);
     split.set_max_sidebar_width(280.0);
 
-    {
-        let (stack, split, content_page) = (stack.clone(), split.clone(), content_page.clone());
-        nav.connect_row_selected(move |_, row| {
-            let Some(row) = row else { return };
+    // Selecting a section shows it; clicking the one already selected also
+    // leaves a page pushed over it.
+    sidebar_list.connect_row_selected(|_, row| {
+        if let Some(row) = row {
             let id = row.widget_name();
-            if let Some(spec) = PAGES.iter().find(|p| p.id == id.as_str()) {
-                stack.set_visible_child_name(spec.id);
-                content_page.set_title(spec.title);
-                split.set_show_content(true);
-            }
-        });
-    }
-    nav.select_row(nav.row_at_index(0).as_ref());
+            with_nav(|nav| show_section(nav, id.as_str()));
+        }
+    });
+    sidebar_list.connect_row_activated(|_, row| {
+        let id = row.widget_name();
+        with_nav(|nav| show_section(nav, id.as_str()));
+    });
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -548,11 +722,7 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
                 } else {
                     format!("{title}. {detail}")
                 }));
-                let (label, action) = match issue["kind"].as_str() {
-                    Some("sync_paused") => (Some("Resume"), Some("app.resume-sync")),
-                    Some("devices_not_found") => (Some("Scan"), Some("app.rescan")),
-                    _ => (None, None),
-                };
+                let (label, action) = fix_for(issue["kind"].as_str().unwrap_or_default());
                 banner.set_button_label(label);
                 banner.set_action_name(action);
                 banner.set_revealed(true);
@@ -563,26 +733,29 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
     pairing::watch(hub);
 
     TOASTS.with(|t| *t.borrow_mut() = Some(toasts));
-    SIDEBAR.with(|s| *s.borrow_mut() = Some(nav));
+    NAV.with(|n| {
+        *n.borrow_mut() = Some(Nav {
+            sidebar: sidebar_list.clone(),
+            split,
+            view,
+            root,
+            content: content_page,
+            stack,
+            notes,
+        })
+    });
     WINDOW.with(|w| *w.borrow_mut() = Some(window.clone()));
+    sidebar_list.select_row(sidebar_list.row_at_index(0).as_ref());
     window
 }
 
-/// Opens a page by id, e.g. from a device row's "Browse files".
-pub fn open_page(id: &str) {
-    SIDEBAR.with(|s| {
-        let Some(list) = s.borrow().clone() else {
-            return;
-        };
-        let mut i = 0;
-        while let Some(row) = list.row_at_index(i) {
-            if row.widget_name() == id {
-                list.select_row(Some(&row));
-                break;
-            }
-            i += 1;
-        }
-    });
+/// The button that fixes a health issue of this `kind`, as (label, action), if one does.
+pub fn fix_for(kind: &str) -> (Option<&'static str>, Option<&'static str>) {
+    match kind {
+        "sync_paused" => (Some("Resume"), Some("app.resume-sync")),
+        "devices_not_found" | "connection_blocked" => (Some("Scan"), Some("app.rescan")),
+        _ => (None, None),
+    }
 }
 
 #[cfg(test)]

@@ -1,8 +1,11 @@
 import SwiftUI
 import QuickLook
 
-struct TransfersDashboardView: View {
+/// Files: send to a device, browse what a paired device shares, follow what is
+/// moving and open what arrived.
+struct FilesView: View {
     @ObservedObject var store: LinkAllStore
+    @State private var browsing: ManagedDevice?
     @Environment(\.colorScheme) var colorScheme
     
     var historyItems: [IpcActivityEntry] {
@@ -28,15 +31,38 @@ struct TransfersDashboardView: View {
             VStack(alignment: .leading, spacing: 32) {
                 
                 // MARK: - Header
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Transfers")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .foregroundStyle(CRTheme.ink)
-                    Text("Manage active files and view recent history")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(CRTheme.inkSoft)
+                PageHeader(title: "Files", subtitle: "Send, browse, and find what arrived")
+                    .padding(.top, 40)
+                    .padding(.horizontal, 40)
+
+                // MARK: - Send and browse
+                VStack(alignment: .leading, spacing: 0) {
+                    GroupLabel("Send")
+                    TileGrid(tiles: [
+                        TileSpec(icon: "doc.badge.arrow.up", label: "Send files") { store.presentSendModal() },
+                        TileSpec(icon: "folder.badge.plus", label: "Send a folder") { store.presentSendModal(choosingFolder: true) },
+                    ])
+                    GroupLabel("Browse")
+                    let paired = store.devices
+                        .filter { $0.trustState == .trusted }
+                        .sorted { a, b in a.isLinked && !b.isLinked }
+                    if paired.isEmpty {
+                        EmptyNote(icon: "folder", text: "Pair a device to browse its files from here.")
+                    } else {
+                        Panel {
+                            ForEach(Array(paired.enumerated()), id: \.element.id) { index, device in
+                                if index > 0 { RowDivider(inset: 54) }
+                                PanelRow(
+                                    icon: "folder", tone: device.isLinked ? .green : .neutral,
+                                    title: device.name,
+                                    detail: device.isLinked ? "Browse its files" : "Not connected",
+                                    // Offline: its page says why and offers Connect.
+                                    action: { if device.isLinked { browsing = device } else { store.openDevice(device.id) } }
+                                )
+                            }
+                        }
+                    }
                 }
-                .padding(.top, 40)
                 .padding(.horizontal, 40)
                 
                 // MARK: - Active Transfers
@@ -123,6 +149,9 @@ struct TransfersDashboardView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.clear)
         .quickLookPreview($quickLookURL)
+        .sheet(item: $browsing) { device in
+            RemoteExplorerView(store: store, device: device)
+        }
         .onAppear {
             spaceMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
                 if event.keyCode == 49, let hoveredId = hoveredItemId { // Spacebar
@@ -501,5 +530,45 @@ struct ActiveSpeedTestCard: View {
         .background(CRTheme.surfaceStrong)
         .crCard(cornerRadius: CRTheme.radiusMedium, highlighted: isHovered, accent: CRTheme.brandCyan)
         .onHover { isHovered = $0 }
+    }
+}
+
+/// A transfer in flight, compact for Home: name, direction, progress and Cancel.
+struct TransferProgressRow: View {
+    let transfer: FileTransferState
+    @ObservedObject var store: LinkAllStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 10) {
+                IconWell(systemName: transfer.isOutbound ? "arrow.up.doc" : "arrow.down.doc", tone: .blue, size: 28)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(transfer.fileName)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(CRTheme.ink)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Text(transfer.directionLabel)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(transfer.exactPercentString)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(CRTheme.inkSoft)
+                Button { store.cancelFileTransfer(transfer) } label: {
+                    Image(systemName: "xmark")
+                }
+                .buttonStyle(IconButtonStyle())
+                .help("Cancel")
+                .accessibilityLabel("Cancel \(transfer.fileName)")
+            }
+            ProgressView(value: transfer.exactRatio)
+                .progressViewStyle(.linear)
+                .tint(CRTheme.brandInk)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }

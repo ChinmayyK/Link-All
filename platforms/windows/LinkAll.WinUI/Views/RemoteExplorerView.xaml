@@ -42,7 +42,7 @@
         <!-- Header spans both columns: page title, then which device, how
              much is here and how much room is left on it. -->
         <StackPanel Grid.Row="0" Spacing="6">
-            <TextBlock Text="Remote files" Style="{StaticResource AppDisplayText}" />
+            <TextBlock Text="Browse files" Style="{StaticResource AppDisplayText}" />
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <TextBlock x:Name="DeviceNameText"
                            Text="{x:Bind mgr.SelectedPeer.DisplayName, Mode=OneWay}"

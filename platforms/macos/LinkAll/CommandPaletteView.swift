@@ -29,20 +29,25 @@ struct CommandPaletteView: View {
         let isSyncPaused = store.settings?.syncEnabled == false
         return [
             PaletteGroup(title: "Navigate", commands: [
-                cmd(id: "nav.devices", icon: "desktopcomputer",
-                    label: "Devices", hint: "Manage connected peers",
+                cmd(id: "nav.home", icon: "house",
+                    label: "Home", hint: "Your devices and what they play",
                     tint: CRTheme.brandElectric, shortcut: "⌘1")
-                { store.selectedSection = .devices },
+                { store.reveal(.home) },
 
                 cmd(id: "nav.clipboard", icon: "doc.on.clipboard",
                     label: "Clipboard", hint: "View clipboard history",
                     tint: CRTheme.accentGreen, shortcut: "⌘2")
-                { store.selectedSection = .clipboard },
+                { store.reveal(.clipboard) },
 
-                cmd(id: "nav.transfers", icon: "arrow.left.arrow.right",
-                    label: "Transfers", hint: "File transfer history",
+                cmd(id: "nav.files", icon: "folder",
+                    label: "Files", hint: "Send, browse and find what arrived",
                     tint: CRTheme.accentOrange, shortcut: "⌘3")
-                { store.selectedSection = .transfers },
+                { store.reveal(.files) },
+
+                cmd(id: "nav.notes", icon: "note.text",
+                    label: "Notes", hint: "Notes shared with your devices",
+                    tint: CRTheme.brandViolet)
+                { store.openNotes() },
 
 
 
@@ -79,7 +84,7 @@ struct CommandPaletteView: View {
                     label: "Manual Connect…",
                     hint: "Connect to a peer by IP address or hostname",
                     tint: CRTheme.accentMint)
-                { store.selectedSection = .devices },
+                { store.promptConnectByAddress() },
 
                 cmd(id: "net.sync_toggle",
                     icon: isSyncPaused ? "play.circle.fill" : "pause.circle.fill",

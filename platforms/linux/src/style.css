@@ -78,3 +78,17 @@ button.file-tile, .file-grid button.flat { border-radius: 12px; }
 /* ── Drop zone ──────────────────────────────────────────────────────────── */
 .drop-zone { border-radius: 16px; border: 2px dashed alpha(@la_blue, 0.35); background: alpha(@la_blue, 0.04); padding: 26px; }
 .drop-zone.hovering { border-color: @la_blue; background: alpha(@la_blue, 0.12); }
+
+/* Device-first Home, device page and Now Playing */
+.device-card { padding: 14px 16px; }
+.device-card-head { padding: 4px; border-radius: 12px; }
+button.quick-action { padding: 8px 12px; border-radius: 10px; background: @la_sunk; }
+button.quick-action:hover { background: alpha(@la_blue, 0.12); }
+.well.large { min-width: 64px; min-height: 64px; border-radius: 18px; }
+.state-panel { padding: 18px 20px; }
+.state-panel.accent-edge { box-shadow: 0 0 0 1px alpha(@la_blue, 0.35); background: alpha(@la_blue, 0.06); }
+.fingerprint { font-family: monospace; font-size: 28px; font-weight: 800; letter-spacing: 4px; }
+.now-playing { padding: 16px; }
+.now-playing-mini { padding: 8px; border-radius: 12px; background: @la_sunk; }
+.cover { border-radius: 10px; }
+button.play-button { min-width: 48px; min-height: 48px; }

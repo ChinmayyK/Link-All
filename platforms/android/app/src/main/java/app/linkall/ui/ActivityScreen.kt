@@ -6,16 +6,24 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -26,7 +34,7 @@ import app.linkall.ActivityEntry
 import app.linkall.ActivityKind
 import java.util.Calendar
 
-private enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>?) {
+internal enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind>?) {
     All("All", null),
     Clipboard("Clipboard", setOf(ActivityKind.CLIPBOARD_TEXT, ActivityKind.CLIPBOARD_IMAGE)),
     Files("Files", setOf(
@@ -38,20 +46,25 @@ private enum class ActivityFilter(val label: String, val kinds: Set<ActivityKind
 
 /** Everything that crossed between devices, grouped by day. */
 @Composable
-fun ActivityTab(
+internal fun ActivityTab(
     isDark: Boolean,
     feed: List<ActivityEntry>,
+    // Held by the caller, so "See all" on Files opens this filtered to files.
+    filter: ActivityFilter,
+    onFilterChange: (ActivityFilter) -> Unit,
     onApply: (ActivityEntry) -> Unit,
-    onResend: (ActivityEntry) -> Unit,
     onDelete: (ActivityEntry) -> Unit,
     onTogglePin: (ActivityEntry) -> Unit = {},
     onClearAll: () -> Unit = {}
 ) {
     val c = rememberDdColors(isDark)
-    var filter by rememberSaveable { mutableStateOf(ActivityFilter.All) }
-    val groups = remember(feed, filter) {
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    val groups = remember(feed, filter, query) {
+        val q = query.trim()
         // Pinned entries get their own group on top; the rest by day.
         feed.filter { e -> filter.kinds?.contains(e.kind) ?: true }
+            .filter { e -> q.isEmpty() || e.preview.contains(q, ignoreCase = true) || e.deviceName.contains(q, ignoreCase = true) }
             .groupBy { if (it.isPinned) "Pinned" else dayLabel(it.timestamp) }
             .toList()
     }
@@ -64,6 +77,11 @@ fun ActivityTab(
             Column {
                 PageTitle(c, "Activity", if (feed.isEmpty()) null else "${feed.size} items") {
                     if (feed.isNotEmpty()) {
+                        TopIconButton(c, if (searching) Icons.Rounded.Close else Icons.Outlined.Search, if (searching) "Close search" else "Search activity") {
+                            searching = !searching
+                            if (!searching) query = ""
+                        }
+                        Spacer(Modifier.width(4.dp))
                         Text(
                             "Clear",
                             style = DdType.small.copy(fontWeight = FontWeight.Medium),
@@ -75,13 +93,17 @@ fun ActivityTab(
                         )
                     }
                 }
+                if (searching) {
+                    Spacer(Modifier.height(12.dp))
+                    SearchField(c, query, "Search clips, files and devices") { query = it }
+                }
                 Spacer(Modifier.height(14.dp))
                 Row(
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     ActivityFilter.values().forEach { f ->
-                        FilterChip(c, f.label, selected = f == filter) { filter = f }
+                        FilterChip(c, f.label, selected = f == filter) { onFilterChange(f) }
                     }
                 }
             }
@@ -92,45 +114,74 @@ fun ActivityTab(
                 Column {
                     Spacer(Modifier.height(24.dp))
                     EmptyBox(
-                        c, Icons.Outlined.History,
-                        if (filter == ActivityFilter.All) "Nothing yet. Clipboard items, files and device changes show up here."
-                        else "No ${filter.label.lowercase()} activity yet."
+                        c, if (query.isNotBlank()) Icons.Outlined.Search else Icons.Outlined.History,
+                        when {
+                            query.isNotBlank() -> "Nothing matches \u201c${query.trim()}\u201d."
+                            filter == ActivityFilter.All -> "Nothing yet. Clipboard items, files and device changes show up here."
+                            else -> "No ${filter.label.lowercase()} activity yet."
+                        }
                     )
                 }
             }
         } else {
             groups.forEach { (day, entries) ->
                 item(key = "h_$day") {
-                    Column {
-                        Text(
-                            day,
-                            style = DdType.title,
-                            color = c.text,
-                            modifier = Modifier.padding(top = 28.dp, bottom = 10.dp)
-                        )
-                    }
+                    Text(
+                        day,
+                        style = DdType.title,
+                        color = c.text,
+                        modifier = Modifier.padding(top = 28.dp, bottom = 10.dp)
+                    )
                 }
-                item(key = "g_$day") {
-                    Column {
-                        Panel(c) {
-                            entries.forEachIndexed { i, entry ->
-                                if (i > 0) Hairline(c)
-                                ActivityRow(
-                                    c = c,
-                                    entry = entry,
-                                    onApply = { onApply(entry) },
-                                    onResend = { onResend(entry) },
-                                    onDelete = { onDelete(entry) },
-                                    onTogglePin = { onTogglePin(entry) },
-                                    showClockTime = true
-                                )
-                            }
-                        }
+                // One lazy row per entry, drawn as one panel per day, so a busy
+                // day scrolls without composing all of it at once.
+                itemsIndexed(entries, key = { _, e -> e.id }) { i, entry ->
+                    Column(Modifier.panelSlice(c, first = i == 0, last = i == entries.lastIndex)) {
+                        if (i > 0) Hairline(c)
+                        ActivityRow(
+                            c = c,
+                            entry = entry,
+                            onApply = { onApply(entry) },
+                            onDelete = { onDelete(entry) },
+                            onTogglePin = { onTogglePin(entry) },
+                            showClockTime = true
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * One row's part of a [Panel]: the rounded top on the first row, the rounded
+ * bottom on the last, and the outline only on the outer edges.
+ */
+private fun Modifier.panelSlice(c: DdColors, first: Boolean, last: Boolean): Modifier {
+    val radius = 24.dp
+    val shape = RoundedCornerShape(
+        topStart = if (first) radius else 0.dp, topEnd = if (first) radius else 0.dp,
+        bottomStart = if (last) radius else 0.dp, bottomEnd = if (last) radius else 0.dp,
+    )
+    return fillMaxWidth()
+        .clip(shape)
+        .background(c.surface)
+        .drawWithContent {
+            drawContent()
+            // The panel's outline, stretched past this row where the panel goes on,
+            // so the clip leaves only the sides (and the ends on the first and last rows).
+            val stroke = 1.dp.toPx()
+            val r = radius.toPx()
+            val top = if (first) stroke / 2 else -r - stroke
+            val bottom = if (last) size.height - stroke / 2 else size.height + r + stroke
+            drawRoundRect(
+                color = c.line,
+                topLeft = Offset(stroke / 2, top),
+                size = Size(size.width - stroke, bottom - top),
+                cornerRadius = CornerRadius(r - stroke / 2),
+                style = Stroke(stroke),
+            )
+        }
 }
 
 @Composable

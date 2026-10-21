@@ -64,6 +64,7 @@ class MainActivity : ComponentActivity() {
     private val syncImages = mutableStateOf(true)
     private val syncFiles = mutableStateOf(true)
     private val findPhoneEnabled = mutableStateOf(false)
+    private val shareCodesEnabled = mutableStateOf(false)
     private val callContinuityEnabled = mutableStateOf(false)
     private val notificationMirroringEnabled = mutableStateOf(false)
     private val autoForwardSms = mutableStateOf(false)
@@ -308,6 +309,7 @@ class MainActivity : ComponentActivity() {
                         syncImages = syncImages.value,
                         syncFiles = syncFiles.value,
                         findPhoneEnabled = findPhoneEnabled.value,
+                        shareCodesEnabled = shareCodesEnabled.value,
                         callContinuityEnabled = callContinuityEnabled.value,
                         notificationMirroringEnabled = notificationMirroringEnabled.value,
                         autoForwardSms = autoForwardSms.value,
@@ -342,6 +344,10 @@ class MainActivity : ComponentActivity() {
                         onFindPhoneChange = {
                             findPhoneEnabled.value = it
                             saveBooleanPref("allow_find_device", it)
+                        },
+                        onShareCodesChange = {
+                            shareCodesEnabled.value = it
+                            saveBooleanPref("share_verification_codes", it)
                         },
                         onCallContinuityChange = { enabled ->
                             val apply = {
@@ -693,6 +699,7 @@ class MainActivity : ComponentActivity() {
         syncImages.value = prefs.getBoolean("sync_images", true)
         syncFiles.value = prefs.getBoolean("sync_files", true)
         findPhoneEnabled.value = prefs.getBoolean("allow_find_device", false)
+        shareCodesEnabled.value = prefs.getBoolean("share_verification_codes", false)
         callContinuityEnabled.value = prefs.getBoolean("call_continuity_enabled", false)
         notificationMirroringEnabled.value = prefs.getBoolean("notification_mirroring", false)
         autoForwardSms.value = prefs.getBoolean("auto_forward_sms", false)
