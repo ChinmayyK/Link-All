@@ -149,6 +149,29 @@
                                           Toggled="OnFileBrowsingToggled"
                                           AutomationProperties.Name="Let devices browse files" />
                         </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE964;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Let phones control this PC" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="RemoteControlToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnRemoteControlToggled"
+                                          AutomationProperties.Name="Let phones control this PC" />
+                        </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>
