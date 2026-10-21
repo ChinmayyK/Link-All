@@ -1,5 +1,7 @@
 package app.linkall
 
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.lifecycleScope
 import app.linkall.ui.setupItems
 import app.linkall.ui.SetupState
 import app.linkall.ui.SetupItem
@@ -149,6 +151,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // What an action did, including that it did nothing, shows as a snackbar here.
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                ActionReceipts.messages.collect { showSnack(it) }
+            }
+        }
         installSplashScreen()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
@@ -617,6 +625,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onResume() {
+        ActionReceipts.appVisible.set(true)
         super.onResume()
         UpdateChecker.checkIfDue(applicationContext)
         refreshDashboardState()
@@ -645,6 +654,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        ActionReceipts.appVisible.set(false)
         unregisterReceiver(statusReceiver)
         super.onStop()
     }

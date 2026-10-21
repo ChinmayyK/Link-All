@@ -763,6 +763,7 @@ class LinkAllService : Service() {
                 if (h != 0L) {
                     if (!hasConnectedPeers()) {
                         Log.i(TAG, "PUSH_CLIPBOARD ignored: no connected peers")
+                        ActionReceipts.say(this, ActionReceipts.NO_DEVICE)
                         return START_STICKY
                     }
                     val cm = getSystemService(android.content.ClipboardManager::class.java)
@@ -774,11 +775,15 @@ class LinkAllService : Service() {
                         Log.i(TAG, "PUSH_CLIPBOARD: result=$result len=${text.length}")
                         if (result == 0) {
                             broadcastActivityUpdated()
+                            ActionReceipts.say(this, ActionReceipts.clipboardSent(connectedPeerIds.values.toList()))
+                        } else {
+                            ActionReceipts.say(this, ActionReceipts.CLIPBOARD_FAILED)
                         }
                         // Hide quick context once sent
                         quickSendContextFlow.value = null
                     } else {
                         Log.w(TAG, "PUSH_CLIPBOARD: clipboard is empty")
+                        ActionReceipts.say(this, ActionReceipts.CLIPBOARD_EMPTY)
                     }
                 }
                 return START_STICKY
@@ -2083,6 +2088,8 @@ class LinkAllService : Service() {
                         val opened = SharedFolders.open(applicationContext, fileId)
                         if (opened == null) {
                             Log.w(TAG, "Shared file $fileId is gone or no longer shared")
+                            // The computer asked for it and would otherwise wait for nothing.
+                            withEngine { live -> LinkAllJni.sendPermissionError(live, targetDeviceId, "Files", ActionReceipts.FILE_NOT_SHARED) }
                             return@executeInBackgroundWithWakeLock
                         }
                         val (pfd, displayName, mimeType) = opened
@@ -3208,6 +3215,7 @@ class LinkAllService : Service() {
                     val files = FolderSync.pending(this, job)
                     if (files.isEmpty()) continue
                     Log.i(TAG, "Folder sync: ${files.size} new file(s) in ${job.label} for ${job.targetName}")
+                    ActionReceipts.say(this, ActionReceipts.folderSync(files.size, job.label, job.targetName))
                     sendTreeFiles(job.treeUri, job.label, files, job.targetDeviceId) { tid, file ->
                         FolderSync.queued(this, tid, job.id, file.key)
                     }
