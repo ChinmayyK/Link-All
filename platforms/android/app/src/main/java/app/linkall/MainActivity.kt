@@ -1,5 +1,8 @@
 package app.linkall
 
+import app.linkall.ui.setupItems
+import app.linkall.ui.SetupState
+import app.linkall.ui.SetupItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Security
@@ -67,6 +70,7 @@ class MainActivity : ComponentActivity() {
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
     private val healthIssues = mutableStateOf<List<HealthIssue>>(emptyList())
+    private val setupItemsState = mutableStateOf<List<SetupItem>>(emptyList())
     private val themeMode = mutableStateOf("system")
     private val hasCompletedOnboarding = mutableStateOf(false)
     private val showBackgroundGuide = mutableStateOf(false)
@@ -305,6 +309,8 @@ class MainActivity : ComponentActivity() {
                         ambientStatus = ambientStatus.value,
                         healthIssue = healthIssues.value.firstOrNull(),
                         onHealthAction = ::onHealthAction,
+                        setupItems = setupItemsState.value,
+                        onSetupFix = { kind -> onHealthAction(HealthIssue(kind, "", "", null)) },
                         activeTransfers = activeTransfers.toImmutableList(),
                         activeSpeedTests = activeSpeedTests.toImmutableList(),
                         onSyncEnabledChange = {
@@ -680,6 +686,18 @@ class MainActivity : ComponentActivity() {
 
         val isConnected = allPeers.any { it.isConnected }
         healthIssues.value = withCallAccessCheck(withBatteryCheck(prefs.healthIssues(), allPeers), allPeers)
+        setupItemsState.value = setupItems(
+            SetupState(
+                problems = healthIssues.value,
+                hasPairedDevice = allPeers.any { it.trusted },
+                batteryAllowed = backgroundAllowed.value,
+                notificationAccess = notificationAccessGranted(),
+                callContinuityOn = callContinuityEnabled.value,
+                postNotifications = androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled(),
+                playBuild = !BuildConfig.FULL_PERMISSIONS,
+                sharedFolders = SharedFolders.list(this).size,
+            )
+        )
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
     }
 
@@ -739,6 +757,7 @@ class MainActivity : ComponentActivity() {
             "notification_access" -> runCatching {
                 startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
             }
+            "notifications_permission" -> openNotificationSettings()
         }
     }
 

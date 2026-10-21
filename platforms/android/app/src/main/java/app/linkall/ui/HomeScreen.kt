@@ -2,6 +2,7 @@
 
 package app.linkall.ui
 
+import androidx.compose.foundation.clickable
 import app.linkall.controllableComputers
 import app.linkall.supportsRemoteControl
 import app.linkall.UpdateChecker
@@ -121,6 +122,7 @@ fun HomeTab(
     onSendPairingRequest: (PeerSnapshot) -> Unit,
     onCancelPairing: (PeerSnapshot) -> Unit,
     healthIssue: HealthIssue? = null,
+    moreIssues: Int = 0,
     onHealthAction: (HealthIssue) -> Unit = {}
 ) {
     val c = remember(isDark) { DdColors(isDark) }
@@ -165,6 +167,18 @@ fun HomeTab(
             }
             if (healthIssue != null) {
                 HealthBanner(c, healthIssue, onHealthAction)
+                if (moreIssues > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "$moreIssues more to fix in Setup  →",
+                        style = DdType.small.copy(fontWeight = FontWeight.Medium),
+                        color = c.accent,
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .clickable { onTabSelected(AppTab.Settings) }
+                            .padding(horizontal = 4.dp, vertical = 6.dp),
+                    )
+                }
                 Spacer(Modifier.height(20.dp))
             }
             if (connected.isEmpty()) {
