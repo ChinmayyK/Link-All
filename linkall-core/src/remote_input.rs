@@ -1,8 +1,11 @@
 //! Mouse and keyboard input a paired phone sends to this computer: the phone
 //! as a trackpad and keyboard. Like [`crate::remote_control`], it is only
-//! reachable when the user has turned "Remote control" on, and the keys a
-//! phone can press are a fixed list; typed text is sent as characters, never
-//! run as a command.
+//! reachable when the user has turned "Remote control" on, and what a phone
+//! can press is a fixed list (keys, modifiers and named shortcuts); typed
+//! text is sent as characters, never run as a command.
+
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 /// A mouse button, as numbered on the wire.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,6 +13,10 @@ pub enum Button {
     Left,
     Right,
     Middle,
+    /// The side button that goes back.
+    Back,
+    /// The side button that goes forward.
+    Forward,
 }
 
 impl Button {
@@ -18,9 +25,40 @@ impl Button {
             0 => Some(Button::Left),
             1 => Some(Button::Right),
             2 => Some(Button::Middle),
+            3 => Some(Button::Back),
+            4 => Some(Button::Forward),
             _ => None,
         }
     }
+}
+
+/// A key by what it is, mapped to each system's own key code.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Code {
+    Letter(char),
+    Zero,
+    Plus,
+    Minus,
+    LeftBracket,
+    RightBracket,
+    Space,
+    Tab,
+    Enter,
+    Escape,
+    Backspace,
+    Delete,
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    /// F1 to F12.
+    Function(u8),
+    /// The Super / Windows key on its own.
+    Super,
 }
 
 /// A key without a character of its own that a phone can press.
@@ -34,10 +72,18 @@ pub enum Key {
     Right,
     Up,
     Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Delete,
+    /// F1 to F12.
+    Function(u8),
 }
 
 impl Key {
-    pub const ALL: [Key; 8] = [
+    /// Every key except the function keys, which are F1 to F12.
+    pub const ALL: [Key; 13] = [
         Key::Backspace,
         Key::Enter,
         Key::Escape,
@@ -46,23 +92,251 @@ impl Key {
         Key::Right,
         Key::Up,
         Key::Down,
+        Key::Home,
+        Key::End,
+        Key::PageUp,
+        Key::PageDown,
+        Key::Delete,
     ];
 
-    pub fn name(self) -> &'static str {
+    pub fn name(self) -> String {
         match self {
-            Key::Backspace => "backspace",
-            Key::Enter => "enter",
-            Key::Escape => "escape",
-            Key::Tab => "tab",
-            Key::Left => "left",
-            Key::Right => "right",
-            Key::Up => "up",
-            Key::Down => "down",
+            Key::Backspace => "backspace".into(),
+            Key::Enter => "enter".into(),
+            Key::Escape => "escape".into(),
+            Key::Tab => "tab".into(),
+            Key::Left => "left".into(),
+            Key::Right => "right".into(),
+            Key::Up => "up".into(),
+            Key::Down => "down".into(),
+            Key::Home => "home".into(),
+            Key::End => "end".into(),
+            Key::PageUp => "page_up".into(),
+            Key::PageDown => "page_down".into(),
+            Key::Delete => "delete".into(),
+            Key::Function(n) => format!("f{n}"),
         }
     }
 
     pub fn parse(name: &str) -> Option<Key> {
+        if let Some(n) = name.strip_prefix('f').and_then(|n| n.parse::<u8>().ok()) {
+            // "f1" to "f12" only: no "f01", "f+1" or "f13".
+            return ((1..=12).contains(&n) && name == format!("f{n}")).then_some(Key::Function(n));
+        }
         Key::ALL.into_iter().find(|k| k.name() == name)
+    }
+
+    fn code(self) -> Code {
+        match self {
+            Key::Backspace => Code::Backspace,
+            Key::Enter => Code::Enter,
+            Key::Escape => Code::Escape,
+            Key::Tab => Code::Tab,
+            Key::Left => Code::Left,
+            Key::Right => Code::Right,
+            Key::Up => Code::Up,
+            Key::Down => Code::Down,
+            Key::Home => Code::Home,
+            Key::End => Code::End,
+            Key::PageUp => Code::PageUp,
+            Key::PageDown => Code::PageDown,
+            Key::Delete => Code::Delete,
+            Key::Function(n) => Code::Function(n),
+        }
+    }
+}
+
+/// A modifier a phone can hold down, for a click with Shift or Control held,
+/// or a shortcut it doesn't have a button for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Modifier {
+    Shift,
+    Ctrl,
+    /// Alt, or Option on a Mac.
+    Alt,
+    /// The Windows or Super key, or Command on a Mac.
+    Meta,
+}
+
+impl Modifier {
+    pub const ALL: [Modifier; 4] = [
+        Modifier::Shift,
+        Modifier::Ctrl,
+        Modifier::Alt,
+        Modifier::Meta,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Modifier::Shift => "shift",
+            Modifier::Ctrl => "ctrl",
+            Modifier::Alt => "alt",
+            Modifier::Meta => "meta",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Modifier> {
+        Modifier::ALL.into_iter().find(|m| m.name() == name)
+    }
+
+    fn index(self) -> usize {
+        match self {
+            Modifier::Shift => 0,
+            Modifier::Ctrl => 1,
+            Modifier::Alt => 2,
+            Modifier::Meta => 3,
+        }
+    }
+}
+
+/// A named shortcut, the same idea on every system: "copy" is Command-C on a
+/// Mac and Control-C elsewhere.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shortcut {
+    Copy,
+    Cut,
+    Paste,
+    Undo,
+    Redo,
+    SelectAll,
+    Find,
+    Save,
+    NewTab,
+    CloseTab,
+    NextTab,
+    PreviousTab,
+    Back,
+    Forward,
+    Reload,
+    ZoomIn,
+    ZoomOut,
+    ZoomReset,
+    SwitchApp,
+    Overview,
+    ShowDesktop,
+    DesktopLeft,
+    DesktopRight,
+}
+
+impl Shortcut {
+    pub const ALL: [Shortcut; 23] = [
+        Shortcut::Copy,
+        Shortcut::Cut,
+        Shortcut::Paste,
+        Shortcut::Undo,
+        Shortcut::Redo,
+        Shortcut::SelectAll,
+        Shortcut::Find,
+        Shortcut::Save,
+        Shortcut::NewTab,
+        Shortcut::CloseTab,
+        Shortcut::NextTab,
+        Shortcut::PreviousTab,
+        Shortcut::Back,
+        Shortcut::Forward,
+        Shortcut::Reload,
+        Shortcut::ZoomIn,
+        Shortcut::ZoomOut,
+        Shortcut::ZoomReset,
+        Shortcut::SwitchApp,
+        Shortcut::Overview,
+        Shortcut::ShowDesktop,
+        Shortcut::DesktopLeft,
+        Shortcut::DesktopRight,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Shortcut::Copy => "copy",
+            Shortcut::Cut => "cut",
+            Shortcut::Paste => "paste",
+            Shortcut::Undo => "undo",
+            Shortcut::Redo => "redo",
+            Shortcut::SelectAll => "select_all",
+            Shortcut::Find => "find",
+            Shortcut::Save => "save",
+            Shortcut::NewTab => "new_tab",
+            Shortcut::CloseTab => "close_tab",
+            Shortcut::NextTab => "next_tab",
+            Shortcut::PreviousTab => "previous_tab",
+            Shortcut::Back => "back",
+            Shortcut::Forward => "forward",
+            Shortcut::Reload => "reload",
+            Shortcut::ZoomIn => "zoom_in",
+            Shortcut::ZoomOut => "zoom_out",
+            Shortcut::ZoomReset => "zoom_reset",
+            Shortcut::SwitchApp => "switch_app",
+            Shortcut::Overview => "overview",
+            Shortcut::ShowDesktop => "show_desktop",
+            Shortcut::DesktopLeft => "desktop_left",
+            Shortcut::DesktopRight => "desktop_right",
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Shortcut> {
+        Shortcut::ALL.into_iter().find(|s| s.name() == name)
+    }
+
+    /// The modifiers and key that make this shortcut on `system`.
+    fn chord(self, system: System) -> (Vec<Modifier>, Code) {
+        use Modifier::{Alt, Ctrl, Meta, Shift};
+        let mac = system == System::Mac;
+        let primary = if mac { Meta } else { Ctrl };
+        let letter = |c| (vec![primary], Code::Letter(c));
+        match self {
+            Shortcut::Copy => letter('c'),
+            Shortcut::Cut => letter('x'),
+            Shortcut::Paste => letter('v'),
+            Shortcut::Undo => letter('z'),
+            Shortcut::Redo if mac => (vec![Meta, Shift], Code::Letter('z')),
+            Shortcut::Redo => letter('y'),
+            Shortcut::SelectAll => letter('a'),
+            Shortcut::Find => letter('f'),
+            Shortcut::Save => letter('s'),
+            Shortcut::NewTab => letter('t'),
+            Shortcut::CloseTab => letter('w'),
+            Shortcut::NextTab => (vec![Ctrl], Code::Tab),
+            Shortcut::PreviousTab => (vec![Ctrl, Shift], Code::Tab),
+            Shortcut::Back if mac => (vec![Meta], Code::LeftBracket),
+            Shortcut::Back => (vec![Alt], Code::Left),
+            Shortcut::Forward if mac => (vec![Meta], Code::RightBracket),
+            Shortcut::Forward => (vec![Alt], Code::Right),
+            Shortcut::Reload => letter('r'),
+            Shortcut::ZoomIn => (vec![primary], Code::Plus),
+            Shortcut::ZoomOut => (vec![primary], Code::Minus),
+            Shortcut::ZoomReset => (vec![primary], Code::Zero),
+            Shortcut::SwitchApp if mac => (vec![Meta], Code::Tab),
+            Shortcut::SwitchApp => (vec![Alt], Code::Tab),
+            Shortcut::Overview if mac => (vec![Ctrl], Code::Up),
+            Shortcut::Overview if system == System::Windows => (vec![Meta], Code::Tab),
+            Shortcut::Overview => (vec![], Code::Super),
+            Shortcut::ShowDesktop if mac => (vec![], Code::Function(11)),
+            Shortcut::ShowDesktop => (vec![Meta], Code::Letter('d')),
+            Shortcut::DesktopLeft if mac => (vec![Ctrl], Code::Left),
+            Shortcut::DesktopLeft if system == System::Windows => (vec![Ctrl, Meta], Code::Left),
+            Shortcut::DesktopLeft => (vec![Ctrl, Alt], Code::Left),
+            Shortcut::DesktopRight if mac => (vec![Ctrl], Code::Right),
+            Shortcut::DesktopRight if system == System::Windows => (vec![Ctrl, Meta], Code::Right),
+            Shortcut::DesktopRight => (vec![Ctrl, Alt], Code::Right),
+        }
+    }
+}
+
+/// Which system's key conventions apply.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum System {
+    Mac,
+    Windows,
+    Other,
+}
+
+fn this_system() -> System {
+    if cfg!(target_os = "macos") {
+        System::Mac
+    } else if cfg!(windows) {
+        System::Windows
+    } else {
+        System::Other
     }
 }
 
@@ -76,6 +350,64 @@ pub const MAX_STEP: i32 = 2000;
 
 fn clamp_step(v: i32) -> i32 {
     v.clamp(-MAX_STEP, MAX_STEP)
+}
+
+/// A held modifier is let go of after this long without being released, so a
+/// dropped connection can't leave a key stuck down.
+const HOLD_LIMIT: Duration = Duration::from_secs(30);
+
+struct Held {
+    down: [bool; 4],
+    since: Option<Instant>,
+}
+
+static HELD: Mutex<Held> = Mutex::new(Held {
+    down: [false; 4],
+    since: None,
+});
+
+/// Lets go of every held modifier that has been down too long.
+fn release_stale() {
+    let stale: Vec<Modifier> = {
+        let mut held = HELD.lock().unwrap();
+        if held.since.is_some_and(|t| t.elapsed() > HOLD_LIMIT) {
+            held.since = None;
+            Modifier::ALL
+                .into_iter()
+                .filter(|m| std::mem::replace(&mut held.down[m.index()], false))
+                .collect()
+        } else {
+            Vec::new()
+        }
+    };
+    for m in stale {
+        let _ = imp::modifier(m, false);
+    }
+}
+
+/// Presses or releases a modifier and keeps it held until released.
+pub fn set_modifier(modifier: Modifier, down: bool) -> Result<(), String> {
+    {
+        let mut held = HELD.lock().unwrap();
+        held.down[modifier.index()] = down;
+        held.since = held.down.iter().any(|d| *d).then(Instant::now);
+    }
+    imp::modifier(modifier, down)
+}
+
+/// Presses and releases `code` with `mods` held for that moment.
+fn chord(mods: &[Modifier], code: Code) -> Result<(), String> {
+    let held = HELD.lock().unwrap().down;
+    // Only press the modifiers that aren't already held.
+    let extra: Vec<Modifier> = mods.iter().copied().filter(|m| !held[m.index()]).collect();
+    for m in &extra {
+        imp::modifier(*m, true)?;
+    }
+    let result = imp::key(code, true).and_then(|()| imp::key(code, false));
+    for m in extra.iter().rev() {
+        let _ = imp::modifier(*m, false);
+    }
+    result
 }
 
 /// A phone number a computer asked the phone to call, or None when it isn't
@@ -102,22 +434,26 @@ pub fn clean_phone_number(raw: &str) -> Option<String> {
 
 /// Moves the pointer by (`dx`, `dy`) from where it is.
 pub fn pointer_move(dx: i32, dy: i32) -> Result<(), String> {
+    release_stale();
     imp::pointer_move(clamp_step(dx), clamp_step(dy))
 }
 
 /// Presses or releases a mouse button.
 pub fn pointer_button(button: Button, down: bool) -> Result<(), String> {
+    release_stale();
     imp::pointer_button(button, down)
 }
 
 /// Scrolls by (`dx`, `dy`) in pixel-like units; positive `dy` moves the
 /// content up, as with a trackpad's natural direction off.
 pub fn scroll(dx: i32, dy: i32) -> Result<(), String> {
+    release_stale();
     imp::scroll(clamp_step(dx), clamp_step(dy))
 }
 
 /// Types `text` as characters.
 pub fn type_text(text: &str) -> Result<(), String> {
+    release_stale();
     let text: String = text.chars().take(MAX_TEXT_CHARS).collect();
     if text.is_empty() {
         return Ok(());
@@ -127,13 +463,21 @@ pub fn type_text(text: &str) -> Result<(), String> {
 
 /// Presses and releases one of the fixed keys.
 pub fn press_key(key: Key) -> Result<(), String> {
-    imp::press_key(key)
+    release_stale();
+    chord(&[], key.code())
+}
+
+/// Runs one of the named shortcuts the way this system spells it.
+pub fn shortcut(shortcut: Shortcut) -> Result<(), String> {
+    release_stale();
+    let (mods, code) = shortcut.chord(this_system());
+    chord(&mods, code)
 }
 
 /// Pastes what is on the clipboard into the focused app (Command-V, or
 /// Control-V). Used by "Paste" on a verification-code popup.
 pub fn paste() -> Result<(), String> {
-    imp::paste()
+    shortcut(Shortcut::Paste)
 }
 
 /// The one-time code in a phone notification that Link All sent for a
@@ -147,8 +491,9 @@ pub fn verification_code(title: &str, text: &str) -> Option<String> {
 
 #[cfg(target_os = "macos")]
 mod imp {
-    use super::{Button, Key};
+    use super::{Button, Code, Modifier};
     use std::ffi::c_void;
+    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Mutex;
     use std::time::Instant;
 
@@ -191,13 +536,16 @@ mod imp {
     const CLICK_STATE: u32 = 1;
     const MOVED: u32 = 5;
 
+    /// The modifier flags held down now, put on every event we post.
+    static FLAGS: AtomicU64 = AtomicU64::new(0);
+
     struct State {
-        down: [bool; 3],
+        down: [bool; 5],
         last_click: Option<(Instant, u8)>,
     }
 
     static STATE: Mutex<State> = Mutex::new(State {
-        down: [false; 3],
+        down: [false; 5],
         last_click: None,
     });
 
@@ -206,6 +554,7 @@ mod imp {
             return Err("macOS didn't create the event".into());
         }
         unsafe {
+            CGEventSetFlags(event, FLAGS.load(Ordering::Relaxed));
             CGEventPost(HID_TAP, event);
             CFRelease(event);
         }
@@ -229,6 +578,8 @@ mod imp {
             Button::Left => 0,
             Button::Right => 1,
             Button::Middle => 2,
+            Button::Back => 3,
+            Button::Forward => 4,
         }
     }
 
@@ -261,6 +612,10 @@ mod imp {
             (Button::Right, false) => (4, 1),
             (Button::Middle, true) => (25, 2),
             (Button::Middle, false) => (26, 2),
+            (Button::Back, true) => (25, 3),
+            (Button::Back, false) => (26, 3),
+            (Button::Forward, true) => (25, 4),
+            (Button::Forward, false) => (26, 4),
         };
         let clicks = {
             let mut st = STATE.lock().unwrap();
@@ -306,46 +661,106 @@ mod imp {
         Ok(())
     }
 
-    pub fn paste() -> Result<(), String> {
-        const COMMAND: u64 = 0x0010_0000;
-        for down in [true, false] {
-            // 9 is the V key.
-            let event = unsafe { CGEventCreateKeyboardEvent(std::ptr::null(), 9, down) };
-            if !event.is_null() {
-                unsafe { CGEventSetFlags(event, COMMAND) };
-            }
-            post(event)?;
+    /// The system's own key code for `code` (ANSI layout).
+    fn key_code(code: Code) -> u16 {
+        match code {
+            Code::Letter(c) => match c {
+                'a' => 0,
+                's' => 1,
+                'd' => 2,
+                'f' => 3,
+                'h' => 4,
+                'g' => 5,
+                'z' => 6,
+                'x' => 7,
+                'c' => 8,
+                'v' => 9,
+                'b' => 11,
+                'q' => 12,
+                'w' => 13,
+                'e' => 14,
+                'r' => 15,
+                'y' => 16,
+                't' => 17,
+                'o' => 31,
+                'u' => 32,
+                'i' => 34,
+                'p' => 35,
+                'l' => 37,
+                'j' => 38,
+                'k' => 40,
+                'n' => 45,
+                'm' => 46,
+                _ => 0,
+            },
+            Code::Zero => 29,
+            Code::Plus => 24,
+            Code::Minus => 27,
+            Code::LeftBracket => 33,
+            Code::RightBracket => 30,
+            Code::Space => 49,
+            Code::Tab => 48,
+            Code::Enter => 36,
+            Code::Escape => 53,
+            Code::Backspace => 51,
+            Code::Delete => 117,
+            Code::Left => 123,
+            Code::Right => 124,
+            Code::Down => 125,
+            Code::Up => 126,
+            Code::Home => 115,
+            Code::End => 119,
+            Code::PageUp => 116,
+            Code::PageDown => 121,
+            Code::Function(n) => match n {
+                1 => 122,
+                2 => 120,
+                3 => 99,
+                4 => 118,
+                5 => 96,
+                6 => 97,
+                7 => 98,
+                8 => 100,
+                9 => 101,
+                10 => 109,
+                11 => 103,
+                _ => 111,
+            },
+            Code::Super => 55,
         }
-        Ok(())
     }
 
-    pub fn press_key(key: Key) -> Result<(), String> {
-        let code: u16 = match key {
-            Key::Backspace => 51,
-            Key::Enter => 36,
-            Key::Escape => 53,
-            Key::Tab => 48,
-            Key::Left => 123,
-            Key::Right => 124,
-            Key::Down => 125,
-            Key::Up => 126,
+    pub fn key(code: Code, down: bool) -> Result<(), String> {
+        post(unsafe { CGEventCreateKeyboardEvent(std::ptr::null(), key_code(code), down) })
+    }
+
+    /// Holds or lets go of a modifier: later events carry its flag, and the
+    /// key press itself tells the system.
+    pub fn modifier(m: Modifier, down: bool) -> Result<(), String> {
+        let (key, flag): (u16, u64) = match m {
+            Modifier::Shift => (56, 0x0002_0000),
+            Modifier::Ctrl => (59, 0x0004_0000),
+            Modifier::Alt => (58, 0x0008_0000),
+            Modifier::Meta => (55, 0x0010_0000),
         };
-        for down in [true, false] {
-            post(unsafe { CGEventCreateKeyboardEvent(std::ptr::null(), code, down) })?;
+        if down {
+            FLAGS.fetch_or(flag, Ordering::Relaxed);
+        } else {
+            FLAGS.fetch_and(!flag, Ordering::Relaxed);
         }
-        Ok(())
+        post(unsafe { CGEventCreateKeyboardEvent(std::ptr::null(), key, down) })
     }
 }
 
 #[cfg(windows)]
 mod imp {
-    use super::{Button, Key};
+    use super::{Button, Code, Modifier};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP,
-        KEYEVENTF_UNICODE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
-        MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE, MOUSEEVENTF_RIGHTDOWN,
-        MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEINPUT, VK_BACK, VK_CONTROL, VK_DOWN,
-        VK_ESCAPE, VK_LEFT, VK_RETURN, VK_RIGHT, VK_TAB, VK_UP,
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
+        KEYEVENTF_KEYUP, KEYEVENTF_UNICODE, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN,
+        MOUSEEVENTF_LEFTUP, MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP, MOUSEEVENTF_MOVE,
+        MOUSEEVENTF_RIGHTDOWN, MOUSEEVENTF_RIGHTUP, MOUSEEVENTF_WHEEL, MOUSEEVENTF_XDOWN,
+        MOUSEEVENTF_XUP, MOUSEINPUT,
     };
 
     fn send(inputs: &[INPUT]) -> Result<(), String> {
@@ -379,7 +794,7 @@ mod imp {
         }
     }
 
-    fn key(vk: u16, scan: u16, flags: u32) -> INPUT {
+    fn key_input(vk: u16, scan: u16, flags: u32) -> INPUT {
         INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
@@ -406,8 +821,16 @@ mod imp {
             (Button::Right, false) => MOUSEEVENTF_RIGHTUP,
             (Button::Middle, true) => MOUSEEVENTF_MIDDLEDOWN,
             (Button::Middle, false) => MOUSEEVENTF_MIDDLEUP,
+            (Button::Back | Button::Forward, true) => MOUSEEVENTF_XDOWN,
+            (Button::Back | Button::Forward, false) => MOUSEEVENTF_XUP,
         };
-        send(&[mouse(0, 0, 0, flags)])
+        // The side buttons say which one in the data: 1 is back, 2 is forward.
+        let data = match button {
+            Button::Back => 1,
+            Button::Forward => 2,
+            _ => 0,
+        };
+        send(&[mouse(0, 0, data, flags)])
     }
 
     pub fn scroll(dx: i32, dy: i32) -> Result<(), String> {
@@ -428,40 +851,67 @@ mod imp {
     pub fn type_text(text: &str) -> Result<(), String> {
         let mut inputs = Vec::new();
         for unit in text.encode_utf16() {
-            inputs.push(key(0, unit, KEYEVENTF_UNICODE));
-            inputs.push(key(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
+            inputs.push(key_input(0, unit, KEYEVENTF_UNICODE));
+            inputs.push(key_input(0, unit, KEYEVENTF_UNICODE | KEYEVENTF_KEYUP));
         }
         send(&inputs)
     }
 
-    pub fn paste() -> Result<(), String> {
-        const V: u16 = 0x56;
-        send(&[
-            key(VK_CONTROL, 0, 0),
-            key(V, 0, 0),
-            key(V, 0, KEYEVENTF_KEYUP),
-            key(VK_CONTROL, 0, KEYEVENTF_KEYUP),
-        ])
+    /// The system's virtual key for `code`, and whether it is an "extended" key.
+    fn virtual_key(code: Code) -> (u16, bool) {
+        match code {
+            Code::Letter(c) => (c.to_ascii_uppercase() as u16, false),
+            Code::Zero => (0x30, false),
+            Code::Plus => (0xBB, false),
+            Code::Minus => (0xBD, false),
+            Code::LeftBracket => (0xDB, false),
+            Code::RightBracket => (0xDD, false),
+            Code::Space => (0x20, false),
+            Code::Tab => (0x09, false),
+            Code::Enter => (0x0D, false),
+            Code::Escape => (0x1B, false),
+            Code::Backspace => (0x08, false),
+            Code::Delete => (0x2E, true),
+            Code::Left => (0x25, true),
+            Code::Up => (0x26, true),
+            Code::Right => (0x27, true),
+            Code::Down => (0x28, true),
+            Code::Home => (0x24, true),
+            Code::End => (0x23, true),
+            Code::PageUp => (0x21, true),
+            Code::PageDown => (0x22, true),
+            Code::Function(n) => (0x6F + u16::from(n.clamp(1, 12)), false),
+            Code::Super => (0x5B, false),
+        }
     }
 
-    pub fn press_key(k: Key) -> Result<(), String> {
-        let vk = match k {
-            Key::Backspace => VK_BACK,
-            Key::Enter => VK_RETURN,
-            Key::Escape => VK_ESCAPE,
-            Key::Tab => VK_TAB,
-            Key::Left => VK_LEFT,
-            Key::Right => VK_RIGHT,
-            Key::Up => VK_UP,
-            Key::Down => VK_DOWN,
+    pub fn key(code: Code, down: bool) -> Result<(), String> {
+        let (vk, extended) = virtual_key(code);
+        let mut flags = if extended { KEYEVENTF_EXTENDEDKEY } else { 0 };
+        if !down {
+            flags |= KEYEVENTF_KEYUP;
+        }
+        send(&[self::key_input(vk, 0, flags)])
+    }
+
+    pub fn modifier(m: Modifier, down: bool) -> Result<(), String> {
+        let vk = match m {
+            Modifier::Shift => 0x10,
+            Modifier::Ctrl => 0x11,
+            Modifier::Alt => 0x12,
+            Modifier::Meta => 0x5B,
         };
-        send(&[key(vk, 0, 0), key(vk, 0, KEYEVENTF_KEYUP)])
+        send(&[self::key_input(
+            vk,
+            0,
+            if down { 0 } else { KEYEVENTF_KEYUP },
+        )])
     }
 }
 
 #[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
 mod imp {
-    use super::{Button, Key};
+    use super::{Button, Code, Modifier};
     use std::fs::{File, OpenOptions};
     use std::io::Write;
     use std::os::fd::AsRawFd;
@@ -478,6 +928,8 @@ mod imp {
     const BTN_LEFT: u16 = 0x110;
     const BTN_RIGHT: u16 = 0x111;
     const BTN_MIDDLE: u16 = 0x112;
+    const BTN_SIDE: u16 = 0x113;
+    const BTN_EXTRA: u16 = 0x114;
 
     const UI_SET_EVBIT: libc::c_ulong = 0x4004_5564;
     const UI_SET_KEYBIT: libc::c_ulong = 0x4004_5565;
@@ -537,7 +989,7 @@ mod imp {
         ioctl(&file, UI_SET_EVBIT, EV_KEY as i32)?;
         ioctl(&file, UI_SET_EVBIT, EV_REL as i32)?;
         ioctl(&file, UI_SET_EVBIT, EV_SYN as i32)?;
-        for b in [BTN_LEFT, BTN_RIGHT, BTN_MIDDLE] {
+        for b in [BTN_LEFT, BTN_RIGHT, BTN_MIDDLE, BTN_SIDE, BTN_EXTRA] {
             ioctl(&file, UI_SET_KEYBIT, b as i32)?;
         }
         for r in [REL_X, REL_Y, REL_WHEEL, REL_HWHEEL] {
@@ -618,6 +1070,8 @@ mod imp {
             Button::Left => BTN_LEFT,
             Button::Right => BTN_RIGHT,
             Button::Middle => BTN_MIDDLE,
+            Button::Back => BTN_SIDE,
+            Button::Forward => BTN_EXTRA,
         };
         with_device(|d| emit(d, &[(EV_KEY, code, i32::from(down))]))
     }
@@ -670,41 +1124,66 @@ mod imp {
         ])
     }
 
-    pub fn paste() -> Result<(), String> {
-        first_that_works(&[
-            vec!["xdotool".into(), "key".into(), "ctrl+v".into()],
-            vec![
-                "wtype".into(),
-                "-M".into(),
-                "ctrl".into(),
-                "v".into(),
-                "-m".into(),
-                "ctrl".into(),
-            ],
-        ])
+    /// The X11 key name for `code`.
+    fn key_name(code: Code) -> String {
+        match code {
+            Code::Letter(c) => c.to_string(),
+            Code::Zero => "0".into(),
+            Code::Plus => "equal".into(),
+            Code::Minus => "minus".into(),
+            Code::LeftBracket => "bracketleft".into(),
+            Code::RightBracket => "bracketright".into(),
+            Code::Space => "space".into(),
+            Code::Tab => "Tab".into(),
+            Code::Enter => "Return".into(),
+            Code::Escape => "Escape".into(),
+            Code::Backspace => "BackSpace".into(),
+            Code::Delete => "Delete".into(),
+            Code::Left => "Left".into(),
+            Code::Right => "Right".into(),
+            Code::Up => "Up".into(),
+            Code::Down => "Down".into(),
+            Code::Home => "Home".into(),
+            Code::End => "End".into(),
+            Code::PageUp => "Prior".into(),
+            Code::PageDown => "Next".into(),
+            Code::Function(n) => format!("F{n}"),
+            Code::Super => "Super_L".into(),
+        }
     }
 
-    pub fn press_key(key: Key) -> Result<(), String> {
-        let (xdo, wtype) = match key {
-            Key::Backspace => ("BackSpace", "BackSpace"),
-            Key::Enter => ("Return", "Return"),
-            Key::Escape => ("Escape", "Escape"),
-            Key::Tab => ("Tab", "Tab"),
-            Key::Left => ("Left", "Left"),
-            Key::Right => ("Right", "Right"),
-            Key::Up => ("Up", "Up"),
-            Key::Down => ("Down", "Down"),
+    fn press_or_release(name: &str, down: bool) -> Result<(), String> {
+        if down {
+            first_that_works(&[
+                vec!["xdotool".into(), "keydown".into(), name.into()],
+                vec!["wtype".into(), "-P".into(), name.into()],
+            ])
+        } else {
+            first_that_works(&[
+                vec!["xdotool".into(), "keyup".into(), name.into()],
+                vec!["wtype".into(), "-p".into(), name.into()],
+            ])
+        }
+    }
+
+    pub fn key(code: Code, down: bool) -> Result<(), String> {
+        press_or_release(&key_name(code), down)
+    }
+
+    pub fn modifier(m: Modifier, down: bool) -> Result<(), String> {
+        let name = match m {
+            Modifier::Shift => "Shift_L",
+            Modifier::Ctrl => "Control_L",
+            Modifier::Alt => "Alt_L",
+            Modifier::Meta => "Super_L",
         };
-        first_that_works(&[
-            vec!["xdotool".into(), "key".into(), xdo.into()],
-            vec!["wtype".into(), "-k".into(), wtype.into()],
-        ])
+        press_or_release(name, down)
     }
 }
 
 #[cfg(target_os = "android")]
 mod imp {
-    use super::{Button, Key};
+    use super::{Button, Code, Modifier};
 
     const NO: &str = "this device can't be controlled";
 
@@ -720,10 +1199,10 @@ mod imp {
     pub fn type_text(_: &str) -> Result<(), String> {
         Err(NO.into())
     }
-    pub fn press_key(_: Key) -> Result<(), String> {
+    pub fn key(_: Code, _: bool) -> Result<(), String> {
         Err(NO.into())
     }
-    pub fn paste() -> Result<(), String> {
+    pub fn modifier(_: Modifier, _: bool) -> Result<(), String> {
         Err(NO.into())
     }
 }
@@ -735,23 +1214,90 @@ mod tests {
     #[test]
     fn every_key_round_trips_by_name() {
         for k in Key::ALL {
-            assert_eq!(Key::parse(k.name()), Some(k));
+            assert_eq!(Key::parse(&k.name()), Some(k));
         }
     }
 
     #[test]
     fn odd_key_names_are_refused() {
-        for bad in ["", "ctrl", "Enter", "delete", "f4", "enter; reboot"] {
+        for bad in ["", "ctrl", "Enter", "insert", "f13", "enter; reboot"] {
             assert_eq!(Key::parse(bad), None, "{bad}");
         }
     }
 
     #[test]
-    fn only_three_buttons_exist() {
+    fn five_buttons_exist() {
         assert_eq!(Button::from_wire(0), Some(Button::Left));
         assert_eq!(Button::from_wire(1), Some(Button::Right));
         assert_eq!(Button::from_wire(2), Some(Button::Middle));
-        assert_eq!(Button::from_wire(3), None);
+        assert_eq!(Button::from_wire(3), Some(Button::Back));
+        assert_eq!(Button::from_wire(4), Some(Button::Forward));
+        assert_eq!(Button::from_wire(5), None);
+    }
+
+    #[test]
+    fn function_keys_are_f1_to_f12_only() {
+        for n in 1..=12 {
+            let key = Key::Function(n);
+            assert_eq!(Key::parse(&key.name()), Some(key));
+        }
+        for bad in ["f0", "f13", "f01", "f+1", "f", "F1", "ff1"] {
+            assert_eq!(Key::parse(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn every_modifier_and_shortcut_round_trips_by_name() {
+        for m in Modifier::ALL {
+            assert_eq!(Modifier::parse(m.name()), Some(m));
+        }
+        for s in Shortcut::ALL {
+            assert_eq!(Shortcut::parse(s.name()), Some(s));
+        }
+        for bad in [
+            "",
+            "super",
+            "Shift",
+            "copy; reboot",
+            "alt+f4",
+            "close_window",
+            "shutdown",
+        ] {
+            assert!(
+                Modifier::parse(bad).is_none() && Shortcut::parse(bad).is_none(),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn shortcuts_follow_each_systems_conventions() {
+        let (mods, code) = Shortcut::Copy.chord(System::Mac);
+        assert_eq!((mods, code), (vec![Modifier::Meta], Code::Letter('c')));
+        let (mods, code) = Shortcut::Copy.chord(System::Windows);
+        assert_eq!((mods, code), (vec![Modifier::Ctrl], Code::Letter('c')));
+        assert_eq!(
+            Shortcut::Redo.chord(System::Mac).0,
+            vec![Modifier::Meta, Modifier::Shift]
+        );
+        assert_eq!(Shortcut::Redo.chord(System::Other).1, Code::Letter('y'));
+        assert_eq!(Shortcut::Back.chord(System::Mac).1, Code::LeftBracket);
+        assert_eq!(Shortcut::Back.chord(System::Windows).1, Code::Left);
+        assert_eq!(
+            Shortcut::SwitchApp.chord(System::Mac).0,
+            vec![Modifier::Meta]
+        );
+        assert_eq!(
+            Shortcut::SwitchApp.chord(System::Other).0,
+            vec![Modifier::Alt]
+        );
+        // Every shortcut has a key on every system.
+        for s in Shortcut::ALL {
+            for system in [System::Mac, System::Windows, System::Other] {
+                let (_, code) = s.chord(system);
+                assert!(!matches!(code, Code::Function(0)));
+            }
+        }
     }
 
     #[test]

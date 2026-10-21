@@ -650,6 +650,17 @@ pub enum AppMessage {
     CaptureRequest {
         mode: String,
     },
+    /// Phone -> computer: run a named shortcut (see `remote_input::Shortcut`),
+    /// spelled the way the computer's system spells it.
+    RemoteShortcut {
+        name: String,
+    },
+    /// Phone -> computer: hold (`down`) or release a modifier: shift, ctrl,
+    /// alt or meta. Released on its own after 30 seconds.
+    RemoteModifier {
+        modifier: String,
+        down: bool,
+    },
 }
 
 impl AppMessage {

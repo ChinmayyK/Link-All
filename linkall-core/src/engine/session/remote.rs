@@ -363,6 +363,16 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             Some(key) => input(ctx, move || crate::remote_input::press_key(key)).await,
             None => tracing::debug!("ignoring a key that isn't on the list"),
         },
+        AppMessage::RemoteShortcut { name } => match crate::remote_input::Shortcut::parse(&name) {
+            Some(shortcut) => input(ctx, move || crate::remote_input::shortcut(shortcut)).await,
+            None => tracing::debug!("ignoring a shortcut that isn't on the list"),
+        },
+        AppMessage::RemoteModifier { modifier, down } => {
+            match crate::remote_input::Modifier::parse(&modifier) {
+                Some(m) => input(ctx, move || crate::remote_input::set_modifier(m, down)).await,
+                None => tracing::debug!("ignoring a modifier that isn't on the list"),
+            }
+        }
         AppMessage::DialNumber { number } => {
             ctx.touch_last_seen();
             let trusted = shared

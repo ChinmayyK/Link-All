@@ -259,6 +259,8 @@ impl Engine {
                 | AppMessage::RemotePointerScroll { .. }
                 | AppMessage::RemoteTypeText { .. }
                 | AppMessage::RemoteKeyPress { .. }
+                | AppMessage::RemoteShortcut { .. }
+                | AppMessage::RemoteModifier { .. }
         ) {
             return Err("That isn't a trackpad message.".to_string());
         }

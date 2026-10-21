@@ -3225,3 +3225,41 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_scratchpadClear(
     rt().block_on(h.engine.scratchpad_clear());
     0
 }
+
+/// Runs a named shortcut (copy, paste, back, ...) on a computer.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendShortcut(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    name: JString,
+) -> jint {
+    let Ok(name) = env.get_string(&name).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteShortcut { name }
+    })
+}
+
+/// Holds or releases a modifier (shift, ctrl, alt, meta) on a computer.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendModifier(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    modifier: JString,
+    down: jboolean,
+) -> jint {
+    let Ok(modifier) = env.get_string(&modifier).map(String::from) else {
+        return -1;
+    };
+    send_input(&mut env, handle, &target_device_id, || {
+        AppMessage::RemoteModifier {
+            modifier,
+            down: down != 0,
+        }
+    })
+}
