@@ -383,6 +383,7 @@ internal fun healthActionLabel(kind: String): String? = when (kind) {
     "devices_not_found", "connection_blocked" -> "Search again"
     "listener_down" -> "Restart Link All"
     "battery_restricted" -> "Allow"
+    "notification_access" -> "Turn on"
     else -> null
 }
 

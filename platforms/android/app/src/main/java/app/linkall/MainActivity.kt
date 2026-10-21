@@ -679,7 +679,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val isConnected = allPeers.any { it.isConnected }
-        healthIssues.value = withBatteryCheck(prefs.healthIssues(), allPeers)
+        healthIssues.value = withCallAccessCheck(withBatteryCheck(prefs.healthIssues(), allPeers), allPeers)
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
     }
 
@@ -703,6 +703,26 @@ class MainActivity : ComponentActivity() {
         return engineIssues.toMutableList().apply { add(if (notFound < 0) 0 else notFound, battery) }
     }
 
+    private fun notificationAccessGranted(): Boolean =
+        android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+            ?.contains(packageName) == true
+
+    /**
+     * Calls from the phone name the caller and can be answered from a computer
+     * only through Notification access (the Google Play build has no contacts
+     * or answer-calls permission). Say so while the user has call continuity
+     * on and it is off, instead of leaving them with a nameless banner.
+     */
+    private fun withCallAccessCheck(issues: List<HealthIssue>, allPeers: List<PeerSnapshot>): List<HealthIssue> {
+        if (!callContinuityEnabled.value || allPeers.none { it.trusted } || notificationAccessGranted()) return issues
+        return issues + HealthIssue(
+            "notification_access",
+            "Calls need notification access",
+            "Without it your computer can't show who is calling or answer for you. Turn on Notification access for Link All.",
+            null
+        )
+    }
+
     private fun onHealthAction(issue: HealthIssue) {
         when (issue.kind) {
             "no_network" -> runCatching { startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)) }
@@ -716,6 +736,9 @@ class MainActivity : ComponentActivity() {
                 launchService()
             }
             "battery_restricted" -> showBackgroundGuide.value = true
+            "notification_access" -> runCatching {
+                startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+            }
         }
     }
 
