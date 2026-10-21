@@ -61,6 +61,8 @@ object LinkAllJni {
     // ── Clipboard push ────────────────────────────────────────────────────────
     @JvmStatic external fun pushText(handle: Long, text: String): Int
     @JvmStatic external fun openUrlOnDevice(handle: Long, targetDeviceId: String, url: String): Int
+    /** The devices a purpose ("send", "remote", "browse", "sync_target") can go to, as JSON. */
+    @JvmStatic external fun deviceChoicesJson(handle: Long, purpose: String, lastUsed: String?): String?
     /** Asks a computer to press a media, volume or slide key. 0 when sent, -1 when it could not be. */
     @JvmStatic external fun remoteControl(handle: Long, targetDeviceId: String, action: String): Int
     /** Why [remoteControl] could not send, as a sentence, or null. */

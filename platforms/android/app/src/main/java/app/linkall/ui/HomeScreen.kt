@@ -3,6 +3,7 @@
 package app.linkall.ui
 
 import app.linkall.controllableComputers
+import app.linkall.supportsRemoteControl
 import app.linkall.UpdateChecker
 import app.linkall.HealthIssue
 
@@ -215,7 +216,10 @@ fun HomeTab(
                         else -> "Choose which of ${computers.size} computers"
                     },
                     enabled = enabled && computers.isNotEmpty(),
-                    onClick = { if (computers.size == 1) remoteTarget = computers.first() else showRemotePicker = true }
+                    onClick = {
+                        val only = computers.singleOrNull()
+                        if (only != null && supportsRemoteControl(only.appVersion)) remoteTarget = only else showRemotePicker = true
+                    }
                 )
             }
         }
@@ -289,7 +293,7 @@ fun HomeTab(
         BrowseDevicePicker(c, connected, onPick = browseFiles, onDismiss = { showBrowsePicker = false })
     }
     if (showRemotePicker) {
-        RemoteDevicePicker(c, connected.controllableComputers(), onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })
+        RemoteDevicePicker(c, connected, onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })
     }
     remoteTarget?.let { target ->
         RemoteSheet(
@@ -303,7 +307,6 @@ fun HomeTab(
     if (showSendSheet) {
         SendSheet(
             c = c,
-            connected = connected,
             onSend = { folder, target -> if (folder) onActionSendFolder(target) else onActionSendFiles(target) },
             onDismiss = { showSendSheet = false }
         )

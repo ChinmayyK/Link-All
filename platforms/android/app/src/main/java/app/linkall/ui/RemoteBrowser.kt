@@ -431,14 +431,18 @@ private fun iconFor(file: RemoteFile): ImageVector = when {
     else -> Icons.Outlined.Description
 }
 
-/** Which connected device to browse, when there's more than one. */
+/** Which device to browse, ranked by the core; unusable devices say why. */
 @Composable
 internal fun BrowseDevicePicker(c: DdColors, connected: List<PeerSnapshot>, onPick: (PeerSnapshot) -> Unit, onDismiss: () -> Unit) {
-    DdSheet(c, icon = Icons.Outlined.FolderOpen, title = "Browse files", subtitle = "Get files from another device", onDismiss = onDismiss) { close ->
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            connected.forEach { peer ->
-                SheetOption(c, osIcon(peer.platform, peer.name), peer.name, null) { close { onPick(peer) } }
-            }
-        }
-    }
+    DeviceChooserSheet(
+        c, purpose = app.linkall.ChoicePurpose.Browse, icon = Icons.Outlined.FolderOpen,
+        title = "Browse which device?",
+        emptyHint = "No paired device is connected.",
+        actions = listOf(
+            ChooserAction(Icons.Outlined.FolderOpen, { d -> "Browse ${d?.name ?: "files"}" }) { id ->
+                connected.firstOrNull { it.id == id }?.let(onPick)
+            },
+        ),
+        onDismiss = onDismiss,
+    )
 }
