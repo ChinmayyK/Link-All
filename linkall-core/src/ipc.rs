@@ -77,6 +77,7 @@ pub struct PartialSettings {
     pub show_receive_notification: Option<bool>,
     pub ignore_patterns: Option<Vec<String>>,
     pub allow_file_browsing: Option<bool>,
+    pub allow_remote_control: Option<bool>,
 }
 
 fn default_remote_files_limit() -> u32 {
@@ -377,6 +378,8 @@ pub enum IpcRequest {
         ignore_patterns: Option<Vec<String>>,
         #[serde(default)]
         allow_file_browsing: Option<bool>,
+        #[serde(default)]
+        allow_remote_control: Option<bool>,
     },
 
     // ── Call continuity ───────────────────────────────────────────────────────
@@ -1351,6 +1354,7 @@ pub async fn handle_ipc_request(
             show_receive_notification,
             ignore_patterns,
             allow_file_browsing,
+            allow_remote_control,
         } => {
             match eng
                 .save_settings_partial(crate::ipc::PartialSettings {
@@ -1373,6 +1377,7 @@ pub async fn handle_ipc_request(
                     show_receive_notification,
                     ignore_patterns,
                     allow_file_browsing,
+                    allow_remote_control,
                 })
                 .await
             {

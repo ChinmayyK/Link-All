@@ -117,6 +117,9 @@ impl Engine {
         if let Some(v) = p.allow_file_browsing {
             s.allow_file_browsing = v;
         }
+        if let Some(v) = p.allow_remote_control {
+            s.allow_remote_control = v;
+        }
         let persisted = self.persist_settings_snapshot(s)?;
         self.apply_settings(persisted).await;
         Ok(())
