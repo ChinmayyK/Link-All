@@ -13,6 +13,9 @@ import android.os.Bundle
 import android.provider.MediaStore
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,6 +41,35 @@ class CaptureActivity : Activity() {
             finish()
             return
         }
+        if (mode == "document" && startDocumentScanner()) return
+        startCamera()
+    }
+
+    /**
+     * A document is scanned with Google's scanner, which finds the page's edges,
+     * straightens it and cleans it up. Returns false when this phone can't
+     * (no Google Play services), and the camera is used with a simple clean-up.
+     */
+    private fun startDocumentScanner(): Boolean {
+        return runCatching {
+            val options = GmsDocumentScannerOptions.Builder()
+                .setGalleryImportAllowed(false)
+                .setPageLimit(1)
+                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+                .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+                .build()
+            GmsDocumentScanning.getClient(options)
+                .getStartScanIntent(this)
+                .addOnSuccessListener { sender ->
+                    runCatching { startIntentSenderForResult(sender, SCAN_REQUEST, null, 0, 0, 0) }
+                        .onFailure { startCamera() }
+                }
+                .addOnFailureListener { startCamera() }
+            true
+        }.getOrDefault(false)
+    }
+
+    private fun startCamera() {
         val dir = File(cacheDir, "captures").apply { mkdirs() }
         // Pictures from earlier requests are no longer needed.
         dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 60 * 60 * 1000 }?.forEach { it.delete() }
@@ -55,16 +87,36 @@ class CaptureActivity : Activity() {
     @Deprecated("Deprecated in Java")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == SCAN_REQUEST) {
+            val page = if (resultCode == RESULT_OK) {
+                GmsDocumentScanningResult.fromActivityResultIntent(data)?.pages?.firstOrNull()?.imageUri
+            } else null
+            if (page == null) {
+                finish()
+                return
+            }
+            val dir = File(cacheDir, "captures").apply { mkdirs() }
+            val scanned = File(dir, "scan-${System.currentTimeMillis()}.jpg")
+            val copied = runCatching {
+                contentResolver.openInputStream(page)?.use { input -> scanned.outputStream().use { input.copyTo(it) } }
+                scanned.length() > 0
+            }.getOrDefault(false)
+            if (copied) send(scanned) else finish()
+            return
+        }
         val file = photo
         if (requestCode != REQUEST || resultCode != RESULT_OK || file == null || !file.exists() || file.length() == 0L) {
             finish()
             return
         }
+        send(if (mode == "document") enhance(file) ?: file else file)
+    }
+
+    /** Sends the picture back to the computer that asked for it. */
+    private fun send(toSend: File) {
         val target = deviceId
         val app = applicationContext
-        val mode = mode
         thread {
-            val toSend = if (mode == "document") enhance(file) ?: file else file
             val name = "LinkAll Capture ${SimpleDateFormat("yyyy-MM-dd HH.mm.ss", Locale.US).format(Date())}.jpg"
             val uri: Uri = FileProvider.getUriForFile(app, "${app.packageName}.fileprovider", toSend)
             app.startService(
@@ -108,5 +160,6 @@ class CaptureActivity : Activity() {
         const val EXTRA_MODE = "capture_mode"
         const val EXTRA_DEVICE_ID = "capture_device_id"
         private const val REQUEST = 71
+        private const val SCAN_REQUEST = 72
     }
 }
