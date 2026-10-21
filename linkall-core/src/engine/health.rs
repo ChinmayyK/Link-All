@@ -87,9 +87,10 @@ async fn evaluate(shared: &EngineShared) -> Vec<HealthIssue> {
     } else if listener_error.is_some() {
         issues.push(HealthIssue::new(
             "listener_down",
-            "Other devices can't reach this one",
-            "Link All couldn't start listening after the network changed. It tries again on the \
-             next network change; restarting Link All fixes it now.",
+            "Other devices can't connect to this one",
+            "You can still connect to them, but they can't connect to you. Link All couldn't \
+             start listening after the network changed. It tries again on the next network \
+             change; restarting Link All fixes it now.",
         ));
     }
 

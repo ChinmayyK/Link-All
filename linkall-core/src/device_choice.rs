@@ -252,7 +252,12 @@ mod tests {
     fn a_device_that_is_not_paired_is_not_listed() {
         let mut stranger = peer("Stranger", "Windows", true, 1);
         stranger.trusted = false;
-        let got = choices(&[stranger, peer("Mac", "macOS", true, 1)], Purpose::Send, None, NOW);
+        let got = choices(
+            &[stranger, peer("Mac", "macOS", true, 1)],
+            Purpose::Send,
+            None,
+            NOW,
+        );
         assert_eq!(names(&got), ["Mac"]);
     }
 
