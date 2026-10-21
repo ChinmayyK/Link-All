@@ -172,8 +172,29 @@ fn main() -> gtk::glib::ExitCode {
         app.connect_open(move |app, files, _| {
             skip_present.set(false);
             app.activate();
-            let paths = files.iter().filter_map(|f| f.path()).collect();
-            ui::send::send_paths(&hub, paths, None);
+            // A tel: link goes to the phone; anything else is files to send.
+            let (calls, rest): (Vec<_>, Vec<_>) =
+                files.iter().partition(|f| f.uri().starts_with("tel:"));
+            for call in calls {
+                let uri = call.uri().to_string();
+                let number =
+                    glib::uri_unescape_string(uri.trim_start_matches("tel:"), None::<&str>)
+                        .map(|s| s.to_string())
+                        .unwrap_or_default();
+                let valid = (3..=32).contains(&number.chars().count())
+                    && number
+                        .chars()
+                        .all(|c| c.is_ascii_digit() || "+-().*# ".contains(c));
+                if valid {
+                    ui::call_from_phone(Some(number));
+                } else {
+                    ui::toast("That doesn't look like a phone number");
+                }
+            }
+            let paths: Vec<_> = rest.iter().filter_map(|f| f.path()).collect();
+            if !paths.is_empty() {
+                ui::send::send_paths(&hub, paths, None);
+            }
         });
     }
     if let Some(action) = action {
@@ -225,6 +246,14 @@ fn install_actions(app: &adw::Application, hub: &hub::Hub) {
         by_address.connect_activate(move |_, _| ui::add_by_address(&hub));
     }
     app.add_action(&by_address);
+
+    let guest = gio::SimpleAction::new("receive-guest", None);
+    guest.connect_activate(|_, _| ui::receive_from_guest());
+    app.add_action(&guest);
+
+    let call = gio::SimpleAction::new("call-phone", None);
+    call.connect_activate(|_, _| ui::call_from_phone(None));
+    app.add_action(&call);
 
     let rescan = gio::SimpleAction::new("rescan", None);
     {

@@ -97,6 +97,8 @@ pub fn page(hub: &Hub) -> gtk::ScrolledWindow {
     let more = gio::Menu::new();
     more.append(Some("Pair a Phone with a QR Code…"), Some("app.pair-phone"));
     more.append(Some("Add by IP Address…"), Some("app.add-by-address"));
+    more.append(Some("Receive from a Guest…"), Some("app.receive-guest"));
+    more.append(Some("Call from Phone…"), Some("app.call-phone"));
     more.append(Some("Scan for Devices"), Some("app.rescan"));
     hero.append(
         &gtk::MenuButton::builder()
@@ -847,6 +849,34 @@ pub fn open_device(hub: &Hub, id: &str) {
                 "Makes it ring, even on silent",
                 Box::new(move || find_phone(&h, &i, &n)),
             );
+            for (title, detail, mode) in [
+                (
+                    "Take Photo with Phone",
+                    "The photo comes back and is pasted where you were typing",
+                    "photo",
+                ),
+                (
+                    "Scan Document with Phone",
+                    "Scans a page and pastes it where you were typing",
+                    "document",
+                ),
+            ] {
+                let (h, i) = (hub.clone(), id.clone());
+                add(
+                    "camera-photo-symbolic",
+                    "violet",
+                    title,
+                    detail,
+                    Box::new(move || {
+                        crate::agent::mark_capture_asked();
+                        act(
+                            json!({ "cmd": "capture_request", "target": i, "mode": mode }),
+                            Some("Check your phone and tap the notification"),
+                            &h,
+                        )
+                    }),
+                );
+            }
         }
         let (h, i) = (hub.clone(), id.clone());
         add(

@@ -897,6 +897,58 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
+    /// Click to call: offers `number` to a paired phone, asking which when there are
+    /// several, and asking for the number first when there isn't one. The phone shows a
+    /// notification and opens its dialer when its owner taps it.
+    func callFromPhone(number: String?) {
+        guard let number else {
+            LinkAllModal.shared.present { [weak self] dismiss in
+                CallNumberCard(
+                    onCall: { typed in dismiss(); self?.callFromPhone(number: typed) },
+                    onCancel: dismiss
+                )
+            }
+            return
+        }
+        let clean = number.trimmingCharacters(in: .whitespacesAndNewlines)
+        Task { [weak self] in
+            guard let self else { return }
+            guard let choices = try? await self.ipc.deviceChoices(purpose: "find", lastUsed: self.lastUsedDeviceId) else {
+                self.showToast(title: "Can't reach your phone", body: "Link All isn't running.", tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 5.0)
+                return
+            }
+            let usable = choices.usable
+            if usable.count == 1 {
+                self.offerCall(clean, to: usable[0])
+            } else if usable.isEmpty {
+                self.showToast(title: "No phone to use", body: choices.choices.first?.reason ?? "Pair your phone first.", tint: CRTheme.inkSoft, systemImage: "iphone.slash", ttl: 5.0)
+            } else {
+                LinkAllModal.shared.present { [weak self] dismiss in
+                    FindPhoneCard(
+                        title: "Call \(clean) on which phone?",
+                        subtitle: "It shows a notification; tap it to open the dialer",
+                        icon: "phone.fill",
+                        choices: choices,
+                        onPick: { choice in dismiss(); self?.offerCall(clean, to: choice) },
+                        onCancel: dismiss
+                    )
+                }
+            }
+        }
+    }
+
+    private func offerCall(_ number: String, to phone: IpcDeviceChoice) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.ipc.dialNumber(target: phone.id, number: number)
+                self.showToast(title: "Check \(phone.name)", body: "Tap the notification to call \(number).", tint: CRTheme.accentBlue, systemImage: "phone.fill", ttl: 8.0)
+            } catch {
+                self.showToast(title: "\(phone.name) can't do that", body: error.localizedDescription, tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 6.0)
+            }
+        }
+    }
+
     /// "Receive from Guest": a link, QR code and PIN that someone who isn't paired
     /// can use to send a file to this Mac. It ends after five minutes.
     func receiveFromGuest() {

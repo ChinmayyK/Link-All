@@ -7,6 +7,7 @@ Exec=linkall %U
 Icon=app.linkall.LinkAll
 Terminal=false
 Categories=Network;FileTransfer;Utility;
+MimeType=x-scheme-handler/tel;
 Keywords=clipboard;sync;phone;android;transfer;share;send;files;continuity;
 StartupNotify=true
 StartupWMClass=app.linkall.LinkAll

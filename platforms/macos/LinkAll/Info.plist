@@ -51,6 +51,17 @@
 		<string>Outfit-Regular.ttf</string>
 		<string>Outfit-Bold.ttf</string>
 	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Phone number (call from your phone)</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>tel</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSServices</key>
 	<array>
 		<dict>

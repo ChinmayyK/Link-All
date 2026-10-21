@@ -268,7 +268,7 @@ fn local_ip() -> String {
         .unwrap_or_else(|_| "127.0.0.1".into())
 }
 
-fn qr_texture(text: &str) -> Option<gdk::MemoryTexture> {
+pub(crate) fn qr_texture(text: &str) -> Option<gdk::MemoryTexture> {
     let code = qrcode::QrCode::with_error_correction_level(text, qrcode::EcLevel::M).ok()?;
     let modules = code.width();
     let colors = code.to_colors();

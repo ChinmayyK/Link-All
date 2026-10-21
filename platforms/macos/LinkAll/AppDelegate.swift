@@ -357,6 +357,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let guest = windowMenu.addItem(withTitle: "Receive from Guest", action: #selector(receiveFromGuest), keyEquivalent: "g")
         guest.keyEquivalentModifierMask = [.command, .shift]
         guest.target = self
+        let call = windowMenu.addItem(withTitle: "Call from Phone…", action: #selector(callFromPhone), keyEquivalent: "c")
+        call.keyEquivalentModifierMask = [.command, .shift]
+        call.target = self
         let insert = windowMenu.addItem(withTitle: "Insert Photo from Phone", action: #selector(insertPhotoFromPhone), keyEquivalent: "i")
         insert.keyEquivalentModifierMask = [.command, .shift]
         insert.target = self
@@ -876,6 +879,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     @objc private func receiveFromGuest() { store.receiveFromGuest() }
+    @objc private func callFromPhone() { store.callFromPhone(number: nil) }
+
+    /// A tel: link, once Link All is chosen for them: the number is offered to a paired phone.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls where url.scheme == "tel" {
+            let number = url.absoluteString.dropFirst("tel:".count).removingPercentEncoding ?? ""
+            let valid = (3...32).contains(number.count)
+                && number.allSatisfy { $0.isASCII && ($0.isNumber || "+-().*# ".contains($0)) }
+            if valid {
+                store.callFromPhone(number: number)
+            } else {
+                store.showToast(title: "Can't call that", body: "It doesn't look like a phone number.", tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 4.0)
+            }
+        }
+    }
     @objc private func insertPhotoFromPhone() { store.captureFromPhone(mode: "photo") }
     @objc private func scanDocumentWithPhone() { store.captureFromPhone(mode: "document") }
 

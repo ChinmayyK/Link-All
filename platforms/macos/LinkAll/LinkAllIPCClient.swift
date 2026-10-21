@@ -569,6 +569,13 @@ final class LinkAllIPCClient {
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
     }
 
+    /// Offers a paired phone a call; its owner taps a notification to open the dialer.
+    func dialNumber(target: String, number: String) async throws {
+        let raw = try await send(cmd: ["cmd": "dial_number", "target": target, "number": number])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
     /// Starts a Guest Drop session: a link and PIN for someone who isn't paired.
     func guestDropStart() async throws -> IpcGuestSession {
         let raw = try await send(cmd: ["cmd": "guest_drop_start"])

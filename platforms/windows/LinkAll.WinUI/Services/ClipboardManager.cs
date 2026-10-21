@@ -218,6 +218,14 @@ namespace LinkAll.WinUI.Services
                             var fileName = NativeCore.PtrToUtf8String(NativeCore.linkall_event_transfer_file_name(ev)) ?? "File";
                             var device = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_name(ev)) ?? "Unknown device";
                             var destPath = NativeCore.PtrToUtf8String(NativeCore.linkall_event_transfer_dest_path(ev));
+                            // A picture asked of the phone with "Take photo with phone" is pasted where you were typing.
+                            if (!string.IsNullOrEmpty(destPath) && NotificationHelperPictures.TakePending(fileName))
+                            {
+                                _ = NotificationHelperPictures.InsertAsync(destPath);
+                                (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() =>
+                                    NotificationHelper.ShowToast("Picture inserted", "Pasted into the app you were using"));
+                                break;
+                            }
                             (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
                                 if (!string.IsNullOrEmpty(destPath))
                                     NotificationHelper.ShowToast("File Received", $"{fileName} from {device}");

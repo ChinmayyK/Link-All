@@ -131,6 +131,14 @@
                                                 Visibility="{x:Bind IsPhone, Converter={StaticResource BoolToVisibleConverter}, Mode=OneTime}">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEA8F;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Take photo with phone" Click="OnTakePhotoClicked"
+                                                Visibility="{x:Bind IsPhone, Converter={StaticResource BoolToVisibleConverter}, Mode=OneTime}">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE722;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Scan document with phone" Click="OnScanDocumentClicked"
+                                                Visibility="{x:Bind IsPhone, Converter={StaticResource BoolToVisibleConverter}, Mode=OneTime}">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8A5;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
                                 <MenuFlyoutItem Text="Run speed test" Click="OnSpeedTestDeviceClicked"
                                                 Visibility="{x:Bind IsConnected, Converter={StaticResource BoolToVisibleConverter}, Mode=OneWay}">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE916;" /></MenuFlyoutItem.Icon>
@@ -295,6 +303,12 @@
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem Text="Connect by IP address" Click="OnConnectByIpClicked">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE968;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Receive from a guest…" Click="OnReceiveFromGuestClicked">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE8FA;" /></MenuFlyoutItem.Icon>
+                                </MenuFlyoutItem>
+                                <MenuFlyoutItem Text="Call from phone…" Click="OnCallFromPhoneClicked">
+                                    <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE717;" /></MenuFlyoutItem.Icon>
                                 </MenuFlyoutItem>
                                 <MenuFlyoutItem Text="Open downloads folder" Click="OnOpenDownloadsClicked">
                                     <MenuFlyoutItem.Icon><FontIcon Glyph="&#xED25;" /></MenuFlyoutItem.Icon>

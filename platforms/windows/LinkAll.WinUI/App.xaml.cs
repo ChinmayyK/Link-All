@@ -368,6 +368,47 @@ public partial class App : Application
     // API that carries them changed) - called from both a cold launch
     // (ProcessActivationArgs, AppNotification/Protocol kinds) and a click
     // while already running (NotificationHelper.OnNotificationInvoked).
+    /// <summary>
+    /// A tel: link was clicked: offer the number to a paired phone. The phone shows a
+    /// notification and opens its dialer only when its owner taps it.
+    /// </summary>
+    private static void OfferCallToPhone(string raw)
+    {
+        var number = raw.Trim();
+        if (number.Length is < 3 or > 32 || !number.All(c => char.IsAsciiDigit(c) || "+-().*# ".Contains(c)))
+        {
+            NotificationHelper.ShowToast("Can't call that", "It doesn't look like a phone number.");
+            return;
+        }
+        _ = System.Threading.Tasks.Task.Run(() =>
+        {
+            string? phoneId = null;
+            using (var doc = DaemonClient.DeviceChoices("find"))
+            {
+                if (doc != null
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("choices", out var choices))
+                {
+                    foreach (var c in choices.EnumerateArray())
+                    {
+                        if (c.TryGetProperty("available", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.True)
+                        {
+                            phoneId = c.GetProperty("id").GetString();
+                            break;
+                        }
+                    }
+                }
+            }
+            if (phoneId == null)
+            {
+                NotificationHelper.ShowToast("No phone to use", "Connect a paired phone that runs Link All 2.1 or later.");
+                return;
+            }
+            using var resp = DaemonClient.DialNumber(phoneId, number);
+            DaemonActions.ReportIfFailed("Call from phone", resp);
+        });
+    }
+
     public static void HandleLinkAllUri(string uriString)
     {
         if (!Uri.TryCreate(uriString, UriKind.Absolute, out var uri) || uri.Scheme != "linkall") return;
@@ -409,7 +450,9 @@ public partial class App : Application
             // Any web page can open a linkall:// link, so a link must never
             // accept a pairing or a transfer: only the notification buttons
             // (AppNotification activation below) may do that.
-            if (uri != null)
+            if (uri != null && uri.Scheme == "tel")
+                OfferCallToPhone(Uri.UnescapeDataString(uri.OriginalString.Substring(4)));
+            else if (uri != null)
                 TraceLog.Write("Ignored protocol activation: " + uri.Scheme + "://" + uri.Host);
         }
         else if (activatedArgs.Kind == Microsoft.Windows.AppLifecycle.ExtendedActivationKind.AppNotification)

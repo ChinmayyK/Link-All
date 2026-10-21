@@ -3,11 +3,13 @@
 mod activity;
 mod clipboard;
 pub mod devices;
+mod extras;
 mod files;
 pub mod pairing;
 pub mod palette;
 mod scratchpad;
 pub use devices::add_by_address;
+pub use extras::{call_from_phone, receive_from_guest};
 pub mod send;
 mod settings;
 mod transfers;
