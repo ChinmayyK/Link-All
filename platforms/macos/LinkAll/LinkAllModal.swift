@@ -472,3 +472,70 @@ struct SendModalCard: View {
         group.notify(queue: .main) { done(urls) }
     }
 }
+
+
+/// Which phone to ring, when more than one can be asked. One tap rings it.
+struct FindPhoneCard: View {
+    let choices: IpcDeviceChoices
+    let onPick: (IpcDeviceChoice) -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ModalCard(icon: "bell.and.waves.left.and.right.fill", title: "Ring which phone?",
+                  subtitle: "It rings even on silent until you tap Found it", width: 440) {
+            VStack(spacing: 8) {
+                ForEach(choices.usable) { d in row(d, enabled: true) }
+                if !choices.unusable.isEmpty {
+                    Text("Not available")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
+                    ForEach(choices.unusable) { d in row(d, enabled: false) }
+                }
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", action: onCancel).buttonStyle(CRSecondaryButtonStyle()).keyboardShortcut(.cancelAction)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func row(_ d: IpcDeviceChoice, enabled: Bool) -> some View {
+        Button { if enabled { onPick(d) } } label: {
+            HStack(spacing: 12) {
+                OSIcon(DeviceOS(platform: d.platform, name: d.name), size: 16)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(CRTheme.brandElectric.opacity(0.10)))
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(d.name).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                    Text(enabled ? "Ring" : (d.reason ?? ""))
+                        .font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+            }
+            .foregroundStyle(CRTheme.ink)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(CRTheme.surfaceStrong))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(CRTheme.stroke, lineWidth: 1))
+            .opacity(enabled ? 1 : 0.5)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+}
+
+/// Shown while a phone rings; closing it asks the phone to stop.
+struct RingingCard: View {
+    let name: String
+    let onStop: () -> Void
+
+    var body: some View {
+        ModalCard(icon: "bell.fill", title: "\(name) is ringing",
+                  subtitle: "It rings at full volume for up to a minute", width: 400) {
+            ModalButtons(cancel: nil, confirm: "Stop ringing", onCancel: onStop, onConfirm: onStop)
+        }
+    }
+}

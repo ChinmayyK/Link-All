@@ -111,7 +111,9 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::OpenUrlOnDevice { .. }
         | M::OpenUrlOnDeviceAck { .. }
         | M::RemoteControl { .. }
-        | M::RemoteControlAck { .. }) => remote::handle(ctx, m).await,
+        | M::RemoteControlAck { .. }
+        | M::FindDevice { .. }
+        | M::FindDeviceAck { .. }) => remote::handle(ctx, m).await,
         // Handshake messages; once the session is up they carry nothing.
         M::Hello { .. } | M::HelloAck { .. } => Flow::Continue,
         // Sent only by older builds that had the camera stream.

@@ -120,6 +120,9 @@ impl Engine {
         if let Some(v) = p.allow_remote_control {
             s.allow_remote_control = v;
         }
+        if let Some(v) = p.allow_find_device {
+            s.allow_find_device = v;
+        }
         let persisted = self.persist_settings_snapshot(s)?;
         self.apply_settings(persisted).await;
         Ok(())

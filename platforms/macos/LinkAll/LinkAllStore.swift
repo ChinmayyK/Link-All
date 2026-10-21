@@ -836,6 +836,51 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
+    /// Rings a paired phone so it can be found. With one phone that can ring it
+    /// asks straight away; with several, the user picks; with none, say why.
+    func findPhone() {
+        Task { [weak self] in
+            guard let self else { return }
+            guard let choices = try? await self.ipc.deviceChoices(purpose: "find", lastUsed: self.lastUsedDeviceId) else {
+                self.showToast(title: "Can't find a phone", body: "Link All isn't running.", tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 5.0)
+                return
+            }
+            let usable = choices.usable
+            if usable.count == 1 {
+                self.ringPhone(usable[0])
+            } else if usable.isEmpty {
+                let why = choices.choices.first?.reason ?? "Pair your phone first."
+                self.showToast(title: "No phone to ring", body: why, tint: CRTheme.inkSoft, systemImage: "iphone.slash", ttl: 5.0)
+            } else {
+                LinkAllModal.shared.present { [weak self] dismiss in
+                    FindPhoneCard(
+                        choices: choices,
+                        onPick: { choice in dismiss(); self?.ringPhone(choice) },
+                        onCancel: dismiss
+                    )
+                }
+            }
+        }
+    }
+
+    private func ringPhone(_ phone: IpcDeviceChoice) {
+        Task { [weak self] in
+            guard let self else { return }
+            do {
+                try await self.ipc.findDevice(target: phone.id, ring: true)
+            } catch {
+                self.showToast(title: "\(phone.name) won't ring", body: error.localizedDescription, tint: CRTheme.accentRed, systemImage: "exclamationmark.triangle", ttl: 6.0)
+                return
+            }
+            LinkAllModal.shared.present { [weak self] dismiss in
+                RingingCard(name: phone.name, onStop: {
+                    dismiss()
+                    Task { try? await self?.ipc.findDevice(target: phone.id, ring: false) }
+                })
+            }
+        }
+    }
+
     private func processAndSend(url: URL, targetDeviceId: String?) async {
         let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
         do {

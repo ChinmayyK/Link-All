@@ -197,6 +197,8 @@ struct IpcDeviceChoices: Codable {
     var unusable: [IpcDeviceChoice] { choices.filter { !$0.available } }
 }
 
+struct IpcEmpty: Codable {}
+
 struct IpcDiagnosticReport: Codable {
     let text: String
 }
@@ -532,7 +534,7 @@ final class LinkAllIPCClient {
         return Data(base64Encoded: b64)
     }
 
-    /// The paired devices `purpose` ("send", "remote", "browse", "sync_target") can go
+    /// The paired devices `purpose` ("send", "remote", "browse", "sync_target", "find") can go
     /// to, best first, with why the others can't. `lastUsed` is the device chosen last.
     func deviceChoices(purpose: String, lastUsed: String?) async throws -> IpcDeviceChoices {
         var cmd: [String: Any] = ["cmd": "device_choices", "purpose": purpose]
@@ -542,6 +544,14 @@ final class LinkAllIPCClient {
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
         guard let data = resp.data else { throw LinkAllIPCError.noData }
         return data
+    }
+
+    /// Makes a paired phone ring (`ring` true) or stop. Returns once the phone has
+    /// answered; throws with the phone's reason when it won't ring.
+    func findDevice(target: String, ring: Bool) async throws {
+        let raw = try await send(cmd: ["cmd": "find_device", "target": target, "ring": ring])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
     }
 
     /// The daemon's redacted problem report; `header` is what only the app knows.

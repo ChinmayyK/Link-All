@@ -58,6 +58,7 @@ fun SettingsTab(
     syncImages: Boolean,
     syncFiles: Boolean,
     callContinuityEnabled: Boolean,
+    findPhoneEnabled: Boolean,
     notificationMirroringEnabled: Boolean,
     autoForwardSms: Boolean,
     autoForwardScreenshots: Boolean,
@@ -67,6 +68,7 @@ fun SettingsTab(
     onSyncTextChange: (Boolean) -> Unit,
     onSyncImagesChange: (Boolean) -> Unit,
     onSyncFilesChange: (Boolean) -> Unit,
+    onFindPhoneChange: (Boolean) -> Unit,
     onCallContinuityChange: (Boolean) -> Unit,
     onNotificationMirroringChange: (Boolean) -> Unit,
     onAutoForwardSmsChange: (Boolean) -> Unit,
@@ -154,6 +156,8 @@ fun SettingsTab(
                     )
                     Hairline(c)
                     SwitchRow(c, Icons.Outlined.Notifications, "Notifications", "Mirror phone notifications", notificationMirroringEnabled, onNotificationMirroringChange)
+                    Hairline(c)
+                    SwitchRow(c, Icons.Outlined.NotificationsActive, "Find my phone", "Let your computers make this phone ring, even on silent", findPhoneEnabled, onFindPhoneChange)
                 }
             }
         }

@@ -143,6 +143,36 @@ namespace LinkAll.WinUI.Views
             catch (Exception ex) { App.HandleError(ex); }
         }
 
+        // Rings the phone (even on silent) and keeps a dialog open with a Stop
+        // button; the phone also stops by itself after a minute or on "Found it".
+        private async void OnFindPhoneClicked(object sender, RoutedEventArgs e)
+        {
+            if ((sender as FrameworkElement)?.DataContext is not PeerViewModel peer) return;
+
+            try
+            {
+                var answer = await Task.Run(() => DaemonClient.FindDevice(peer.device_id, true));
+                var failed = answer == null
+                    || (answer.RootElement.TryGetProperty("status", out var s) && s.GetString() == "error");
+                if (failed)
+                {
+                    DaemonActions.ReportIfFailed($"Ringing {peer.DisplayName}", answer);
+                    return;
+                }
+
+                var dialog = new ContentDialog
+                {
+                    Title = Services.AppDialog.Header("\uEA8F", $"{peer.DisplayName} is ringing", "It rings at full volume for up to a minute"),
+                    CloseButtonText = "Stop ringing",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = this.XamlRoot,
+                };
+                await dialog.ShowAsync();
+                await Task.Run(() => DaemonClient.FindDevice(peer.device_id, false));
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+        }
+
         private async void OnPauseSyncClicked(object sender, RoutedEventArgs e)
         {
             if ((sender as FrameworkElement)?.DataContext is PeerViewModel peer)

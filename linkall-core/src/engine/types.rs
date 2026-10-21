@@ -273,6 +273,11 @@ pub enum EngineEvent {
         success: bool,
         error: Option<String>,
     },
+    /// A paired computer asked this phone to start (`ring`) or stop ringing.
+    FindDeviceRequested {
+        from_device: Uuid,
+        ring: bool,
+    },
     /// An untrusted peer has requested to pair with this device.
     PairingRequest {
         device_id: Uuid,
@@ -593,6 +598,9 @@ pub(crate) type RemoteWaiter<T> = (uuid::Uuid, oneshot::Sender<T>);
 pub(crate) struct RemoteWaiters {
     pub(crate) files: Arc<Mutex<HashMap<uuid::Uuid, RemoteWaiter<RemoteFilesResult>>>>,
     pub(crate) thumbnails: Arc<Mutex<HashMap<uuid::Uuid, RemoteWaiter<RemoteThumbnailResult>>>>,
+    /// A phone's answer to a find request, keyed by the phone's device id.
+    pub(crate) find:
+        Arc<Mutex<HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<Result<(), String>>>>>,
 }
 
 /// The clipboard as Link All last set it on this device.

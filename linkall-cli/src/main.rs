@@ -58,6 +58,8 @@ async fn run() -> Result<()> {
         ["events"] => cmd_events(20).await,
         ["events", "--last", n] => cmd_events(n.parse().context("bad N")?).await,
         ["devices"] | ["devices", "list"] => cmd_devices_list(),
+        ["find", "stop", id] => cmd_find(id, false).await,
+        ["find", id] => cmd_find(id, true).await,
         ["devices", "choose", purpose] => cmd_devices_choose(purpose, None).await,
         ["devices", "choose", purpose, last] => cmd_devices_choose(purpose, Some(last)).await,
         ["devices", "show", id] => cmd_devices_show(id).await,
@@ -262,6 +264,30 @@ async fn cmd_push(text: &str) -> Result<()> {
         })
         .await?,
     )
+}
+
+/// Makes a paired phone ring, or stop ringing. `id` is its full device ID
+/// (`devices choose find` lists the phones that can ring).
+async fn cmd_find(id: &str, ring: bool) -> Result<()> {
+    match ipc(&IpcRequest::FindDevice {
+        target: id.to_string(),
+        ring,
+    })
+    .await?
+    {
+        IpcResponse::Error { message } => bail!("{}", message),
+        _ => {
+            println!(
+                "{}",
+                if ring {
+                    "Asked the phone to ring"
+                } else {
+                    "Asked the phone to stop"
+                }
+            );
+            Ok(())
+        }
+    }
 }
 
 async fn cmd_send(target: &str, text: &str) -> Result<()> {
@@ -1317,6 +1343,7 @@ DAEMON CONTROL
   ping                            Check daemon health / measure IPC round-trip time
   push "<text>"                   Push text to all connected peers
   send <device> "<text>"          Push text to one specific device (name or UUID prefix)
+  find [stop] <uuid>              Make a paired phone ring (or stop) so you can find it
   send-file [<uuid>] <path>       Send a file (to every connected device without a uuid)
   send-folder <uuid> <path>       Send a folder and everything in it
   pause <transfer-id>             Pause a file transfer

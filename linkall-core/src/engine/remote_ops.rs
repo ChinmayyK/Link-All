@@ -212,6 +212,36 @@ impl Engine {
         .map_err(|_| "That computer isn't connected.".to_string())
     }
 
+    /// Ask a connected, trusted phone on 2.1.0 or later to ring (`ring`) or
+    /// stop. Waits for the phone's answer: `Ok` when it will, otherwise why it
+    /// won't (it only rings while its own setting allows it).
+    pub async fn send_find_device(&self, target_device: Uuid, ring: bool) -> Result<(), String> {
+        let tx = self.remote_control_sender(target_device)?;
+        let (answer, answered) = tokio::sync::oneshot::channel();
+        self.shared
+            .remote_waiters
+            .find
+            .lock()
+            .await
+            .insert(target_device, answer);
+        let sent = tx.send(AppMessage::FindDevice { ring }).await;
+        let result = match sent {
+            Err(_) => Err("That phone isn't connected.".to_string()),
+            Ok(()) => match tokio::time::timeout(std::time::Duration::from_secs(5), answered).await
+            {
+                Ok(Ok(answer)) => answer,
+                _ => Err("The phone didn't answer.".to_string()),
+            },
+        };
+        self.shared
+            .remote_waiters
+            .find
+            .lock()
+            .await
+            .remove(&target_device);
+        result
+    }
+
     /// Why a remote-control action could not be sent to `target_device`, or
     /// `Ok` when it could.
     pub async fn send_remote_control_check(&self, target_device: Uuid) -> Result<(), String> {

@@ -838,6 +838,16 @@ pub fn open_device(hub: &Hub, id: &str) {
             &format!("Opens it on {n}"),
             Box::new(move || open_link(&h, &i, &n)),
         );
+        if p["platform"] == "Android" {
+            let (h, i, n) = (hub.clone(), id.clone(), name.clone());
+            add(
+                "audio-volume-high-symbolic",
+                "red",
+                "Find Phone",
+                "Makes it ring, even on silent",
+                Box::new(move || find_phone(&h, &i, &n)),
+            );
+        }
         let (h, i) = (hub.clone(), id.clone());
         add(
             "network-transmit-receive-symbolic",
@@ -948,6 +958,36 @@ pub fn open_device(hub: &Hub, id: &str) {
     ));
     dialog.set_child(Some(&view));
     dialog.present(window().as_ref());
+}
+
+/// Rings a phone and keeps a dialog open with a Stop button; the phone also stops
+/// by itself after a minute, or on "Found it".
+fn find_phone(hub: &Hub, id: &str, name: &str) {
+    let (hub, id, name) = (hub.clone(), id.to_string(), name.to_string());
+    glib::spawn_future_local(async move {
+        if let Err(e) = ipc::call(json!({ "cmd": "find_device", "target": id, "ring": true })).await
+        {
+            toast(&e.to_string());
+            return;
+        }
+        let dialog = adw::AlertDialog::builder()
+            .heading(format!("{name} is ringing"))
+            .body("It rings at full volume for up to a minute.")
+            .close_response("stop")
+            .default_response("stop")
+            .build();
+        dialog.add_response("stop", "Stop Ringing");
+        dialog.set_response_appearance("stop", adw::ResponseAppearance::Suggested);
+        dialog.connect_response(None, move |_, _| {
+            let (hub, id) = (hub.clone(), id.clone());
+            glib::spawn_future_local(async move {
+                let _ =
+                    ipc::call(json!({ "cmd": "find_device", "target": id, "ring": false })).await;
+                hub.poke();
+            });
+        });
+        dialog.present(window().as_ref());
+    });
 }
 
 /// Asks a device to open a web link, prefilled with a link on the clipboard.

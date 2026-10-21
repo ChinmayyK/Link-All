@@ -20,6 +20,8 @@ pub enum Purpose {
     Browse,
     /// Keep a folder synced to it: a paired computer, connected or not.
     SyncTarget,
+    /// Make it ring so it can be found: a connected paired phone on 2.1 or later.
+    Find,
 }
 
 impl Purpose {
@@ -29,6 +31,7 @@ impl Purpose {
             "remote" => Some(Purpose::Remote),
             "browse" => Some(Purpose::Browse),
             "sync_target" => Some(Purpose::SyncTarget),
+            "find" => Some(Purpose::Find),
             _ => None,
         }
     }
@@ -74,6 +77,7 @@ fn unavailable_reason(peer: &PeerRecord, purpose: Purpose, now: u64) -> Option<S
     match purpose {
         Purpose::Remote if is_phone(peer) => return Some("A phone can't be controlled".into()),
         Purpose::SyncTarget if is_phone(peer) => return Some("Folders sync to computers".into()),
+        Purpose::Find if !is_phone(peer) => return Some("Only a phone can ring".into()),
         _ => {}
     }
     if purpose != Purpose::SyncTarget && !connected {
@@ -82,7 +86,9 @@ fn unavailable_reason(peer: &PeerRecord, purpose: Purpose, now: u64) -> Option<S
             _ => "Offline".into(),
         });
     }
-    if purpose == Purpose::Remote && !understands_remote_control(peer.app_version.as_deref()) {
+    if matches!(purpose, Purpose::Remote | Purpose::Find)
+        && !understands_remote_control(peer.app_version.as_deref())
+    {
         return Some("Needs Link All 2.1 or later".into());
     }
     if !peer.remote_sync_enabled && connected && purpose == Purpose::Send {
@@ -296,5 +302,34 @@ mod tests {
         assert!(understands_remote_control(Some("3.0.0")));
         assert!(!understands_remote_control(Some("2.0.2")));
         assert!(!understands_remote_control(None));
+    }
+
+    #[test]
+    fn only_connected_phones_on_2_1_can_be_asked_to_ring() {
+        let mut old = peer("Old phone", "Android", true, 5);
+        old.app_version = Some("2.0.2".into());
+        let got = choices(
+            &[
+                peer("Phone", "Android", true, 5),
+                peer("Laptop", "macOS", true, 5),
+                peer("Away", "Android", false, 5),
+                old,
+            ],
+            Purpose::Find,
+            None,
+            NOW,
+        );
+        let by = |n: &str| got.iter().find(|c| c.name == n).unwrap().clone();
+        assert!(by("Phone").available);
+        assert_eq!(
+            by("Laptop").reason.as_deref(),
+            Some("Only a phone can ring")
+        );
+        assert!(by("Away").reason.unwrap().starts_with("Offline"));
+        assert_eq!(
+            by("Old phone").reason.as_deref(),
+            Some("Needs Link All 2.1 or later")
+        );
+        assert!(!offers_all(Purpose::Find, &got));
     }
 }

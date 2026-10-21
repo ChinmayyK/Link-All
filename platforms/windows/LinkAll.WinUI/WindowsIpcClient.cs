@@ -312,6 +312,11 @@ namespace LinkAll.WinUI
         public static JsonDocument? OpenUrlOnDevice(string deviceId, string url) =>
             Send(Req("open_url_on_device", ("target_device", deviceId), ("url", url)));
 
+        // Make a paired phone ring (ring = true) or stop. The daemon answers once
+        // the phone has: an error status carries the phone's reason for not ringing.
+        public static JsonDocument? FindDevice(string deviceId, bool ring) =>
+            Send(Req("find_device", ("target", deviceId), ("ring", ring)));
+
         // Report back whether we actually managed to open a URL a peer asked
         // us to open. Called after the local Process.Start attempt.
         public static JsonDocument? AckOpenUrlOnDevice(string requesterDeviceId, bool success, string? error = null)
