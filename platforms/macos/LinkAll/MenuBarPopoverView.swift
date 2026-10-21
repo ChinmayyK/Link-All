@@ -10,6 +10,7 @@ enum MenuBarPopoverAction {
     case scan
     case connectByIP
     case diagnostics
+    case scratchpad
     case quit
 }
 
@@ -54,6 +55,17 @@ struct MenuBarPopoverView: View {
                     
                     Spacer()
                     
+                    Button(action: { onAction(.scratchpad) }) {
+                        Image(systemName: "note.text")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(scheme == .light ? CRTheme.inkSoft : Color.secondary.opacity(0.7))
+                            .frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.05), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Scratchpad")
+                    .crHoverScale()
+
                     Button(action: { onAction(.diagnostics) }) {
                         Image(systemName: "info.circle")
                             .font(.system(size: 14, weight: .semibold))

@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var menuBarDropView: MenuBarDropView?
     private var quickAccessWindow: NSWindow?
     private var diagnosticsWindow: NSWindow?
+    private var scratchpadWindow: NSWindow?
     private var fileBannerManager: FileBannerWindowManager!
     private var previousConnectedDeviceIDs: Set<String> = []
     /// Incoming pairing requests already notified, with the code each showed.
@@ -160,6 +161,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         DaemonManager.shared.ensureDaemonResponsiveFromStore()
     }
 
+    private func openScratchpad() {
+        if scratchpadWindow == nil {
+            let win = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered, defer: false
+            )
+            win.title = "Scratchpad"
+            win.center()
+            win.contentViewController = NSHostingController(rootView: ScratchpadView())
+            win.isReleasedWhenClosed = false
+            win.setFrameAutosaveName("LinkAllScratchpad")
+            scratchpadWindow = win
+        }
+        scratchpadWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
     private func openDiagnostics() {
         if diagnosticsWindow == nil {
             let win = NSWindow(
@@ -278,6 +297,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         case .scan: scanDevices()
         case .connectByIP: connectManually()
         case .diagnostics: openDiagnostics()
+        case .scratchpad: openScratchpad()
         case .quit: quitApp()
         }
     }

@@ -9,7 +9,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- **Scratchpad.** Notes, links and snippets shared between your own devices, kept on each device and sent only to paired ones. On Android: Home › Scratchpad, with Markdown (headings, bold, code, lists), Copy, Pin and Clear all. On a computer: `linkall-cli scratch`. The newest edit wins; a device that was off catches up when it connects.
+- **Scratchpad.** Notes, links and snippets shared between your own devices, kept on each device and sent only to paired ones. On Android: Home › Scratchpad, with Markdown (headings, bold, code, lists), Copy, Pin and Clear all. On a Mac: the note icon in the menu-bar panel opens the Scratchpad window. Elsewhere: `linkall-cli scratch`. The newest edit wins; a device that was off catches up when it connects.
 - **Android:** Verification codes. Turn on Settings › Continuity › Verification codes (it needs notification access) and the 4 to 8 digit code in a text from a bank, Google or GitHub is sent to your computers' clipboards, so you can paste it. Only a message that says what the number is for counts, and an amount or a year in the same message is not picked.
 - **Click to call.** `linkall-cli call <device-id> <number>` offers a paired phone a call: the phone shows a notification, and the dialer opens with the number filled in when you tap it. Nothing is dialled on its own.
 - **Walk-away lock.** On Mac, Windows and Linux, turn on "Lock when my phone leaves" and the computer locks when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone. Off by default.

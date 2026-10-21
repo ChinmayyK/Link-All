@@ -794,3 +794,44 @@ extension LinkAllIPCClient {
         _ = try await send(cmd: cmd)
     }
 }
+
+// ── Scratchpad ────────────────────────────────────────────────────────────────
+
+struct IpcScratchNote: Codable, Identifiable, Equatable {
+    let id: String
+    let text: String
+    let pinned: Bool
+    let updated_at_ms: UInt64
+}
+
+extension LinkAllIPCClient {
+    /// The Scratchpad notes, pinned first.
+    func scratchpadList() async throws -> [IpcScratchNote] {
+        let raw = try await send(cmd: ["cmd": "scratchpad_list"])
+        let resp = try await decode(IpcResponse<[IpcScratchNote]>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+        return resp.data ?? []
+    }
+
+    /// Creates a note (`id` nil) or edits one.
+    func scratchpadSave(id: String?, text: String, pinned: Bool) async throws {
+        var cmd: [String: Any] = ["cmd": "scratchpad_save", "text": text, "pinned": pinned]
+        if let id { cmd["id"] = id }
+        let raw = try await send(cmd: cmd)
+        let resp = try await decode(IpcResponse<IpcScratchNote>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    func scratchpadDelete(id: String) async throws {
+        let raw = try await send(cmd: ["cmd": "scratchpad_delete", "id": id])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+
+    /// Deletes every note that isn't pinned.
+    func scratchpadClear() async throws {
+        let raw = try await send(cmd: ["cmd": "scratchpad_clear"])
+        let resp = try await decode(IpcResponse<IpcEmpty>.self, from: raw)
+        if let err = resp.message { throw LinkAllIPCError.serverError(err) }
+    }
+}
