@@ -86,7 +86,7 @@ internal fun BackgroundAccessDialog(
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PillButton(c, "Not now", filled = false, modifier = Modifier.weight(1f), onClick = onDismiss)
-                PillButton(c, "Open settings", filled = true, modifier = Modifier.weight(1f), onClick = onOpenSettings)
+                PillButton(c, "Settings", filled = true, modifier = Modifier.weight(1f), onClick = onOpenSettings)
             }
         }
     }

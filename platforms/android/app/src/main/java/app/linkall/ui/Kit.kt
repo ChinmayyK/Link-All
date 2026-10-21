@@ -279,7 +279,7 @@ internal fun PillButton(
             Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
         }
-        Text(text, style = if (compact) DdType.small.copy(fontWeight = FontWeight.Medium) else DdType.label, color = fg, maxLines = 1)
+        Text(text, style = if (compact) DdType.small.copy(fontWeight = FontWeight.Medium) else DdType.label, color = fg, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
     }
 }
 
