@@ -202,6 +202,19 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
     );
     page.add(&files);
 
+    let remote = adw::PreferencesGroup::builder()
+        .title("Remote Control")
+        .build();
+    switch(
+        hub,
+        &remote,
+        "allow_remote_control",
+        "Let Phones Control This Computer",
+        "Paired phones can press play/pause, next and previous, volume and mute, and the arrow keys for slides. Uses playerctl, wpctl or pactl, and xdotool or wtype when installed",
+        &syncing,
+    );
+    page.add(&remote);
+
     let startup = adw::PreferencesGroup::builder().title("Startup").build();
     let login = adw::SwitchRow::builder()
         .title("Start at Login")
