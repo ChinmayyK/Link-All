@@ -311,7 +311,7 @@ impl Engine {
         self.remote_control_sender(target_device).map(|_| ())
     }
 
-    fn remote_control_sender(
+    pub(super) fn remote_control_sender(
         &self,
         target_device: Uuid,
     ) -> Result<mpsc::Sender<AppMessage>, String> {

@@ -694,6 +694,45 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
+        IpcRequest::NowPlayingList => Ok(IpcResponse::ok(state.engine.now_playing_list())),
+        IpcRequest::SetNowPlaying {
+            title,
+            artist,
+            album,
+            playing,
+            position_ms,
+            duration_ms,
+            app,
+            art_base64,
+        } => {
+            use base64::Engine as _;
+            let art =
+                art_base64.and_then(|a| base64::engine::general_purpose::STANDARD.decode(a).ok());
+            state
+                .engine
+                .set_now_playing(Some(linkall_core::now_playing::NowPlaying {
+                    title,
+                    artist,
+                    album,
+                    playing,
+                    position_ms,
+                    duration_ms,
+                    app,
+                    art,
+                }));
+            Ok(IpcResponse::ok(json!({})))
+        }
+        IpcRequest::MediaCommand {
+            target,
+            action,
+            value,
+        } => Ok(match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match state.engine.send_media_command(id, &action, value).await {
+                Ok(()) => IpcResponse::ok(json!({})),
+                Err(e) => IpcResponse::error(e),
+            },
+            Err(_) => IpcResponse::error("unknown device".to_string()),
+        }),
         IpcRequest::GuestDropStart => Ok(match state.engine.guest_drop_start().await {
             Ok(session) => IpcResponse::ok(session),
             Err(e) => IpcResponse::error(e),

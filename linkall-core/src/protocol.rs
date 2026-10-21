@@ -661,6 +661,16 @@ pub enum AppMessage {
         modifier: String,
         down: bool,
     },
+    /// What the sender is playing, with cover art once per track; an empty
+    /// title means nothing is playing any more. Sent to paired devices.
+    NowPlaying {
+        info: crate::now_playing::NowPlaying,
+    },
+    /// Play, pause, skip or seek the receiver's player (see `now_playing::MediaAction`).
+    MediaCommand {
+        action: String,
+        value: i64,
+    },
 }
 
 impl AppMessage {

@@ -496,6 +496,8 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         DialRequested { .. } => 44,
         ScratchpadChanged => 45,
         CaptureRequested { .. } => 46,
+        NowPlayingChanged => 47,
+        MediaCommandReceived { .. } => 48,
     }
 }
 
@@ -540,6 +542,12 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventText(
         crate::engine::EngineEvent::RemoteFileActionRequestReceived { action, .. } => {
             return env
                 .new_string(action)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::MediaCommandReceived { action, value, .. } => {
+            return env
+                .new_string(format!("{action}:{value}"))
                 .map(|s| s.into_raw())
                 .unwrap_or(std::ptr::null_mut());
         }
@@ -686,6 +694,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceId(
         FindDeviceRequested { from_device, .. } => Some(*from_device),
         DialRequested { from_device, .. } => Some(*from_device),
         CaptureRequested { from_device, .. } => Some(*from_device),
+        MediaCommandReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -3262,4 +3271,132 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_sendModifier(
             down: down != 0,
         }
     })
+}
+
+/// Tells the engine what this phone is playing; paired devices show it. Positions in ms.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_setNowPlaying(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    title: JString,
+    artist: JString,
+    album: JString,
+    app: JString,
+    playing: jboolean,
+    position_ms: jlong,
+    duration_ms: jlong,
+    art: JByteArray,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let read =
+        |env: &mut JNIEnv, s: &JString| env.get_string(s).map(String::from).unwrap_or_default();
+    let info = crate::now_playing::NowPlaying {
+        title: read(&mut env, &title),
+        artist: read(&mut env, &artist),
+        album: read(&mut env, &album),
+        app: read(&mut env, &app),
+        playing: playing != 0,
+        position_ms: position_ms.max(0) as u64,
+        duration_ms: duration_ms.max(0) as u64,
+        art: if art.is_null() {
+            None
+        } else {
+            env.convert_byte_array(&art).ok()
+        },
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    h.engine.set_now_playing(Some(info));
+    0
+}
+
+/// Tells the engine nothing is playing on this phone any more.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_clearNowPlaying(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    h.engine.set_now_playing(None);
+    0
+}
+
+/// What the paired devices are playing, as JSON without the cover art (see nowPlayingArt).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_nowPlayingJson(
+    env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    let mut list = h.engine.now_playing_list();
+    for item in &mut list {
+        item.art_base64 = None;
+    }
+    match serde_json::to_string(&list) {
+        Ok(json) => env
+            .new_string(json)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// The cover art of what a device is playing, or null.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_nowPlayingArt(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id: JString,
+) -> jbyteArray {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let Some(id) = target_uuid(&mut env, &device_id) else {
+        return std::ptr::null_mut();
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match h.engine.now_playing_art(id) {
+        Some(bytes) => env
+            .byte_array_from_slice(&bytes)
+            .map(|a| a.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        None => std::ptr::null_mut(),
+    }
+}
+
+/// Plays, pauses, skips or seeks a paired device's player. 0 when sent, -1 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_sendMediaCommand(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    device_id: JString,
+    action: JString,
+    value: jlong,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Some(id) = target_uuid(&mut env, &device_id) else {
+        return -1;
+    };
+    let Ok(action) = env.get_string(&action).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_media_command(id, &action, value)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
 }

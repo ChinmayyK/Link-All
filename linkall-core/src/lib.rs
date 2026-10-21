@@ -57,6 +57,7 @@ pub mod mesh;
 pub mod metrics;
 pub mod network;
 pub mod network_manager;
+pub mod now_playing;
 pub mod pairing;
 pub mod peer_manager;
 pub mod probe;

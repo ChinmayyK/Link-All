@@ -145,6 +145,34 @@ pub enum IpcRequest {
         target: String,
         number: String,
     },
+    /// What the paired devices are playing.
+    NowPlayingList,
+    /// An app tells the engine what this device plays (Windows reads its own
+    /// system media session). An empty title clears it.
+    SetNowPlaying {
+        title: String,
+        #[serde(default)]
+        artist: String,
+        #[serde(default)]
+        album: String,
+        #[serde(default)]
+        playing: bool,
+        #[serde(default)]
+        position_ms: u64,
+        #[serde(default)]
+        duration_ms: u64,
+        #[serde(default)]
+        app: String,
+        #[serde(default)]
+        art_base64: Option<String>,
+    },
+    /// Play, pause, skip or seek a paired device's player.
+    MediaCommand {
+        target: String,
+        action: String,
+        #[serde(default)]
+        value: i64,
+    },
     /// Start a Guest Drop session: a link and PIN for someone who isn't paired.
     GuestDropStart,
     GuestDropStop,
@@ -950,6 +978,43 @@ pub async fn handle_ipc_request(
         }
         IpcRequest::FindDevice { target, ring } => match uuid::Uuid::parse_str(&target) {
             Ok(id) => match eng.send_find_device(id, ring).await {
+                Ok(()) => IpcResponse::ok(serde_json::json!({})),
+                Err(e) => IpcResponse::err(e),
+            },
+            Err(_) => IpcResponse::err("unknown device".to_string()),
+        },
+        IpcRequest::NowPlayingList => IpcResponse::ok(eng.now_playing_list()),
+        IpcRequest::SetNowPlaying {
+            title,
+            artist,
+            album,
+            playing,
+            position_ms,
+            duration_ms,
+            app,
+            art_base64,
+        } => {
+            use base64::Engine as _;
+            let art =
+                art_base64.and_then(|a| base64::engine::general_purpose::STANDARD.decode(a).ok());
+            eng.set_now_playing(Some(crate::now_playing::NowPlaying {
+                title,
+                artist,
+                album,
+                playing,
+                position_ms,
+                duration_ms,
+                app,
+                art,
+            }));
+            IpcResponse::ok(serde_json::json!({}))
+        }
+        IpcRequest::MediaCommand {
+            target,
+            action,
+            value,
+        } => match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match eng.send_media_command(id, &action, value).await {
                 Ok(()) => IpcResponse::ok(serde_json::json!({})),
                 Err(e) => IpcResponse::err(e),
             },

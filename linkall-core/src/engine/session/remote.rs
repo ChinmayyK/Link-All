@@ -363,6 +363,62 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             Some(key) => input(ctx, move || crate::remote_input::press_key(key)).await,
             None => tracing::debug!("ignoring a key that isn't on the list"),
         },
+        AppMessage::NowPlaying { info } => {
+            ctx.touch_last_seen();
+            let trusted = shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false);
+            if !trusted {
+                return Flow::Continue;
+            }
+            let mut info = info.sanitized();
+            if info.is_empty() {
+                shared.now_playing_remote.remove(&peer_id);
+            } else {
+                // The cover is sent once per track: keep it for the heartbeats that follow.
+                if info.art.is_none() {
+                    if let Some(previous) = shared.now_playing_remote.get(&peer_id) {
+                        if previous.0.same_track(&info) {
+                            info.art = previous.0.art.clone();
+                        }
+                    }
+                }
+                shared
+                    .now_playing_remote
+                    .insert(peer_id, (info, std::time::Instant::now()));
+            }
+            let _ = shared.event_tx.send(EngineEvent::NowPlayingChanged).await;
+        }
+        AppMessage::MediaCommand { action, value } => {
+            ctx.touch_last_seen();
+            let trusted = shared
+                .peer_manager
+                .get(peer_id)
+                .map(|p| p.trusted)
+                .unwrap_or(false);
+            if !trusted {
+                return Flow::Continue;
+            }
+            if cfg!(target_os = "android") {
+                // The phone's app owns its media sessions.
+                let _ = shared
+                    .event_tx
+                    .send(EngineEvent::MediaCommandReceived {
+                        from_device: peer_id,
+                        action,
+                        value,
+                    })
+                    .await;
+            } else if shared.settings.lock().unwrap().allow_remote_control {
+                if let Some(action) = crate::now_playing::MediaAction::parse(&action, value) {
+                    let _ =
+                        tokio::task::spawn_blocking(move || crate::now_playing::control(action))
+                            .await;
+                }
+            }
+        }
         AppMessage::RemoteShortcut { name } => match crate::remote_input::Shortcut::parse(&name) {
             Some(shortcut) => input(ctx, move || crate::remote_input::shortcut(shortcut)).await,
             None => tracing::debug!("ignoring a shortcut that isn't on the list"),

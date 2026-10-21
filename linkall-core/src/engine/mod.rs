@@ -50,6 +50,7 @@ mod folder_ops;
 mod guest_ops;
 mod health;
 mod listener;
+pub(crate) mod now_playing_ops;
 mod peer_discovery;
 mod remote_ops;
 mod scratchpad_ops;
@@ -193,6 +194,8 @@ impl Engine {
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
             guest: Arc::default(),
+            now_playing_sent: Arc::default(),
+            now_playing_remote: Arc::default(),
             scratchpad: Arc::new(std::sync::Mutex::new(crate::scratchpad::Scratchpad::load(
                 &config.data_dir.join("scratchpad.json"),
             ))),
@@ -316,6 +319,7 @@ impl Engine {
         engine.spawn_health_monitor();
         engine.spawn_drop_folder();
         engine.spawn_walk_away_lock();
+        engine.spawn_now_playing_source();
 
         // Spawn UDP broadcast beacon and listener for resilient discovery.
         // Off with discovery: test engines beaconed onto the real LAN, and

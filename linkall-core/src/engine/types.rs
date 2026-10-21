@@ -284,6 +284,14 @@ pub enum EngineEvent {
         from_name: String,
         mode: String,
     },
+    /// A paired device is playing something new, or stopped.
+    NowPlayingChanged,
+    /// A paired device asked this one to control its player.
+    MediaCommandReceived {
+        from_device: Uuid,
+        action: String,
+        value: i64,
+    },
     /// The Scratchpad changed, here or on a paired device.
     ScratchpadChanged,
     /// A paired computer offered to call a number from this phone.
@@ -522,6 +530,11 @@ pub struct QrAuthToken {
 #[derive(Clone)]
 pub(crate) struct EngineShared {
     pub(crate) config: EngineConfig,
+    /// What this device last told the others it was playing.
+    pub(crate) now_playing_sent: crate::engine::now_playing_ops::SentSlot,
+    /// What the other devices are playing, with when it arrived.
+    pub(crate) now_playing_remote:
+        Arc<dashmap::DashMap<Uuid, (crate::now_playing::NowPlaying, Instant)>>,
     /// The running Guest Drop session, if any.
     pub(crate) guest: Arc<std::sync::Mutex<Option<crate::guest_drop::GuestHandle>>>,
     /// Notes shared between your own devices.

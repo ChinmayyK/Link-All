@@ -417,6 +417,8 @@ pub unsafe extern "C" fn linkall_event_type(event: *const PbEvent) -> c_int {
         | EngineEvent::FindDeviceRequested { .. }
         | EngineEvent::DialRequested { .. }
         | EngineEvent::CaptureRequested { .. }
+        | EngineEvent::NowPlayingChanged
+        | EngineEvent::MediaCommandReceived { .. }
         | EngineEvent::ScratchpadChanged => PB_EVENT_NONE,
         EngineEvent::RemoteFilesResponseReceived { .. } => PB_EVENT_REMOTE_FILES_RESPONSE,
         EngineEvent::RemoteThumbnailResponseReceived { .. } => PB_EVENT_REMOTE_THUMBNAIL_RESPONSE,
