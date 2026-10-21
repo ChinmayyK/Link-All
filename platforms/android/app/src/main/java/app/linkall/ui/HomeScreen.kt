@@ -66,7 +66,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -151,7 +153,8 @@ fun HomeTab(
             isDark = isDark,
             peers = peers,
             onScanQr = onActionPairMagicLink,
-            onManualIp = onManualIp
+            onManualIp = onManualIp,
+            onScratchpad = { showScratchpad = true }
         )
 
         Spacer(Modifier.height(24.dp))
@@ -331,7 +334,8 @@ private fun HomeTopBar(
     isDark: Boolean,
     peers: List<PeerSnapshot>,
     onScanQr: () -> Unit,
-    onManualIp: () -> Unit
+    onManualIp: () -> Unit,
+    onScratchpad: () -> Unit
 ) {
     // Redraws "synced 2m ago" once a minute while Home is on screen.
     val now by produceState(System.currentTimeMillis()) {
@@ -358,6 +362,20 @@ private fun HomeTopBar(
             Text("Link All", style = DdType.title.copy(fontSize = 19.sp), color = c.text)
             if (linked.isNotEmpty()) LinkStatusLine(c, linked, synced, Modifier.padding(top = 2.dp))
         }
+        // Notes are one tap from the top of Home, not only a row at the bottom.
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .background(c.surface)
+                .border(1.dp, c.line, CircleShape)
+                .crPressScale(0.92f) { onScratchpad() }
+                .semantics { contentDescription = "Scratchpad"; role = Role.Button },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Outlined.StickyNote2, contentDescription = null, tint = c.text, modifier = Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(8.dp))
         AddDeviceButton(c, onScanQr = onScanQr, onManualIp = onManualIp)
     }
 }

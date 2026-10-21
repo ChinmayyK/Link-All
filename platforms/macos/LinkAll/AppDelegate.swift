@@ -161,7 +161,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         DaemonManager.shared.ensureDaemonResponsiveFromStore()
     }
 
-    private func openScratchpad() {
+    @objc private func openScratchpad() {
         if scratchpadWindow == nil {
             let win = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
@@ -350,6 +350,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         windowMenuItem.submenu = windowMenu
         windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
         windowMenu.addItem(withTitle: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: "")
+        windowMenu.addItem(NSMenuItem.separator())
+        let scratchpad = windowMenu.addItem(withTitle: "Scratchpad", action: #selector(openScratchpad), keyEquivalent: "n")
+        scratchpad.keyEquivalentModifierMask = [.command, .shift]
+        scratchpad.target = self
 
         NSApp.mainMenu = mainMenu
     }
