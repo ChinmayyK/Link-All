@@ -156,3 +156,31 @@ dependencies {
     implementation 'io.coil-kt:coil-compose:2.5.0'
     implementation 'io.coil-kt:coil-video:2.5.0'
 }
+
+// The APK ships whatever liblinkall_core.so is in src/main/jniLibs; Gradle
+// never rebuilds it. A library older than the Rust source made a build that
+// installed fine and then died at startup (UnsatisfiedLinkError on a new
+// JNI function). Refuse to package a stale or missing one.
+tasks.register('checkNativeLibrary') {
+    def lib = file('src/main/jniLibs/arm64-v8a/liblinkall_core.so')
+    def coreDir = file('../../../linkall-core')
+    doLast {
+        if (project.hasProperty('skipNativeCheck')) return
+        if (!lib.exists()) {
+            throw new GradleException("liblinkall_core.so is missing. Run scripts/build-android.sh (or: cd linkall-core && cargo ndk -t arm64-v8a -o ../platforms/android/app/src/main/jniLibs build --features compress --lib --release).")
+        }
+        def newest = 0L
+        ['src', 'Cargo.toml'].each { name ->
+            def f = new File(coreDir, name)
+            if (f.isDirectory()) {
+                f.eachFileRecurse { if (it.isFile() && it.lastModified() > newest) newest = it.lastModified() }
+            } else if (f.exists() && f.lastModified() > newest) {
+                newest = f.lastModified()
+            }
+        }
+        if (newest > lib.lastModified()) {
+            throw new GradleException("liblinkall_core.so is older than the Rust source in linkall-core, so the app would crash at startup. Rebuild it with scripts/build-android.sh (or the cargo ndk command above). Pass -PskipNativeCheck to override.")
+        }
+    }
+}
+tasks.matching { it.name == 'preBuild' }.configureEach { dependsOn 'checkNativeLibrary' }
