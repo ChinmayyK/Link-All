@@ -126,6 +126,9 @@ impl Engine {
         if let Some(v) = p.drop_folder_enabled {
             s.drop_folder_enabled = v;
         }
+        if let Some(v) = p.lock_when_phone_leaves {
+            s.lock_when_phone_leaves = v;
+        }
         let persisted = self.persist_settings_snapshot(s)?;
         self.apply_settings(persisted).await;
         Ok(())

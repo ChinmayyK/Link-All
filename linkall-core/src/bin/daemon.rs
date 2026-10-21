@@ -1051,6 +1051,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             allow_remote_control,
             allow_find_device,
             drop_folder_enabled,
+            lock_when_phone_leaves,
         } => {
             let mut patch = serde_json::Map::new();
             macro_rules! maybe {
@@ -1085,6 +1086,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             maybe!("allow_remote_control", allow_remote_control);
             maybe!("allow_find_device", allow_find_device);
             maybe!("drop_folder_enabled", drop_folder_enabled);
+            maybe!("lock_when_phone_leaves", lock_when_phone_leaves);
 
             let patch_str = serde_json::to_string(&patch)?;
             let updated = {

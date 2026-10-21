@@ -81,6 +81,7 @@ pub struct PartialSettings {
     pub allow_remote_control: Option<bool>,
     pub allow_find_device: Option<bool>,
     pub drop_folder_enabled: Option<bool>,
+    pub lock_when_phone_leaves: Option<bool>,
 }
 
 fn default_remote_files_limit() -> u32 {
@@ -396,6 +397,8 @@ pub enum IpcRequest {
         allow_find_device: Option<bool>,
         #[serde(default)]
         drop_folder_enabled: Option<bool>,
+        #[serde(default)]
+        lock_when_phone_leaves: Option<bool>,
     },
 
     // ── Call continuity ───────────────────────────────────────────────────────
@@ -1386,6 +1389,7 @@ pub async fn handle_ipc_request(
             allow_remote_control,
             allow_find_device,
             drop_folder_enabled,
+            lock_when_phone_leaves,
         } => {
             match eng
                 .save_settings_partial(crate::ipc::PartialSettings {
@@ -1411,6 +1415,7 @@ pub async fn handle_ipc_request(
                     allow_remote_control,
                     allow_find_device,
                     drop_folder_enabled,
+                    lock_when_phone_leaves,
                 })
                 .await
             {

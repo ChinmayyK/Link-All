@@ -57,6 +57,7 @@ pub(crate) mod telemetry;
 mod transfer_ops;
 mod trust_ops;
 mod types;
+mod walk_away;
 
 use connection::*;
 pub use drop_folder::drop_folder_path;
@@ -308,6 +309,7 @@ impl Engine {
         engine.spawn_auto_reconnector();
         engine.spawn_health_monitor();
         engine.spawn_drop_folder();
+        engine.spawn_walk_away_lock();
 
         // Spawn UDP broadcast beacon and listener for resilient discovery.
         // Off with discovery: test engines beaconed onto the real LAN, and

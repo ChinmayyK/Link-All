@@ -136,6 +136,10 @@ pub struct Settings {
     /// Off until the user turns it on.
     #[serde(default)]
     pub drop_folder_enabled: bool,
+    /// Lock this computer when the paired phone that was linked to it stays
+    /// away for 30 seconds. Off until the user turns it on.
+    #[serde(default)]
+    pub lock_when_phone_leaves: bool,
 
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start Link All automatically on login.
@@ -237,6 +241,7 @@ impl Default for Settings {
             allow_remote_control: false,
             allow_find_device: false,
             drop_folder_enabled: false,
+            lock_when_phone_leaves: false,
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,
