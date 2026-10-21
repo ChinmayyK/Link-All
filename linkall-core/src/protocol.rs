@@ -582,6 +582,18 @@ pub enum AppMessage {
         error: Option<String>,
     },
     Bye,
+    // New messages go after `Bye`: the wire format numbers variants in order,
+    // so inserting one earlier would renumber the ones after it.
+    /// Phone -> computer: do one allowed remote-control action (media, volume,
+    /// slides). Only sent to computers that report 2.1.0 or later.
+    RemoteControl {
+        action: String,
+    },
+    /// Answer to `RemoteControl`.
+    RemoteControlAck {
+        success: bool,
+        error: Option<String>,
+    },
 }
 
 impl AppMessage {

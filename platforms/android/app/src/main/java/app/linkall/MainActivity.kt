@@ -1,5 +1,10 @@
 package app.linkall
 
+import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.lifecycleScope
+import app.linkall.ui.setupItems
+import app.linkall.ui.SetupState
+import app.linkall.ui.SetupItem
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Security
@@ -67,6 +72,7 @@ class MainActivity : ComponentActivity() {
     private val peers = mutableStateOf<List<PeerSnapshot>>(emptyList())
     private val ambientStatus = mutableStateOf("Looking for network...")
     private val healthIssues = mutableStateOf<List<HealthIssue>>(emptyList())
+    private val setupItemsState = mutableStateOf<List<SetupItem>>(emptyList())
     private val themeMode = mutableStateOf("system")
     private val hasCompletedOnboarding = mutableStateOf(false)
     private val showBackgroundGuide = mutableStateOf(false)
@@ -145,6 +151,12 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // What an action did, including that it did nothing, shows as a snackbar here.
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+                ActionReceipts.messages.collect { showSnack(it) }
+            }
+        }
         installSplashScreen()
         enableEdgeToEdge(
             statusBarStyle = SystemBarStyle.auto(
@@ -305,6 +317,8 @@ class MainActivity : ComponentActivity() {
                         ambientStatus = ambientStatus.value,
                         healthIssue = healthIssues.value.firstOrNull(),
                         onHealthAction = ::onHealthAction,
+                        setupItems = setupItemsState.value,
+                        onSetupFix = { kind -> onHealthAction(HealthIssue(kind, "", "", null)) },
                         activeTransfers = activeTransfers.toImmutableList(),
                         activeSpeedTests = activeSpeedTests.toImmutableList(),
                         onSyncEnabledChange = {
@@ -611,6 +625,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onResume() {
+        ActionReceipts.appVisible.set(true)
         super.onResume()
         UpdateChecker.checkIfDue(applicationContext)
         refreshDashboardState()
@@ -639,6 +654,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        ActionReceipts.appVisible.set(false)
         unregisterReceiver(statusReceiver)
         super.onStop()
     }
@@ -679,7 +695,19 @@ class MainActivity : ComponentActivity() {
         }
 
         val isConnected = allPeers.any { it.isConnected }
-        healthIssues.value = withBatteryCheck(prefs.healthIssues(), allPeers)
+        healthIssues.value = withCallAccessCheck(withBatteryCheck(prefs.healthIssues(), allPeers), allPeers)
+        setupItemsState.value = setupItems(
+            SetupState(
+                problems = healthIssues.value,
+                hasPairedDevice = allPeers.any { it.trusted },
+                batteryAllowed = backgroundAllowed.value,
+                notificationAccess = notificationAccessGranted(),
+                callContinuityOn = callContinuityEnabled.value,
+                postNotifications = androidx.core.app.NotificationManagerCompat.from(this).areNotificationsEnabled(),
+                playBuild = !BuildConfig.FULL_PERMISSIONS,
+                sharedFolders = SharedFolders.list(this).size,
+            )
+        )
         ambientStatus.value = if (isConnected) "Secure Connection  •  LAN Active" else "Looking for network..."
     }
 
@@ -703,6 +731,26 @@ class MainActivity : ComponentActivity() {
         return engineIssues.toMutableList().apply { add(if (notFound < 0) 0 else notFound, battery) }
     }
 
+    private fun notificationAccessGranted(): Boolean =
+        android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners")
+            ?.contains(packageName) == true
+
+    /**
+     * Calls from the phone name the caller and can be answered from a computer
+     * only through Notification access (the Google Play build has no contacts
+     * or answer-calls permission). Say so while the user has call continuity
+     * on and it is off, instead of leaving them with a nameless banner.
+     */
+    private fun withCallAccessCheck(issues: List<HealthIssue>, allPeers: List<PeerSnapshot>): List<HealthIssue> {
+        if (!callContinuityEnabled.value || allPeers.none { it.trusted } || notificationAccessGranted()) return issues
+        return issues + HealthIssue(
+            "notification_access",
+            "Calls need notification access",
+            "Without it your computer can't show who is calling or answer for you. Turn on Notification access for Link All.",
+            null
+        )
+    }
+
     private fun onHealthAction(issue: HealthIssue) {
         when (issue.kind) {
             "no_network" -> runCatching { startActivity(Intent(android.provider.Settings.ACTION_WIFI_SETTINGS)) }
@@ -716,6 +764,10 @@ class MainActivity : ComponentActivity() {
                 launchService()
             }
             "battery_restricted" -> showBackgroundGuide.value = true
+            "notification_access" -> runCatching {
+                startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"))
+            }
+            "notifications_permission" -> openNotificationSettings()
         }
     }
 

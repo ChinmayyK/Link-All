@@ -24,6 +24,7 @@ namespace LinkAll.WinUI.Views
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
             _ = LoadFileBrowsingAsync();
+            _ = LoadRemoteControlAsync();
             UpdateRow.Visibility = LinkAll.WinUI.Services.UpdateChecker.Supported ? Visibility.Visible : Visibility.Collapsed;
             _showingSavedUpdateCheck = true;
             UpdateCheckToggle.IsOn = LinkAll.WinUI.Services.UpdateChecker.Enabled;
@@ -58,6 +59,32 @@ namespace LinkAll.WinUI.Views
             _showingSavedFileBrowsing = true;
             FileBrowsingToggle.IsOn = on;
             _showingSavedFileBrowsing = false;
+        }
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _showingSavedRemoteControl;
+
+        private async Task LoadRemoteControlAsync()
+        {
+            var on = await Task.Run(() =>
+            {
+                using var doc = DaemonClient.GetSettings();
+                return doc != null
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("allow_remote_control", out var value)
+                    && value.ValueKind == JsonValueKind.True;
+            });
+            _showingSavedRemoteControl = true;
+            RemoteControlToggle.IsOn = on;
+            _showingSavedRemoteControl = false;
+        }
+
+        private async void OnRemoteControlToggled(object sender, RoutedEventArgs e)
+        {
+            if (_showingSavedRemoteControl) return;
+            var on = RemoteControlToggle.IsOn;
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("allow_remote_control", on))));
+            DaemonActions.ReportIfFailed("Let phones control this PC", resp);
         }
 
         private async void OnFileBrowsingToggled(object sender, RoutedEventArgs e)

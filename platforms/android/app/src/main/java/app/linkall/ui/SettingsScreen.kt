@@ -79,6 +79,8 @@ fun SettingsTab(
     onActionStopService: () -> Unit,
     onOpenDiagnostics: () -> Unit,
     onBatterySettingsClicked: () -> Unit = {},
+    setupItems: List<SetupItem> = emptyList(),
+    onSetupFix: (String) -> Unit = {},
     onStorageSettingsClicked: () -> Unit = {},
     onNotificationSettingsClicked: () -> Unit = {}
 ) {
@@ -112,6 +114,8 @@ fun SettingsTab(
                 }
             }
         }
+
+        item { SetupSection(c, setupItems, onSetupFix) }
 
         item {
             Column {

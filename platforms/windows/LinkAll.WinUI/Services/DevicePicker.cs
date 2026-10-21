@@ -18,7 +18,7 @@ namespace LinkAll.WinUI.Services
             var peers = connectedPeers.ToList();
             if (peers.Count == 0) return null;
             if (peers.Count == 1) return peers[0];
-            if (xamlRoot == null) return peers[0];
+            if (xamlRoot == null) return CannotAsk<PeerViewModel>();
 
             var choice = await ShowAsync(xamlRoot, peers, offerAll: false);
             return choice?.Peer;
@@ -32,11 +32,20 @@ namespace LinkAll.WinUI.Services
         {
             var peers = connectedPeers.ToList();
             if (peers.Count == 0) return new SendTarget(null);
-            if (peers.Count == 1 || xamlRoot == null) return new SendTarget(peers[0].device_id);
+            if (peers.Count == 1) return new SendTarget(peers[0].device_id);
+            if (xamlRoot == null) return CannotAsk<SendTarget>();
 
             var choice = await ShowAsync(xamlRoot, peers, offerAll: true);
             if (choice == null) return null;
             return new SendTarget(choice.Value.All ? null : choice.Value.Peer?.device_id);
+        }
+
+        // With several devices and no window to ask in, guessing would send to
+        // an arbitrary one. Say so and do nothing instead.
+        private static T? CannotAsk<T>() where T : class
+        {
+            NotificationHelper.ShowToast("Pick a device", "Several devices are connected. Open Link All and choose one.");
+            return null;
         }
 
         // Each device is one large choice, like the send sheet on Android and

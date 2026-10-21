@@ -430,15 +430,3 @@ private fun iconFor(file: RemoteFile): ImageVector = when {
     file.category == "Apks" -> Icons.Outlined.Android
     else -> Icons.Outlined.Description
 }
-
-/** Which connected device to browse, when there's more than one. */
-@Composable
-internal fun BrowseDevicePicker(c: DdColors, connected: List<PeerSnapshot>, onPick: (PeerSnapshot) -> Unit, onDismiss: () -> Unit) {
-    DdSheet(c, icon = Icons.Outlined.FolderOpen, title = "Browse files", subtitle = "Get files from another device", onDismiss = onDismiss) { close ->
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            connected.forEach { peer ->
-                SheetOption(c, osIcon(peer.platform, peer.name), peer.name, null) { close { onPick(peer) } }
-            }
-        }
-    }
-}

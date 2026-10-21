@@ -283,13 +283,17 @@ struct IncomingCallState: Equatable {
     let contactName: String
 
     /// Human-friendly display: contact name if available, otherwise phone
-    /// number. A phone that can see neither (the Google Play build, before its
-    /// phone app names the caller) says which phone is ringing instead.
+    /// number. A phone that can see neither (the Google Play build without
+    /// Notification access) is an unknown caller; which phone is ringing is
+    /// shown beside it, never in the caller's place.
     var displayName: String {
         if !contactName.isEmpty { return contactName }
         if !phoneNumber.isEmpty { return phoneNumber }
-        return deviceName.isEmpty ? "Your phone" : deviceName
+        return "Unknown caller"
     }
+
+    /// True when the phone told us who is calling.
+    var hasCaller: Bool { !contactName.isEmpty || !phoneNumber.isEmpty }
 
     var isRinging: Bool { state.lowercased() == "ringing" }
     var isOffhook: Bool { state.lowercased() == "offhook" }

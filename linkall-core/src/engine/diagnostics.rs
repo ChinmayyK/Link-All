@@ -77,10 +77,11 @@ impl Engine {
         );
         let _ = writeln!(
             out,
-            "  block sensitive text {}, auto-apply remote clipboard {}, file browsing {}",
+            "  block sensitive text {}, auto-apply remote clipboard {}, file browsing {}, remote control {}",
             on_off(settings.block_sensitive_text),
             on_off(settings.auto_apply_remote_clipboard),
-            on_off(settings.allow_file_browsing)
+            on_off(settings.allow_file_browsing),
+            on_off(settings.allow_remote_control)
         );
 
         let connected = status

@@ -136,9 +136,7 @@ final class CallBannerWindowManager: NSObject {
 
 private final class CallBannerHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let view = super.hitTest(point)
-        NSLog("Link All DEBUG: CallBannerHostingView hitTest at point: \(point), returned: \(String(describing: view))")
-        return view
+        super.hitTest(point)
     }
 }
 
@@ -165,9 +163,6 @@ private final class CallBannerPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 
     override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown {
-            NSLog("Link All DEBUG: Window received leftMouseDown event at location: \(event.locationInWindow)")
-        }
         super.sendEvent(event)
     }
 }
@@ -184,7 +179,8 @@ private struct CallBannerContainerView: View {
                     call: call,
                     onAccept: { store.acceptCall() },
                     onDecline: { store.declineCall() },
-                    onRouteAudio: { route in store.routeAudio(to: route) }
+                    onRouteAudio: { route in store.routeAudio(to: route) },
+                    notice: store.callActionNotice
                 )
                 .transition(.asymmetric(
                     insertion: .move(edge: .top).combined(with: .opacity).combined(with: .scale(scale: 0.8)),
@@ -214,6 +210,7 @@ private struct CallBannerView: View {
     let onAccept: () -> Void
     let onDecline: () -> Void
     let onRouteAudio: (String) -> Void
+    var notice: String? = nil
 
     @State private var ringPulse = false
     @State private var callDuration: TimeInterval = 0
@@ -262,7 +259,7 @@ private struct CallBannerView: View {
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.1), radius: 1, y: 1)
                 } else {
-                    Text(String(call.displayName.prefix(1)).uppercased())
+                    Text(call.hasCaller ? String(call.displayName.prefix(1)).uppercased() : "?")
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.2), radius: 1, y: 1)
@@ -278,13 +275,18 @@ private struct CallBannerView: View {
 
             // ── Caller info ─────────────────────────────────────────────────
             VStack(alignment: .leading, spacing: 2) {
-                if call.isOffhook {
+                if let notice {
+                    Text(notice)
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                        .foregroundStyle(declineRed)
+                        .lineLimit(1)
+                } else if call.isOffhook {
                     Text(formatDuration)
                         .font(.system(size: 12, weight: .black, design: .monospaced))
                         .foregroundStyle(activeBlue)
                         .onReceive(timer) { _ in callDuration += 1 }
                 } else {
-                    Text("INCOMING")
+                    Text(call.deviceName.isEmpty ? "INCOMING" : "INCOMING · \(call.deviceName.uppercased())")
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .foregroundStyle(
                             LinearGradient(colors: [acceptGreen, acceptGreen.opacity(0.8)], startPoint: .leading, endPoint: .trailing)

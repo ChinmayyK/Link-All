@@ -125,6 +125,10 @@ pub struct Settings {
     /// standard folders (see `local_files`). Off until the user turns it on.
     pub allow_file_browsing: bool,
 
+    /// Let paired phones press media, volume and slide keys on this computer.
+    /// Off until the user turns it on.
+    pub allow_remote_control: bool,
+
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start Link All automatically on login.
     pub start_on_login: bool,
@@ -222,6 +226,7 @@ impl Default for Settings {
             auto_accept_file_transfers: true, // auto-accept from trusted/paired peers without approval
             auto_accept_max_bytes: 0,         // 0 = unlimited size by default
             allow_file_browsing: false,
+            allow_remote_control: false,
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,

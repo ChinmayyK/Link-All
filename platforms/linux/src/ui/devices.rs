@@ -367,7 +367,12 @@ pub fn send_clipboard(hub: &Hub, target: Option<String>) {
                     Some(t) => json!({ "cmd": "push_text_to", "text": text.as_str(), "target": t }),
                     None => json!({ "cmd": "push_text", "text": text.as_str() }),
                 };
-                act(req, Some("Clipboard sent"), &hub)
+                let done = if target.is_some() {
+                    "Clipboard sent"
+                } else {
+                    "Clipboard sent to all devices"
+                };
+                act(req, Some(done), &hub)
             }
             _ => toast("Copy some text first, then send it"),
         }

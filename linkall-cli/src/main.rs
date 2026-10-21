@@ -58,6 +58,8 @@ async fn run() -> Result<()> {
         ["events"] => cmd_events(20).await,
         ["events", "--last", n] => cmd_events(n.parse().context("bad N")?).await,
         ["devices"] | ["devices", "list"] => cmd_devices_list(),
+        ["devices", "choose", purpose] => cmd_devices_choose(purpose, None).await,
+        ["devices", "choose", purpose, last] => cmd_devices_choose(purpose, Some(last)).await,
         ["devices", "show", id] => cmd_devices_show(id).await,
         ["devices", "trust", id] | ["devices", "retrust", id] => cmd_devices_trust(id).await,
         ["devices", "reject", id] => cmd_devices_reject(id).await,
@@ -466,6 +468,40 @@ async fn cmd_events(last: usize) -> Result<()> {
         _ => println!("No feedback events (daemon not running?)."),
     }
     Ok(())
+}
+
+/// Shows the chooser the apps would show: usable devices first, then the rest with why.
+async fn cmd_devices_choose(purpose: &str, last_used: Option<&str>) -> Result<()> {
+    let req = IpcRequest::DeviceChoices {
+        purpose: purpose.to_string(),
+        last_used: last_used.map(str::to_string),
+    };
+    match ipc(&req).await? {
+        IpcResponse::Ok { data: Some(data) } => {
+            if data["offers_all"].as_bool() == Some(true) {
+                println!("  * All devices");
+            }
+            for c in data["choices"].as_array().into_iter().flatten() {
+                let name = c["name"].as_str().unwrap_or("?");
+                let platform = c["platform"].as_str().unwrap_or("");
+                if c["available"].as_bool() == Some(true) {
+                    let last = if c["last_used"].as_bool() == Some(true) {
+                        "  (used last)"
+                    } else {
+                        ""
+                    };
+                    println!("  + {name}  {platform}{last}");
+                } else {
+                    println!(
+                        "  - {name}  {platform}  [{}]",
+                        c["reason"].as_str().unwrap_or("not available")
+                    );
+                }
+            }
+            Ok(())
+        }
+        other => bail!("daemon did not return choices: {other:?}"),
+    }
 }
 
 fn cmd_devices_list() -> Result<()> {
@@ -1304,6 +1340,7 @@ PAIRING
 
 DEVICES
   devices list                    List all known devices and their trust state
+  devices choose <purpose> [last] Show the device chooser for send, remote, browse or sync_target
   devices show <uuid>             Show full trust details and key fingerprint
   devices trust <uuid>            Trust an untrusted device (TOFU accept)
   devices retrust <uuid>          Alias for 'trust'

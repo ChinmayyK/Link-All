@@ -491,6 +491,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         PeerSyncStateChanged { .. } => 16,
         OpenUrlOnDeviceRequested { .. } => 38,
         OpenUrlOnDeviceAckReceived { .. } => 39,
+        RemoteControlAckReceived { .. } => 42,
     }
 }
 
@@ -545,6 +546,14 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventText(
                 .unwrap_or(std::ptr::null_mut());
         }
         crate::engine::EngineEvent::OpenUrlOnDeviceAckReceived {
+            error: Some(err), ..
+        } => {
+            return env
+                .new_string(err)
+                .map(|s| s.into_raw())
+                .unwrap_or(std::ptr::null_mut());
+        }
+        crate::engine::EngineEvent::RemoteControlAckReceived {
             error: Some(err), ..
         } => {
             return env
@@ -655,6 +664,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventDeviceId(
         RemoteThumbnailResponseReceived { from_device, .. } => Some(*from_device),
         OpenUrlOnDeviceRequested { from_device, .. } => Some(*from_device),
         OpenUrlOnDeviceAckReceived { from_device, .. } => Some(*from_device),
+        RemoteControlAckReceived { from_device, .. } => Some(*from_device),
         _ => None,
     };
     id.and_then(|value| env.new_string(value.to_string()).ok())
@@ -2365,6 +2375,112 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_openUrlOnDevice(
     let h = unsafe { &*(handle as *const AndroidHandle) };
     rt().block_on(h.engine.open_url_on_device(target, url));
     0
+}
+
+/// The devices `purpose` can go to as JSON: {"offers_all": bool, "choices": [...]}.
+/// `last_used` may be null. Null result: the engine isn't running or the purpose is unknown.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_deviceChoicesJson(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    purpose: JString,
+    last_used: JString,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let Ok(purpose) = env.get_string(&purpose).map(String::from) else {
+        return std::ptr::null_mut();
+    };
+    let last_used = if last_used.is_null() {
+        None
+    } else {
+        env.get_string(&last_used).map(String::from).ok()
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match h.engine.device_choices(&purpose, last_used.as_deref()) {
+        Ok(v) => env
+            .new_string(v.to_string())
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Err(_) => std::ptr::null_mut(),
+    }
+}
+
+/// Asks a computer to run a remote-control action (media, volume, slides).
+/// Returns 0 when the request was sent, or -1 when it could not be (the
+/// computer is unknown, offline, or too old to understand it).
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_remoteControl(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+    action: JString,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let Ok(target) = env.get_string(&target_device_id).map(String::from) else {
+        return -1;
+    };
+    let Ok(target) = uuid::Uuid::parse_str(&target) else {
+        return -1;
+    };
+    let Ok(action) = env.get_string(&action).map(String::from) else {
+        return -1;
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.send_remote_control(target, &action)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// Why `remoteControl` could not send, as a sentence to show the user.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_remoteControlError(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+) -> jstring {
+    if handle == 0 {
+        return std::ptr::null_mut();
+    }
+    let Ok(target) = env.get_string(&target_device_id).map(String::from) else {
+        return std::ptr::null_mut();
+    };
+    let Ok(target) = uuid::Uuid::parse_str(&target) else {
+        return std::ptr::null_mut();
+    };
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    // An action that always parses; only the reachability checks can fail.
+    match rt().block_on(h.engine.send_remote_control_check(target)) {
+        Err(message) => env
+            .new_string(message)
+            .map(|s| s.into_raw())
+            .unwrap_or(std::ptr::null_mut()),
+        Ok(()) => std::ptr::null_mut(),
+    }
+}
+
+/// 1 when a RemoteControl answer says the action worked, 0 otherwise.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_eventRemoteControlSuccess(
+    _env: JNIEnv,
+    _class: JClass,
+    event: jlong,
+) -> jboolean {
+    if event == 0 {
+        return 0;
+    }
+    let ev = unsafe { &*(event as *const crate::engine::EngineEvent) };
+    match ev {
+        crate::engine::EngineEvent::RemoteControlAckReceived { success, .. } => u8::from(*success),
+        _ => 0,
+    }
 }
 
 /// Tells `requester_device_id` whether this device opened the URL it asked

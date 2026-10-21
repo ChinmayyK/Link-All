@@ -218,52 +218,17 @@ internal fun ConfirmSheet(
 @Composable
 internal fun SendSheet(
     c: DdColors,
-    connected: List<PeerSnapshot>,
     onSend: (folder: Boolean, targetId: String?) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    // Every connected device unless the user picks one.
-    var target by remember { mutableStateOf<String?>(null) }
-    val subtitle = if (connected.size == 1) "To ${connected[0].name}" else "To all your devices, or pick one"
-    DdSheet(c, icon = Icons.Outlined.DevicesOther, title = "Send", subtitle = subtitle, onDismiss = onDismiss) { close ->
-        if (connected.size > 1) {
-            Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TargetChip(c, Icons.Outlined.DevicesOther, "All devices", selected = target == null) { target = null }
-                connected.forEach { peer ->
-                    TargetChip(c, osIcon(peer.platform, peer.name), peer.name, selected = target == peer.id) { target = peer.id }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            SheetOption(
-                c, Icons.Outlined.UploadFile,
-                "Files", "Photos, videos, documents, anything"
-            ) { val t = target; close { onSend(false, t) } }
-            SheetOption(
-                c, Icons.Outlined.DriveFolderUpload,
-                "A folder", "Everything in it, subfolders included"
-            ) { val t = target; close { onSend(true, t) } }
-        }
-    }
-}
-
-@Composable
-private fun TargetChip(c: DdColors, icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        Modifier
-            .clip(CircleShape)
-            .background(if (selected) c.accent else c.surfaceSunk)
-            .border(1.dp, if (selected) c.accent else c.line, CircleShape)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = if (selected) c.onAccent else c.textMuted, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = DdType.small, color = if (selected) c.onAccent else c.text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-    }
+    DeviceChooserSheet(
+        c, purpose = app.linkall.ChoicePurpose.Send, icon = Icons.Outlined.DevicesOther,
+        title = "Send to which device?",
+        emptyHint = "No paired device is connected. Open Link All on your computer, on the same Wi-Fi.",
+        actions = listOf(
+            ChooserAction(Icons.Outlined.UploadFile, { d -> if (d == null) "Send files to all" else "Send files to ${d.name}" }) { t -> onSend(false, t) },
+            ChooserAction(Icons.Outlined.DriveFolderUpload, { d -> if (d == null) "Send a folder to all" else "Send a folder to ${d.name}" }) { t -> onSend(true, t) },
+        ),
+        onDismiss = onDismiss,
+    )
 }

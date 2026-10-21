@@ -47,6 +47,8 @@ object LinkAllJni {
     const val CR_EVENT_SPEED_TEST_COMPLETE     = 36
     /** Every file of a folder transfer finished; see [eventFolderCounts]. */
     const val CR_EVENT_FOLDER_TRANSFER_COMPLETE = 41
+    /** A computer answered a remote-control action; see [eventRemoteControlSuccess]. */
+    const val CR_EVENT_REMOTE_CONTROL_ACK      = 42
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)
@@ -59,6 +61,13 @@ object LinkAllJni {
     // ── Clipboard push ────────────────────────────────────────────────────────
     @JvmStatic external fun pushText(handle: Long, text: String): Int
     @JvmStatic external fun openUrlOnDevice(handle: Long, targetDeviceId: String, url: String): Int
+    /** The devices a purpose ("send", "remote", "browse", "sync_target") can go to, as JSON. */
+    @JvmStatic external fun deviceChoicesJson(handle: Long, purpose: String, lastUsed: String?): String?
+    /** Asks a computer to press a media, volume or slide key. 0 when sent, -1 when it could not be. */
+    @JvmStatic external fun remoteControl(handle: Long, targetDeviceId: String, action: String): Int
+    /** Why [remoteControl] could not send, as a sentence, or null. */
+    @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
+    @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean
     @JvmStatic external fun ackOpenUrlOnDevice(handle: Long, requesterDeviceId: String, success: Boolean, error: String?): Int
     @JvmStatic external fun eventOpenUrlAckSuccess(event: Long): Boolean
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int

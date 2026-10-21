@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.layout.Column
 import androidx.core.content.ContextCompat
+import app.linkall.ChoicePurpose
 import app.linkall.FolderSync
 import app.linkall.LinkAllService
 import app.linkall.PeerSnapshot
@@ -96,22 +97,20 @@ internal fun FolderSyncSection(c: DdColors) {
     }
 
     pickedFolder?.let { folder ->
-        val computers = remember(folder) {
-            context.getSharedPreferences(LinkAllService.PREFS_NAME, Context.MODE_PRIVATE).peerSnapshots().filter { it.trusted }
+        val peers = remember(folder) {
+            context.getSharedPreferences(LinkAllService.PREFS_NAME, Context.MODE_PRIVATE).peerSnapshots()
         }
-        DdSheet(
-            c, icon = Icons.Outlined.Folder, title = "Send to which computer?",
-            subtitle = if (computers.isEmpty()) "Pair a computer first" else SharedFolders.label(folder),
+        DeviceChooserSheet(
+            c, purpose = ChoicePurpose.SyncTarget, icon = Icons.Outlined.Folder,
+            title = "Sync ${SharedFolders.label(folder)} to…",
+            emptyHint = "Pair a computer first. Folders sync to computers, not phones.",
+            actions = listOf(
+                ChooserAction(Icons.Outlined.Sync, { d -> "Sync to ${d?.name ?: "computer"}" }) { id ->
+                    peers.firstOrNull { it.id == id }?.let { pickedComputer = folder to it }
+                },
+            ),
             onDismiss = { pickedFolder = null },
-        ) { close ->
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                computers.forEach { peer ->
-                    SheetOption(c, osIcon(peer.platform, peer.name), peer.name, null) {
-                        close { pickedComputer = folder to peer }
-                    }
-                }
-            }
-        }
+        )
     }
 
     pickedComputer?.let { (folder, peer) ->

@@ -681,6 +681,12 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
         IpcRequest::DiagnosticReport { header } => Ok(IpcResponse::ok(
             json!({ "text": state.engine.diagnostic_report(&header).await }),
         )),
+        IpcRequest::DeviceChoices { purpose, last_used } => Ok(
+            match state.engine.device_choices(&purpose, last_used.as_deref()) {
+                Ok(v) => IpcResponse::ok(v),
+                Err(e) => IpcResponse::error(e),
+            },
+        ),
         IpcRequest::Peers => {
             let snapshot = state.engine.status_snapshot().await;
             Ok(IpcResponse::ok(snapshot.peers))
@@ -1035,6 +1041,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             show_receive_notification,
             ignore_patterns,
             allow_file_browsing,
+            allow_remote_control,
         } => {
             let mut patch = serde_json::Map::new();
             macro_rules! maybe {
@@ -1066,6 +1073,7 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             maybe!("show_receive_notification", show_receive_notification);
             maybe!("ignore_patterns", ignore_patterns);
             maybe!("allow_file_browsing", allow_file_browsing);
+            maybe!("allow_remote_control", allow_remote_control);
 
             let patch_str = serde_json::to_string(&patch)?;
             let updated = {

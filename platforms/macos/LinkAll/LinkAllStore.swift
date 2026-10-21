@@ -97,7 +97,8 @@ final class LinkAllStore: ObservableObject {
     @Published var pinnedItemIds: Set<Int64> = []
     /// Active phone call from a connected Android device (nil = no active call).
     @Published var activeCall: IncomingCallState? = nil
-    private var suppressCallUpdatesUntil: Date? = nil
+    /// Set when the phone didn't act on Answer or Decline, so the banner can say so.
+    @Published var callActionNotice: String? = nil
     /// Battery levels for connected peer devices.
     @Published var peerBatteries: [DeviceBatteryState] = []
     @Published var peerNetworks: [DeviceNetworkState] = []
@@ -505,23 +506,21 @@ final class LinkAllStore: ObservableObject {
             // which was silently breaking button hit-testing (mouse-down and
             // mouse-up land on different view instances when the view rebuilds
             // between the two events).
-            if let suppress = suppressCallUpdatesUntil, suppress > Date() {
-                // Ignore status updates for activeCall during optimistic UI wait
-            } else {
-                if let call = s.active_call, call.state.lowercased() != "idle" {
-                    let incoming = IncomingCallState(
-                        deviceId: call.device_id,
-                        deviceName: call.device_name,
-                        state: call.state,
-                        phoneNumber: call.number,
-                        contactName: call.contact_name
-                    )
-                    if activeCall != incoming {
-                        activeCall = incoming
-                    }
-                } else if activeCall != nil {
-                    activeCall = nil
+            if let call = s.active_call, call.state.lowercased() != "idle" {
+                let incoming = IncomingCallState(
+                    deviceId: call.device_id,
+                    deviceName: call.device_name,
+                    state: call.state,
+                    phoneNumber: call.number,
+                    contactName: call.contact_name
+                )
+                if activeCall != incoming {
+                    activeCall = incoming
+                    callActionNotice = nil
                 }
+            } else if activeCall != nil {
+                activeCall = nil
+                callActionNotice = nil
             }
 
             // ── Battery Sync (F20) ────────────────────────────────────────────
@@ -767,15 +766,19 @@ final class LinkAllStore: ObservableObject {
         }
     }
 
-    /// Send files when the caller has no specific device in mind. With one
-    /// connected device they go straight to it; with several, the send
-    /// modal asks (all devices unless one is picked). `completion` says
-    /// whether anything was sent. Returns false when nothing can be sent.
+    /// Send files when the caller has no specific device in mind. They go
+    /// straight to a device only when it is the one device this Mac is paired
+    /// with, and the toast says which. Otherwise the send modal asks, even when
+    /// just one is connected: a phone that dropped off for a moment must not
+    /// silently turn "send to my phone" into "send to whatever is still
+    /// connected". `completion` says whether anything was sent. Returns false
+    /// when nothing can be sent.
     @discardableResult
     func sendFilesChoosingTarget(urls: [URL], completion: ((Bool) -> Void)? = nil) -> Bool {
         guard !urls.isEmpty else { completion?(false); return false }
         let connected = connectedDevices
-        guard connected.count > 1 else {
+        let pairedCount = devices.filter { $0.trustState == .trusted }.count
+        guard connected.count > 1 || pairedCount > 1 else {
             guard let only = connected.first else {
                 // Every drop target lands here; say why nothing was sent.
                 showToast(title: "No Devices Connected", body: "Connect a device to send files or folders.", tint: CRTheme.inkSoft, systemImage: "wifi.slash")
@@ -783,6 +786,11 @@ final class LinkAllStore: ObservableObject {
                 return false
             }
             sendFiles(urls: urls, to: only)
+            showToast(
+                title: "Sending to \(only.name)",
+                body: urls.count == 1 ? urls[0].lastPathComponent : "\(urls.count) items",
+                tint: CRTheme.brandElectric, systemImage: "paperplane.fill", ttl: 2.5
+            )
             completion?(true)
             return true
         }
@@ -799,19 +807,32 @@ final class LinkAllStore: ObservableObject {
             completion?(false)
             return
         }
-        LinkAllModal.shared.present { [weak self] dismiss in
-            SendModalCard(
-                devices: devices,
-                urls: urls,
-                onSend: { chosen, target in
-                    dismiss()
-                    guard let self else { return }
-                    if let target { self.sendFiles(urls: chosen, to: target) }
-                    else { self.sendFiles(urls: chosen, toPeer: nil) }
-                    completion?(true)
-                },
-                onCancel: { dismiss(); completion?(false) }
-            )
+        Task { [weak self] in
+            guard let self else { return }
+            // The core ranks the paired devices and says why any can't be used; if the
+            // daemon doesn't answer, every connected device is offered as usable.
+            let choices = (try? await self.ipc.deviceChoices(purpose: "send", lastUsed: self.lastUsedDeviceId))
+                ?? IpcDeviceChoices(
+                    offers_all: devices.count > 1,
+                    choices: devices.map {
+                        IpcDeviceChoice(id: $0.id, name: $0.name, platform: nil, available: true, reason: nil, last_used: $0.id == self.lastUsedDeviceId)
+                    }
+                )
+            LinkAllModal.shared.present { [weak self] dismiss in
+                SendModalCard(
+                    devices: devices,
+                    choices: choices,
+                    urls: urls,
+                    onSend: { chosen, target in
+                        dismiss()
+                        guard let self else { return }
+                        if let target { self.sendFiles(urls: chosen, to: target) }
+                        else { self.sendFiles(urls: chosen, toPeer: nil) }
+                        completion?(true)
+                    },
+                    onCancel: { dismiss(); completion?(false) }
+                )
+            }
         }
     }
 
@@ -1376,26 +1397,23 @@ final class LinkAllStore: ObservableObject {
 
     // MARK: - Call Continuity
 
-    func acceptCall() {
-        NSSound.beep()
-        guard let call = activeCall else { return }
-        suppressCallUpdatesUntil = Date().addingTimeInterval(3.0)
-        // Temporarily mark as offhook locally for immediate feedback
-        var updated = call
-        updated.state = "offhook"
-        activeCall = updated
-        Task {
-            try? await ipc.callAction(action: "accept", targetDevice: call.deviceId)
-        }
-    }
+    func acceptCall() { requestCallAction("accept") }
 
-    func declineCall() {
-        NSSound.beep()
+    func declineCall() { requestCallAction("decline") }
+
+    /// Asks the phone to answer or decline. The banner follows the phone's own
+    /// next call state rather than guessing: a phone that can't act (the Google
+    /// Play build without Notification access) never changes it, so after a few
+    /// seconds the banner says so instead of looking like a dead button.
+    private func requestCallAction(_ action: String) {
         guard let call = activeCall else { return }
-        suppressCallUpdatesUntil = Date().addingTimeInterval(3.0)
-        withAnimation(.crSpring) { activeCall = nil }
+        callActionNotice = nil
         Task {
-            try? await ipc.callAction(action: "decline", targetDevice: call.deviceId)
+            try? await ipc.callAction(action: action, targetDevice: call.deviceId)
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if let now = activeCall, now.deviceId == call.deviceId, now.state == call.state {
+                callActionNotice = "Your phone couldn't do that. Use the phone."
+            }
         }
     }
 

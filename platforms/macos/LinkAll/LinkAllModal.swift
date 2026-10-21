@@ -290,32 +290,64 @@ private struct ModalInputCard: View {
 
 // MARK: - Send
 
-/// "Files & folders": where to send (all devices unless one is picked),
-/// then what. With `urls` already chosen (a drop, the Finder service) it
-/// only asks where; otherwise it takes a drop or opens the picker, which
-/// accepts files and folders together.
+/// "Files & folders": where to send, then what. The core ranks the devices; the
+/// one used last is already selected, so the usual case is one click on a button
+/// that names the device. Devices that can't be used right now are listed below,
+/// greyed, with the reason. With `urls` already chosen (a drop, the Finder
+/// service) it only asks where; otherwise it takes a drop or opens the picker,
+/// which accepts files and folders together.
 struct SendModalCard: View {
     let devices: [ManagedDevice]
+    let choices: IpcDeviceChoices
     let urls: [URL]?
     let onSend: (_ urls: [URL], _ target: ManagedDevice?) -> Void
     let onCancel: () -> Void
-    @State private var targetId: String? = nil
+    /// The selected device's id, `allId` for every device.
+    @State private var selection: String
     @State private var dropHover = false
+    private static let allId = "*all*"
 
-    private var target: ManagedDevice? { devices.first { $0.id == targetId } }
+    init(devices: [ManagedDevice], choices: IpcDeviceChoices, urls: [URL]?,
+         onSend: @escaping (_ urls: [URL], _ target: ManagedDevice?) -> Void, onCancel: @escaping () -> Void) {
+        self.devices = devices
+        self.choices = choices
+        self.urls = urls
+        self.onSend = onSend
+        self.onCancel = onCancel
+        let usable = choices.usable
+        _selection = State(initialValue: (usable.first { $0.last_used } ?? usable.first)?.id ?? Self.allId)
+    }
+
+    private var target: ManagedDevice? { selection == Self.allId ? nil : devices.first { $0.id == selection } }
+    private var sendLabel: String {
+        if selection == Self.allId { return "Send to all" }
+        return "Send to \(choices.usable.first { $0.id == selection }?.name ?? "device")"
+    }
 
     var body: some View {
         ModalCard(
             icon: "paperplane.fill",
             title: urls.map { "Send \($0.count) item\($0.count == 1 ? "" : "s")" } ?? "Send files & folders",
-            subtitle: devices.count == 1 ? "To \(devices[0].name)" : "To all your devices, or pick one",
+            subtitle: choices.usable.count == 1 ? "Only \(choices.usable[0].name) is connected" : "\(choices.usable.count) devices are connected",
             width: 480
         ) {
-            if devices.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        chip(nil, icon: "rectangle.stack.fill", label: "All devices")
-                        ForEach(devices) { d in chip(d.id, icon: nil, label: d.name, os: d.os) }
+            VStack(spacing: 8) {
+                if choices.offers_all {
+                    row(id: Self.allId, icon: nil, symbol: "rectangle.stack.fill", title: "All devices",
+                        detail: "\(choices.usable.count) connected", enabled: true)
+                }
+                ForEach(choices.usable) { d in
+                    row(id: d.id, icon: osFor(d), symbol: nil, title: d.name,
+                        detail: [d.platform, d.last_used ? "used last" : nil].compactMap { $0 }.joined(separator: " · "), enabled: true)
+                }
+                if !choices.unusable.isEmpty {
+                    Text("Not available")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 8)
+                    ForEach(choices.unusable) { d in
+                        row(id: d.id, icon: osFor(d), symbol: nil, title: d.name, detail: d.reason ?? "", enabled: false)
                     }
                 }
             }
@@ -336,7 +368,7 @@ struct SendModalCard: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(CRTheme.surfaceStrong))
-                ModalButtons(confirm: "Send", onCancel: onCancel, onConfirm: { onSend(urls, target) })
+                ModalButtons(confirm: sendLabel, onCancel: onCancel, onConfirm: { onSend(urls, target) })
             } else {
                 VStack(spacing: 10) {
                     Image(systemName: "tray.and.arrow.down.fill")
@@ -370,22 +402,47 @@ struct SendModalCard: View {
         }
     }
 
+    private func osFor(_ d: IpcDeviceChoice) -> DeviceOS {
+        devices.first { $0.id == d.id }?.os ?? DeviceOS(platform: d.platform, name: d.name)
+    }
+
+    /// A device row: logo, name, detail and a selection mark. Greyed and inert when not `enabled`.
     @ViewBuilder
-    private func chip(_ id: String?, icon: String?, label: String, os: DeviceOS? = nil) -> some View {
-        let selected = targetId == id
-        Button { targetId = id } label: {
-            HStack(spacing: 6) {
-                if let icon { Image(systemName: icon).font(.system(size: 11, weight: .semibold)) }
-                else if let os { OSIcon(os, size: 12) }
-                Text(label).font(.system(size: 12.5, weight: .medium)).lineLimit(1)
+    private func row(id: String, icon: DeviceOS?, symbol: String?, title: String, detail: String, enabled: Bool) -> some View {
+        let selected = enabled && selection == id
+        Button { if enabled { selection = id } } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(selected ? CRTheme.surface : CRTheme.brandElectric.opacity(0.10))
+                        .frame(width: 36, height: 36)
+                    if let icon { OSIcon(icon, size: 16) }
+                    else if let symbol { Image(systemName: symbol).font(.system(size: 14, weight: .semibold)) }
+                }
+                .foregroundStyle(selected ? CRTheme.brandElectric : CRTheme.inkSoft)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 13.5, weight: .semibold)).lineLimit(1)
+                    if !detail.isEmpty {
+                        Text(detail).font(.system(size: 11.5)).foregroundStyle(CRTheme.inkSoft).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                if enabled {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(selected ? CRTheme.brandElectric : CRTheme.inkSubtle)
+                }
             }
-            .foregroundStyle(selected ? Color.white : CRTheme.ink)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(Capsule().fill(selected ? CRTheme.brandElectric : CRTheme.surfaceStrong))
-            .overlay(Capsule().strokeBorder(selected ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: 1))
+            .foregroundStyle(CRTheme.ink)
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(selected ? CRTheme.brandElectric.opacity(0.10) : CRTheme.surfaceStrong))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(selected ? CRTheme.brandElectric : CRTheme.stroke, lineWidth: selected ? 2 : 1))
+            .opacity(enabled ? 1 : 0.55)
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(enabled ? title : "\(title), not available: \(detail)")
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func choose() {

@@ -34,6 +34,8 @@ data class PeerSnapshot(
     val platform: String? = null,
     val lifecycleState: String,
     val remoteSyncEnabled: Boolean,
+    /** The Link All version the device reported, e.g. "2.1.0"; null until it has connected. */
+    val appVersion: String? = null,
 ) {
     val isConnected: Boolean get() = status == "connected" && trusted
     val isConnecting: Boolean get() = status == "connecting"
@@ -93,6 +95,7 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             platform = if (obj.isNull("platform")) null else obj.optString("platform").ifBlank { null },
             lifecycleState = obj.optString("lifecycle_state", "discovered"),
             remoteSyncEnabled = obj.optBoolean("remote_sync_enabled", true),
+            appVersion = if (obj.isNull("app_version")) null else obj.optString("app_version").ifBlank { null },
         )
         
         val existing = uniquePeers[peer.id]
@@ -121,3 +124,15 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
 
 fun SharedPreferences.peerSnapshots(): List<PeerSnapshot> =
     parsePeerSnapshots(getString(PREF_PEER_SNAPSHOTS_JSON, null))
+
+/** True for a device on Link All 2.1.0 or later, the first release that understands the remote. */
+fun supportsRemoteControl(appVersion: String?): Boolean {
+    val parts = (appVersion ?: return false).split('.', '-', '+').map { it.takeWhile(Char::isDigit).toIntOrNull() ?: 0 }
+    val major = parts.getOrElse(0) { 0 }
+    val minor = parts.getOrElse(1) { 0 }
+    return major > 2 || (major == 2 && minor >= 1)
+}
+
+/** Computers a phone can control: connected, paired, and not another phone. */
+fun List<PeerSnapshot>.controllableComputers(): List<PeerSnapshot> =
+    filter { it.isConnected && it.platform != "Android" }

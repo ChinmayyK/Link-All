@@ -123,6 +123,8 @@ fun MainScreen(
     ambientStatus: String,
     healthIssue: app.linkall.HealthIssue? = null,
     onHealthAction: (app.linkall.HealthIssue) -> Unit = {},
+    setupItems: List<SetupItem> = emptyList(),
+    onSetupFix: (String) -> Unit = {},
     activeTransfers: kotlinx.collections.immutable.ImmutableList<TransferProgress>,
     activeSpeedTests: kotlinx.collections.immutable.ImmutableList<SpeedTestProgress> = kotlinx.collections.immutable.persistentListOf(),
     onActionStartSpeedTest: (String) -> Unit = {},
@@ -201,6 +203,7 @@ fun MainScreen(
                                 isDark = isDark,
                                 ambientStatus = ambientStatus,
                                 healthIssue = healthIssue,
+                                moreIssues = if (healthIssue != null) (setupItems.problemCount() - 1).coerceAtLeast(0) else 0,
                                 onHealthAction = onHealthAction,
                                 peers = peers,
                                 feed = feed,
@@ -295,7 +298,9 @@ fun MainScreen(
                                 onOpenDiagnostics = onOpenDiagnostics,
                                 onBatterySettingsClicked = onBatterySettingsClicked,
                                 onStorageSettingsClicked = onStorageSettingsClicked,
-                                onNotificationSettingsClicked = onNotificationSettingsClicked
+                                onNotificationSettingsClicked = onNotificationSettingsClicked,
+                                setupItems = setupItems,
+                                onSetupFix = onSetupFix
                             )
                         }
                     }

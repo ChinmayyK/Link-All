@@ -158,9 +158,9 @@ namespace LinkAll.WinUI
 
             var phone = FirstNonEmpty(_call.DeviceName, "your phone");
             // A phone that can see neither name nor number (the Google Play
-            // build, before its phone app names the caller) shows which phone
-            // is ringing instead of an "unknown caller".
-            var caller = FirstNonEmpty(_call.ContactName, _call.Number, FirstNonEmpty(_call.DeviceName, "Your phone"));
+            // build without Notification access) says "Unknown caller"; which
+            // phone is ringing is shown under it, never in the caller's place.
+            var caller = FirstNonEmpty(_call.ContactName, _call.Number, "Unknown caller");
             TxtCallerName.Text = caller;
             var initials = Initials(_call.ContactName);
             TxtInitials.Text = initials ?? PhoneGlyph;
@@ -247,6 +247,18 @@ namespace LinkAll.WinUI
             if (result != 0)
             {
                 TxtSource.Text = "Couldn't reach your phone";
+                BtnDecline.IsEnabled = true;
+                BtnAccept.IsEnabled = true;
+                return;
+            }
+            // A phone that can't act (the Google Play build without Notification
+            // access) never changes its call state, which would leave these
+            // buttons dead. Say so after a few seconds and let them be pressed again.
+            var stateBefore = _call.State;
+            await Task.Delay(TimeSpan.FromSeconds(4));
+            if (_current == this && _call.State == stateBefore)
+            {
+                TxtSource.Text = "Your phone couldn't do that. Use the phone.";
                 BtnDecline.IsEnabled = true;
                 BtnAccept.IsEnabled = true;
             }
