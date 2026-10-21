@@ -164,16 +164,17 @@ private fun matches(note: ScratchNote, filter: Filter): Boolean = when (filter) 
 
 
 /**
- * Notes, links and snippets shared between your own devices: written here,
- * they appear on your computers, and the other way round. Kept on each device
- * and sent only to your paired ones.
+ * The Notes tab: the Scratchpad. Notes, links and snippets shared between
+ * your own devices: written here, they appear on your computers, and the
+ * other way round. Kept on each device and sent only to your paired ones.
  *
  * Add at the bottom, like a chat with yourself. Swipe a note right to pin it
  * and left to delete it (with Undo); tap it to open its actions. Links open on
  * a tap, code is shown as code, and the filters sort it all.
  */
 @Composable
-internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
+internal fun NotesTab(isDark: Boolean) {
+    val c = rememberDdColors(isDark)
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
@@ -234,26 +235,21 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
         }
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
-        EdgeToEdgeDialogWindow(c)
+        // The tab sits above the navigation bar; with the keyboard open the
+        // bar hides and the box to type in rides on the keyboard.
         Column(
             Modifier
                 .fillMaxSize()
-                .background(c.page)
-                .statusBarsPadding()
-                .navigationBarsPadding()
-                .imePadding(),
+                .imePadding()
+                .padding(bottom = LocalDockInset.current),
         ) {
             // ── Header ──────────────────────────────────────────────────────
             Row(
-                Modifier.fillMaxWidth().padding(start = PageGutter, end = 8.dp, top = 8.dp),
+                Modifier.fillMaxWidth().padding(start = PageGutter, end = 8.dp, top = 20.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(Modifier.weight(1f)) {
-                    Text("Scratchpad", style = DdType.pageTitle, color = c.text)
+                    Text("Notes", style = DdType.pageTitle, color = c.text)
                     Text(
                         if (notes.isEmpty()) "Shared with your paired devices only"
                         else "${notes.size} ${if (notes.size == 1) "note" else "notes"} · paired devices only",
@@ -274,11 +270,10 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
                         )
                     }
                 }
-                HeaderIcon(c, Icons.Outlined.Close, "Close", onClick = onDismiss)
             }
 
             AnimatedVisibility(visible = searching) {
-                SearchField(c, query) { query = it }
+                SearchField(c, query, "Search notes", Modifier.padding(horizontal = PageGutter, vertical = 8.dp)) { query = it }
             }
 
             // ── Filters ─────────────────────────────────────────────────────
@@ -398,7 +393,6 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
                 draft = ""
             }
         }
-    }
 
     editing?.let { note ->
         EditNoteDialog(
@@ -440,7 +434,7 @@ internal fun ScratchpadDialog(c: DdColors, onDismiss: () -> Unit) {
 
 private fun copyNote(context: Context, text: String) {
     val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-    cm.setPrimaryClip(ClipData.newPlainText("Scratchpad note", text))
+    cm.setPrimaryClip(ClipData.newPlainText("Note", text))
     Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
 }
 
@@ -511,31 +505,6 @@ private fun ScratchFilterChip(c: DdColors, label: String, selected: Boolean, onC
 }
 
 @Composable
-private fun SearchField(c: DdColors, value: String, onChange: (String) -> Unit) {
-    Row(
-        Modifier
-            .padding(horizontal = PageGutter, vertical = 8.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(c.surface)
-            .border(1.dp, c.line, RoundedCornerShape(14.dp))
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Outlined.Search, contentDescription = null, tint = c.textMuted, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(10.dp))
-        Box(Modifier.weight(1f)) {
-            if (value.isEmpty()) Text("Search notes", style = DdType.body, color = c.textMuted)
-            BasicTextField(
-                value = value, onValueChange = onChange, singleLine = true,
-                textStyle = DdType.body.copy(color = c.text), cursorBrush = SolidColor(c.accent),
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-    }
-}
-
-@Composable
 private fun EmptyScratchpad(c: DdColors) {
     Column(
         Modifier.fillMaxSize().padding(horizontal = 36.dp),
@@ -549,7 +518,7 @@ private fun EmptyScratchpad(c: DdColors) {
         Text("Nothing here yet", style = DdType.title, color = c.text)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Type below, or share text from any app and pick Scratchpad. It appears on your other devices in a moment.",
+            "Type below, or share text from any app and pick Save to Notes. It shows up on your other devices in a moment.",
             style = DdType.body, color = c.textMuted, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
         )
     }
@@ -564,7 +533,7 @@ private fun Composer(c: DdColors, value: String, onChange: (String) -> Unit, onS
     val keyboardOpen = WindowInsets.ime.getBottom(androidx.compose.ui.platform.LocalDensity.current) > 0
     Row(
         Modifier
-            .padding(start = PageGutter, end = PageGutter, top = 8.dp, bottom = if (keyboardOpen) 34.dp else 20.dp)
+            .padding(start = PageGutter, end = PageGutter, top = 8.dp, bottom = if (keyboardOpen) 34.dp else 12.dp)
             .fillMaxWidth()
             .clip(RoundedCornerShape(26.dp))
             .background(c.surface)

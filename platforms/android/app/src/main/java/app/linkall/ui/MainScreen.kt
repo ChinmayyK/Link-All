@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalFoundationApi::class)
+@file:OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 
 package app.linkall.ui
 
@@ -34,7 +34,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.StickyNote2
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Settings
@@ -101,7 +101,13 @@ val CRTheme.accentGreen get() = Color(0xFF10B981)
 val CRTheme.accentRed get() = Color(0xFFEF4444)
 val CRTheme.accentAmber get() = Color(0xFFF59E0B)
 
-enum class AppTab { Home, Activity, Devices, Settings }
+enum class AppTab { Home, Notes, Activity, Settings }
+
+/** How much of the bottom the floating dock covers, for a tab whose content sits at the bottom. */
+internal val LocalDockInset = staticCompositionLocalOf { 0.dp }
+
+/** Opens a device's page, from wherever a device is shown. */
+internal val LocalOpenDevice = staticCompositionLocalOf<(PeerSnapshot) -> Unit> { {} }
 
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -191,12 +197,17 @@ fun MainScreen(
     val hasConnectedDevices = remember(peers) { peers.any { it.isConnected } }
 
     var browsingPeerId by rememberSaveable { mutableStateOf<String?>(null) }
-    CompositionLocalProvider(LocalBrowseFiles provides { peer: PeerSnapshot -> browsingPeerId = peer.id }) {
+    var devicePageId by rememberSaveable { mutableStateOf<String?>(null) }
+    // The keyboard covers the bar anyway; hiding it gives the Notes box the room.
+    val keyboardOpen = androidx.compose.foundation.layout.WindowInsets.isImeVisible
+    CompositionLocalProvider(
+        LocalBrowseFiles provides { peer: PeerSnapshot -> browsingPeerId = peer.id },
+        LocalOpenDevice provides { peer: PeerSnapshot -> devicePageId = peer.id },
+        LocalDockInset provides if (keyboardOpen) 0.dp else 96.dp,
+    ) {
         CRBackground(isDark = isDark, hasConnectedDevices = hasConnectedDevices, flat = true) {
         Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
             Column(modifier = Modifier.fillMaxSize()) {
-
-                
                 Box(modifier = Modifier.weight(1f)) {
                     androidx.compose.foundation.pager.HorizontalPager(
                         state = pagerState,
@@ -205,7 +216,6 @@ fun MainScreen(
                         when (tabs[page]) {
                             AppTab.Home -> HomeTab(
                                 isDark = isDark,
-                                ambientStatus = ambientStatus,
                                 healthIssue = healthIssue,
                                 moreIssues = if (healthIssue != null) (setupItems.problemCount() - 1).coerceAtLeast(0) else 0,
                                 onHealthAction = onHealthAction,
@@ -213,11 +223,8 @@ fun MainScreen(
                                 feed = feed,
                                 activeTransfers = activeTransfers,
                                 activeSpeedTests = activeSpeedTests,
-                                onActionStartSpeedTest = onActionStartSpeedTest,
                                 onActionPushClipboard = onActionPushClipboard,
-                                onActionSendQuickContext = {
-                                    onActionPushClipboard()
-                                },
+                                onActionSendQuickContext = { onActionPushClipboard() },
                                 quickContextText = LinkAllService.quickSendContextFlow.collectAsState().value,
                                 onActionPairMagicLink = onActionPairMagicLink,
                                 onManualIp = onManualIp,
@@ -227,7 +234,6 @@ fun MainScreen(
                                 onActionPauseTransfer = onActionPauseTransfer,
                                 onActionResumeTransfer = onActionResumeTransfer,
                                 onActionCancelTransfer = onActionCancelTransfer,
-                                onForgetPeer = onForgetPeer,
                                 onDeleteActivity = onDeleteActivity,
                                 onTogglePinActivity = onTogglePinActivity,
                                 onResendActivity = onResendActivity,
@@ -247,6 +253,7 @@ fun MainScreen(
                                 onSendPairingRequest = onSendPairingRequest,
                                 onCancelPairing = onCancelPairing
                             )
+                            AppTab.Notes -> NotesTab(isDark = isDark)
                             AppTab.Activity -> ActivityTab(
                                 isDark = isDark,
                                 feed = feed,
@@ -255,22 +262,6 @@ fun MainScreen(
                                 onDelete = onDeleteActivity,
                                 onTogglePin = onTogglePinActivity,
                                 onClearAll = onClearActivity
-                            )
-                            AppTab.Devices -> DevicesTab(
-                                isDark = isDark,
-                                peers = peers,
-                                activeSpeedTests = activeSpeedTests,
-                                onConnectPeer = onConnectPeer,
-                                onDisconnectPeer = onDisconnectPeer,
-                                onSendPairingRequest = onSendPairingRequest,
-                                onRespondPairing = onRespondPairing,
-                                onCancelPairing = onCancelPairing,
-                                onForgetPeer = onForgetPeer,
-                                onSendFiles = onActionSendFiles,
-                                onSendFolder = onActionSendFolder,
-                                onSpeedTest = onActionStartSpeedTest,
-                                onScanQr = onActionPairMagicLink,
-                                onManualIp = onManualIp
                             )
                             AppTab.Settings -> SettingsTab(
                                 isDark = isDark,
@@ -314,43 +305,79 @@ fun MainScreen(
                     }
                 }
             }
-            
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(120.dp)
-                    .background(
-                        androidx.compose.ui.graphics.Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                CRTheme.bg(isDark).copy(alpha = 0.8f),
-                                CRTheme.bg(isDark)
+
+            // The floating dock, over a fade so content scrolls under it softly.
+            // Hidden while typing: the keyboard covers it anyway.
+            if (!keyboardOpen) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .background(
+                            androidx.compose.ui.graphics.Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    CRTheme.bg(isDark).copy(alpha = 0.8f),
+                                    CRTheme.bg(isDark)
+                                )
                             )
                         )
-                    )
-            )
-            
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 24.dp)
-            ) {
-                BottomDock(
-                    currentTab = currentTab,
-                    onTabSelected = { selectedTab ->
-                        val targetIndex = tabs.indexOf(selectedTab)
-                        if (targetIndex >= 0) {
-                            scope.launch {
-                                pagerState.animateScrollToPage(
-                                    targetIndex,
-                                    animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
-                                )
-                            }
-                        }
-                    },
-                    isDark = isDark
                 )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 24.dp)
+                ) {
+                    BottomDock(
+                        currentTab = currentTab,
+                        onTabSelected = { selectedTab ->
+                            val targetIndex = tabs.indexOf(selectedTab)
+                            if (targetIndex >= 0) {
+                                scope.launch {
+                                    pagerState.animateScrollToPage(
+                                        targetIndex,
+                                        animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                                    )
+                                }
+                            }
+                        },
+                        isDark = isDark
+                    )
+                }
+            }
+
+            // A device's page slides in over the tabs; Back closes it.
+            val devicePeer = devicePageId?.let { id -> peers.firstOrNull { it.id == id } }
+            if (devicePageId != null && devicePeer == null) {
+                LaunchedEffect(devicePageId) { devicePageId = null } // forgotten meanwhile
+            }
+            androidx.compose.animation.AnimatedVisibility(
+                visible = devicePeer != null,
+                enter = androidx.compose.animation.slideInHorizontally { it / 3 } + fadeIn(tween(220)),
+                exit = androidx.compose.animation.slideOutHorizontally { it / 3 } + fadeOut(tween(180)),
+            ) {
+                // Keep the last device while the page animates away.
+                var shown by remember { mutableStateOf<PeerSnapshot?>(null) }
+                if (devicePeer != null) shown = devicePeer
+                shown?.let { peer ->
+                    DeviceScreen(
+                        isDark = isDark,
+                        peer = peer,
+                        speedTest = activeSpeedTests.find { it.peerId == peer.id },
+                        onBack = { devicePageId = null },
+                        onSendFiles = { onActionSendFiles(peer.id) },
+                        onSendFolder = { onActionSendFolder(peer.id) },
+                        onSendClipboard = onActionPushClipboard,
+                        onConnect = { onConnectPeer(peer) },
+                        onDisconnect = { onDisconnectPeer(peer) },
+                        onForget = { onForgetPeer(peer) },
+                        onPair = { onSendPairingRequest(peer) },
+                        onRespondPairing = { accept -> onRespondPairing(peer, accept) },
+                        onCancelPairing = { onCancelPairing(peer) },
+                        onSpeedTest = { onActionStartSpeedTest(peer.id) },
+                    )
+                }
             }
 
             // Over everything, dock included; Back closes it.
@@ -433,21 +460,21 @@ fun BottomDock(
 
 private val AppTab.label get() = when (this) {
     AppTab.Home -> "Home"
+    AppTab.Notes -> "Notes"
     AppTab.Activity -> "Activity"
-    AppTab.Devices -> "Devices"
     AppTab.Settings -> "Settings"
 }
 
 private val AppTab.icon get() = when (this) {
     AppTab.Home -> Icons.Outlined.Home
+    AppTab.Notes -> Icons.Outlined.StickyNote2
     AppTab.Activity -> Icons.Outlined.History
-    AppTab.Devices -> Icons.Outlined.Devices
     AppTab.Settings -> Icons.Outlined.Settings
 }
 
 private val AppTab.selectedIcon get() = when (this) {
     AppTab.Home -> Icons.Filled.Home
+    AppTab.Notes -> Icons.Filled.StickyNote2
     AppTab.Activity -> Icons.Filled.History
-    AppTab.Devices -> Icons.Filled.Devices
     AppTab.Settings -> Icons.Filled.Settings
 }
