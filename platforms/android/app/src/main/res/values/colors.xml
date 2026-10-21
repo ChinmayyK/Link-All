@@ -1,35 +1,35 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- ── Page backgrounds ───────────────────────────────────────── -->
-    <color name="cr_bg">#F6F7F7</color>
+    <color name="cr_bg">#F8FAFC</color>
     <color name="cr_bg_card">#FFFFFF</color>
-    <color name="cr_bg_inset">#EEF1F1</color>
+    <color name="cr_bg_inset">#F1F5F9</color>
     <color name="cr_bg_input">#E2E8F0</color>
 
     <!-- ── Borders and dividers ───────────────────────────────────── -->
-    <color name="cr_border">#E1E5E7</color>
+    <color name="cr_border">#E2E8F0</color>
     <color name="cr_border_strong">#CBD5E1</color>
-    <color name="cr_divider">#EEF1F1</color>
+    <color name="cr_divider">#F1F5F9</color>
 
     <!-- ── Accent — deep teal ─────────────────────────────────────── -->
-    <color name="cr_accent">#0D9488</color>
-    <color name="cr_accent_dim">#14B8A6</color>
-    <color name="cr_accent_bg">#CCFBF1</color>
-    <color name="cr_accent_bg_strong">#99F6E4</color>
+    <color name="cr_accent">#3B82F6</color>
+    <color name="cr_accent_dim">#60A5FA</color>
+    <color name="cr_accent_bg">#DBEAFE</color>
+    <color name="cr_accent_bg_strong">#BFDBFE</color>
     <color name="cr_on_accent">#FFFFFF</color>
 
     <!-- ── Text ───────────────────────────────────────────────────── -->
-    <color name="cr_text_1">#14191C</color>
+    <color name="cr_text_1">#0F172A</color>
     <color name="cr_text_2">#334155</color>
-    <color name="cr_text_3">#5A666C</color>
+    <color name="cr_text_3">#64748B</color>
     <color name="cr_text_4">#94A3B8</color>
 
     <!-- ── Semantic colours ────────────────────────────────────────── -->
-    <color name="cr_green">#16A34A</color>
+    <color name="cr_green">#10B981</color>
     <color name="cr_green_bg">#D1FAE5</color>
-    <color name="cr_amber">#B45309</color>
+    <color name="cr_amber">#F59E0B</color>
     <color name="cr_amber_bg">#FEF3C7</color>
-    <color name="cr_red">#DC2626</color>
+    <color name="cr_red">#EF4444</color>
     <color name="cr_red_bg">#FEE2E2</color>
     <color name="cr_blue">#3B82F6</color>
     <color name="cr_blue_bg">#DBEAFE</color>
@@ -37,8 +37,8 @@
     <color name="cr_purple_bg">#EDE9FE</color>
 
     <!-- ── Activity kind colours ──────────────────────────────────── -->
-    <color name="cr_k_text_fg">#0D9488</color>
-    <color name="cr_k_text_bg">#CCFBF1</color>
+    <color name="cr_k_text_fg">#3B82F6</color>
+    <color name="cr_k_text_bg">#DBEAFE</color>
     <color name="cr_k_img_fg">#8B5CF6</color>
     <color name="cr_k_img_bg">#EDE9FE</color>
     <color name="cr_k_file_fg">#0EA5E9</color>
@@ -50,7 +50,7 @@
 
     <!-- ── Navigation ─────────────────────────────────────────────── -->
     <color name="cr_nav_bg">#FFFFFF</color>
-    <color name="cr_nav_on">#0D9488</color>
+    <color name="cr_nav_on">#3B82F6</color>
     <color name="cr_nav_off">#94A3B8</color>
     <color name="cr_icon_bg">#F8FAFC</color>
 

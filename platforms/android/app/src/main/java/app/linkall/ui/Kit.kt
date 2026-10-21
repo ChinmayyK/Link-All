@@ -53,19 +53,18 @@ import app.linkall.ui.theme.crPressScale
 // PIN tiles 12dp, buttons full pill.
 
 internal class DdColors(isDark: Boolean) {
-    // Teal on a graphite with a hint of green-grey; one brand colour, and "live" stays a separate green.
-    val page = if (isDark) Color(0xFF0E1113) else Color(0xFFF6F7F7)
-    val surface = if (isDark) Color(0xFF171B1E) else Color(0xFFFFFFFF)
-    val surfaceSunk = if (isDark) Color(0xFF1C2124) else Color(0xFFEEF1F1)
-    val line = if (isDark) Color(0xFF262C30) else Color(0xFFE1E5E7)
-    val text = if (isDark) Color(0xFFECEFF0) else Color(0xFF14191C)
-    val textMuted = if (isDark) Color(0xFF9AA4A9) else Color(0xFF5A666C)
-    val accent = if (isDark) Color(0xFF2DD4BF) else Color(0xFF0D9488)
-    val onAccent = if (isDark) Color(0xFF04201C) else Color.White
-    val accentSoft = if (isDark) Color(0xFF2DD4BF).copy(alpha = 0.14f) else Color(0xFF0D9488).copy(alpha = 0.10f)
-    val live = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A)
-    val warn = if (isDark) Color(0xFFFBBF24) else Color(0xFFB45309)
-    val danger = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
+    val page = if (isDark) Color(0xFF000000) else Color(0xFFF5F6FA)
+    val surface = if (isDark) Color(0xFF131316) else Color(0xFFFFFFFF)
+    val surfaceSunk = if (isDark) Color(0xFF1C1C21) else Color(0xFFF1F2F5)
+    val line = if (isDark) Color(0xFF26262C) else Color(0xFFE4E5EA)
+    val text = if (isDark) Color(0xFFF4F4F6) else Color(0xFF111114)
+    val textMuted = if (isDark) Color(0xFF9D9DA6) else Color(0xFF5F6068)
+    val accent = if (isDark) Color(0xFF5C95FF) else Color(0xFF0055CC)
+    val onAccent = if (isDark) Color(0xFF06122A) else Color.White
+    val accentSoft = if (isDark) Color(0xFF5C95FF).copy(alpha = 0.14f) else Color(0xFF0055CC).copy(alpha = 0.08f)
+    val live = if (isDark) Color(0xFF3DD68C) else Color(0xFF14935A)
+    val warn = if (isDark) Color(0xFFF2B544) else Color(0xFFB7791F)
+    val danger = if (isDark) Color(0xFFFF6B6B) else Color(0xFFC62828)
 }
 
 @Composable
