@@ -97,7 +97,8 @@ final class LinkAllStore: ObservableObject {
     @Published var pinnedItemIds: Set<Int64> = []
     /// Active phone call from a connected Android device (nil = no active call).
     @Published var activeCall: IncomingCallState? = nil
-    private var suppressCallUpdatesUntil: Date? = nil
+    /// Set when the phone didn't act on Answer or Decline, so the banner can say so.
+    @Published var callActionNotice: String? = nil
     /// Battery levels for connected peer devices.
     @Published var peerBatteries: [DeviceBatteryState] = []
     @Published var peerNetworks: [DeviceNetworkState] = []
@@ -505,23 +506,21 @@ final class LinkAllStore: ObservableObject {
             // which was silently breaking button hit-testing (mouse-down and
             // mouse-up land on different view instances when the view rebuilds
             // between the two events).
-            if let suppress = suppressCallUpdatesUntil, suppress > Date() {
-                // Ignore status updates for activeCall during optimistic UI wait
-            } else {
-                if let call = s.active_call, call.state.lowercased() != "idle" {
-                    let incoming = IncomingCallState(
-                        deviceId: call.device_id,
-                        deviceName: call.device_name,
-                        state: call.state,
-                        phoneNumber: call.number,
-                        contactName: call.contact_name
-                    )
-                    if activeCall != incoming {
-                        activeCall = incoming
-                    }
-                } else if activeCall != nil {
-                    activeCall = nil
+            if let call = s.active_call, call.state.lowercased() != "idle" {
+                let incoming = IncomingCallState(
+                    deviceId: call.device_id,
+                    deviceName: call.device_name,
+                    state: call.state,
+                    phoneNumber: call.number,
+                    contactName: call.contact_name
+                )
+                if activeCall != incoming {
+                    activeCall = incoming
+                    callActionNotice = nil
                 }
+            } else if activeCall != nil {
+                activeCall = nil
+                callActionNotice = nil
             }
 
             // ── Battery Sync (F20) ────────────────────────────────────────────
@@ -1376,26 +1375,23 @@ final class LinkAllStore: ObservableObject {
 
     // MARK: - Call Continuity
 
-    func acceptCall() {
-        NSSound.beep()
-        guard let call = activeCall else { return }
-        suppressCallUpdatesUntil = Date().addingTimeInterval(3.0)
-        // Temporarily mark as offhook locally for immediate feedback
-        var updated = call
-        updated.state = "offhook"
-        activeCall = updated
-        Task {
-            try? await ipc.callAction(action: "accept", targetDevice: call.deviceId)
-        }
-    }
+    func acceptCall() { requestCallAction("accept") }
 
-    func declineCall() {
-        NSSound.beep()
+    func declineCall() { requestCallAction("decline") }
+
+    /// Asks the phone to answer or decline. The banner follows the phone's own
+    /// next call state rather than guessing: a phone that can't act (the Google
+    /// Play build without Notification access) never changes it, so after a few
+    /// seconds the banner says so instead of looking like a dead button.
+    private func requestCallAction(_ action: String) {
         guard let call = activeCall else { return }
-        suppressCallUpdatesUntil = Date().addingTimeInterval(3.0)
-        withAnimation(.crSpring) { activeCall = nil }
+        callActionNotice = nil
         Task {
-            try? await ipc.callAction(action: "decline", targetDevice: call.deviceId)
+            try? await ipc.callAction(action: action, targetDevice: call.deviceId)
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            if let now = activeCall, now.deviceId == call.deviceId, now.state == call.state {
+                callActionNotice = "Your phone couldn't do that. Use the phone."
+            }
         }
     }
 
