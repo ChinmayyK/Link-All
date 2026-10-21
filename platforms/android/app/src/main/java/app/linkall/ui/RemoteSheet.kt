@@ -4,6 +4,20 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SettingsRemote
@@ -61,7 +75,7 @@ internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, onDismiss: () -> Unit)
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Group(c, "Music") {
                 RemoteKey(c, Icons.Outlined.SkipPrevious, "Previous") { press("previous_track") }
-                RemoteKey(c, Icons.Outlined.PlayArrow, "Play / pause") { press("play_pause") }
+                RemoteKey(c, Icons.Outlined.PlayArrow, "Play") { press("play_pause") }
                 RemoteKey(c, Icons.Outlined.SkipNext, "Next") { press("next_track") }
             }
             Group(c, "Volume") {
@@ -78,19 +92,33 @@ internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, onDismiss: () -> Unit)
 }
 
 @Composable
-private fun Group(c: DdColors, title: String, content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
+private fun Group(c: DdColors, title: String, content: @Composable RowScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        androidx.compose.material3.Text(title, style = DdType.small, color = c.textMuted)
+        Text(title, style = DdType.small, color = c.textMuted)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) { content() }
     }
 }
 
 @Composable
-private fun androidx.compose.foundation.layout.RowScope.RemoteKey(
+private fun RowScope.RemoteKey(
     c: DdColors,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     label: String,
     onClick: () -> Unit,
 ) {
-    PillButton(c, label, filled = false, modifier = Modifier.weight(1f), icon = icon, onClick = onClick)
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(shape)
+            .background(c.surfaceSunk)
+            .border(1.dp, c.line, shape)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(icon, contentDescription = label, tint = c.accent, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(4.dp))
+        Text(label, style = DdType.small, color = c.text, maxLines = 1)
+    }
 }
