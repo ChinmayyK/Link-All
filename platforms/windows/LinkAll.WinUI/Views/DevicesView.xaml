@@ -594,7 +594,10 @@
             <StackPanel Padding="{StaticResource PagePadding}" Spacing="4">
                 <Button Style="{StaticResource AppGhostButton}" Click="OnCloseDeviceClicked"
                         HorizontalAlignment="Left" AutomationProperties.Name="Back to Home"
-                        ToolTipService.ToolTip="Back to Home">
+                        ToolTipService.ToolTip="Back to Home (Esc)">
+                    <Button.KeyboardAccelerators>
+                        <KeyboardAccelerator Key="Escape" />
+                    </Button.KeyboardAccelerators>
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <FontIcon Glyph="&#xE72B;" FontSize="12" />
                         <TextBlock Text="Home" />
