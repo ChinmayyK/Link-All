@@ -1,5 +1,6 @@
 package app.linkall.ui
 
+import app.linkall.supportsRemoteControl
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.SettingsRemote
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.VolumeDown
 import androidx.compose.material.icons.outlined.VolumeOff
@@ -30,6 +32,8 @@ import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.NavigateBefore
 import androidx.compose.material.icons.outlined.NavigateNext
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -37,13 +41,35 @@ import app.linkall.LinkAllJni
 import app.linkall.LinkAllService
 import app.linkall.PeerSnapshot
 
-/** Which connected computer to control, when there's more than one. */
+private const val LAST_REMOTE = "remote_last_device"
+
+private fun lastRemoteDevice(context: android.content.Context): String? =
+    context.getSharedPreferences(LinkAllService.PREFS_NAME, android.content.Context.MODE_PRIVATE).getString(LAST_REMOTE, null)
+
+/**
+ * Which computer to control, when more than one is connected. The one used last
+ * comes first and says so. A computer that is too old to understand the remote
+ * is listed but can't be picked, with the reason, so it never looks like a
+ * button that just does nothing.
+ */
 @Composable
-internal fun RemoteDevicePicker(c: DdColors, connected: List<PeerSnapshot>, onPick: (PeerSnapshot) -> Unit, onDismiss: () -> Unit) {
-    DdSheet(c, icon = Icons.Outlined.SettingsRemote, title = "Remote", subtitle = "Control another device", onDismiss = onDismiss) { close ->
+internal fun RemoteDevicePicker(c: DdColors, computers: List<PeerSnapshot>, onPick: (PeerSnapshot) -> Unit, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val last = remember { lastRemoteDevice(context) }
+    val ordered = remember(computers) { computers.sortedByDescending { it.id == last } }
+    DdSheet(c, icon = Icons.Outlined.SettingsRemote, title = "Control which computer?", subtitle = "${computers.size} are connected", onDismiss = onDismiss) { close ->
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            connected.forEach { peer ->
-                SheetOption(c, osIcon(peer.platform, peer.name), peer.name, null) { close { onPick(peer) } }
+            ordered.forEach { peer ->
+                val supported = supportsRemoteControl(peer.appVersion)
+                val detail = when {
+                    !supported -> "Needs Link All 2.1 or later"
+                    peer.id == last -> "${peer.platform ?: "Computer"} · used last"
+                    else -> peer.platform
+                }
+                SheetOption(c, osIcon(peer.platform, peer.name), peer.name, detail) {
+                    if (supported) close { onPick(peer) }
+                    else Toast.makeText(context, "Update Link All on ${peer.name} to control it.", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -51,8 +77,11 @@ internal fun RemoteDevicePicker(c: DdColors, connected: List<PeerSnapshot>, onPi
 
 /** Music, volume and slide keys for one computer. The computer decides whether to allow it. */
 @Composable
-internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, onDismiss: () -> Unit) {
+internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, canChange: Boolean, onChange: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
+    LaunchedEffect(peer.id) {
+        context.getSharedPreferences(LinkAllService.PREFS_NAME, android.content.Context.MODE_PRIVATE).edit().putString(LAST_REMOTE, peer.id).apply()
+    }
     fun press(action: String) {
         Thread {
             // Null: the engine isn't running. Empty: sent. Otherwise why it could not be sent.
@@ -68,11 +97,14 @@ internal fun RemoteSheet(c: DdColors, peer: PeerSnapshot, onDismiss: () -> Unit)
     }
 
     DdSheet(
-        c, icon = Icons.Outlined.SettingsRemote, title = "Remote",
-        subtitle = "${peer.name} · turn on Remote control in Link All there first",
+        c, icon = Icons.Outlined.SettingsRemote, title = "Remote · ${peer.name}",
+        subtitle = "Turn on Remote control in Link All on that computer first",
         onDismiss = onDismiss,
-    ) { _ ->
+    ) { close ->
         Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (canChange) {
+                PillButton(c, "Change computer", filled = false, compact = true, icon = Icons.Outlined.SwapHoriz) { close { onChange() } }
+            }
             Group(c, "Music") {
                 RemoteKey(c, Icons.Outlined.SkipPrevious, "Previous") { press("previous_track") }
                 RemoteKey(c, Icons.Outlined.PlayArrow, "Play") { press("play_pause") }

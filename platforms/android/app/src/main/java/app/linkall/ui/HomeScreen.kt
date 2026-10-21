@@ -2,6 +2,7 @@
 
 package app.linkall.ui
 
+import app.linkall.controllableComputers
 import app.linkall.UpdateChecker
 import app.linkall.HealthIssue
 
@@ -205,15 +206,16 @@ fun HomeTab(
                     onClick = { if (connected.size == 1) browseFiles(connected.first()) else showBrowsePicker = true }
                 )
                 Hairline(c)
+                val computers = connected.controllableComputers()
                 ActionRow(
                     c, Icons.Outlined.SettingsRemote, "Remote",
-                    when (connected.size) {
-                        0 -> "Control music, volume and slides"
-                        1 -> "Control ${connected.first().name}"
-                        else -> "Control any of ${connected.size} devices"
+                    when (computers.size) {
+                        0 -> "Connect a computer to control its music, volume and slides"
+                        1 -> "Control ${computers.first().name}"
+                        else -> "Choose which of ${computers.size} computers"
                     },
-                    enabled = enabled,
-                    onClick = { if (connected.size == 1) remoteTarget = connected.first() else showRemotePicker = true }
+                    enabled = enabled && computers.isNotEmpty(),
+                    onClick = { if (computers.size == 1) remoteTarget = computers.first() else showRemotePicker = true }
                 )
             }
         }
@@ -287,9 +289,16 @@ fun HomeTab(
         BrowseDevicePicker(c, connected, onPick = browseFiles, onDismiss = { showBrowsePicker = false })
     }
     if (showRemotePicker) {
-        RemoteDevicePicker(c, connected, onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })
+        RemoteDevicePicker(c, connected.controllableComputers(), onPick = { remoteTarget = it }, onDismiss = { showRemotePicker = false })
     }
-    remoteTarget?.let { RemoteSheet(c, it, onDismiss = { remoteTarget = null }) }
+    remoteTarget?.let { target ->
+        RemoteSheet(
+            c, target,
+            canChange = connected.controllableComputers().size > 1,
+            onChange = { remoteTarget = null; showRemotePicker = true },
+            onDismiss = { remoteTarget = null },
+        )
+    }
 
     if (showSendSheet) {
         SendSheet(
