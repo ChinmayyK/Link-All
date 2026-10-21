@@ -53,17 +53,17 @@ import app.linkall.ui.theme.crPressScale
 // PIN tiles 12dp, buttons full pill.
 
 internal class DdColors(isDark: Boolean) {
-    // Warm paper and one ink blue: warm neutrals keep the blue from feeling clinical; green is only for status.
-    val page = if (isDark) Color(0xFF0F1012) else Color(0xFFFAF8F5)
-    val surface = if (isDark) Color(0xFF17181B) else Color(0xFFFFFFFF)
-    val surfaceSunk = if (isDark) Color(0xFF1D1E22) else Color(0xFFF2EFEA)
-    val line = if (isDark) Color(0xFF2A2B30) else Color(0xFFE7E2DA)
-    val text = if (isDark) Color(0xFFF1EFEA) else Color(0xFF1B1A17)
-    val textMuted = if (isDark) Color(0xFFA19D95) else Color(0xFF6B665E)
-    val accent = if (isDark) Color(0xFF7C9BFF) else Color(0xFF2F5BFF)
-    val onAccent = if (isDark) Color(0xFF0B1022) else Color.White
-    val accentSoft = if (isDark) Color(0xFF7C9BFF).copy(alpha = 0.14f) else Color(0xFF2F5BFF).copy(alpha = 0.10f)
-    val live = if (isDark) Color(0xFF34D399) else Color(0xFF16A34A)
+    // Teal on a graphite with a hint of green-grey; one brand colour, and "live" stays a separate green.
+    val page = if (isDark) Color(0xFF0E1113) else Color(0xFFF6F7F7)
+    val surface = if (isDark) Color(0xFF171B1E) else Color(0xFFFFFFFF)
+    val surfaceSunk = if (isDark) Color(0xFF1C2124) else Color(0xFFEEF1F1)
+    val line = if (isDark) Color(0xFF262C30) else Color(0xFFE1E5E7)
+    val text = if (isDark) Color(0xFFECEFF0) else Color(0xFF14191C)
+    val textMuted = if (isDark) Color(0xFF9AA4A9) else Color(0xFF5A666C)
+    val accent = if (isDark) Color(0xFF2DD4BF) else Color(0xFF0D9488)
+    val onAccent = if (isDark) Color(0xFF04201C) else Color.White
+    val accentSoft = if (isDark) Color(0xFF2DD4BF).copy(alpha = 0.14f) else Color(0xFF0D9488).copy(alpha = 0.10f)
+    val live = if (isDark) Color(0xFF4ADE80) else Color(0xFF16A34A)
     val warn = if (isDark) Color(0xFFFBBF24) else Color(0xFFB45309)
     val danger = if (isDark) Color(0xFFF87171) else Color(0xFFDC2626)
 }
