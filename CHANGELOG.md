@@ -12,6 +12,17 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **Android:** Folder sync. Pick a folder on the phone (such as Camera) and a paired computer, and new files in it go to the computer by themselves whenever it is connected, into Downloads/Link All on the computer. It starts with what is new from now on, or sends what is already there if you choose. The phone remembers what each computer received, so nothing arrives twice, and a file that didn't arrive is sent again next time. Pause or remove a folder in Settings › Folder sync.
 - **macOS, Windows, Linux, Android (direct download):** Link All tells you when a newer version exists. It asks GitHub's public release list once a day and shows a banner with a link to the release page (or the `brew upgrade --cask link-all` command for a Homebrew install). It never installs anything and sends nothing about you. Turn it off in Settings › Check for updates. The Google Play and Microsoft Store builds don't check, because the stores update them.
 - **All:** Report a problem, in Diagnostics on macOS and Android and in Settings on Windows and Linux. It builds a report you can copy or save: the app and OS version, device states and the last log lines, with no clipboard text, file names, device names or full addresses (addresses keep only their last number, device IDs six characters). Nothing is uploaded. `linkall-cli report` prints the same text.
+- **Android, macOS, Windows, Linux:** Phone Remote. Control a computer from the phone: play/pause, next and previous track, volume, mute and slide forward/back. It is off by default; turn it on per computer in Settings › Remote Control. The computer allows only those eight actions and nothing else.
+- **All:** One device chooser everywhere. When several devices are connected, send, remote, browse and folder sync ask which one, ranked by the ones that can do the job, instead of picking one for you.
+- **Android:** Settings › Setup lists everything that needs attention (notification access for calls, battery limits, notification permission, connection problems) with a fix button on each, instead of one banner at a time.
+- **Android:** Actions now say what they did, including when they did nothing: "Sent to MacBook Pro", "Nothing to send: the clipboard is empty", "No device is connected".
+
+### Fixed
+- **macOS:** The menu-bar icon no longer turns black in dark mode, and the red dot shows on it again.
+- **macOS:** Dropping a file on the menu-bar icon with several devices asks which one instead of sending to the wrong one.
+- **macOS, Windows:** Answer and Decline on the call banner follow the phone, and the banner says "Unknown caller" instead of showing the phone's name.
+- **Windows:** A send with no window to ask in no longer goes to an arbitrary device; it asks you to open Link All and choose.
+- **Linux:** The tray's clipboard send says it went to all devices.
 
 ## [2.0.2] - 2026-10-20
 
