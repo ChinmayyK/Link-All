@@ -757,6 +757,11 @@ class LinkAllService : Service() {
                 return START_STICKY
             }
 
+            FindPhone.ACTION_STOP -> {
+                FindPhone.stop(this)
+                return START_STICKY
+            }
+
             // User tapped "Send clipboard to Mac" on the dashboard.
             ACTION_PUSH_CLIPBOARD -> {
                 val h = engineHandle
@@ -1103,6 +1108,7 @@ class LinkAllService : Service() {
     }
 
     override fun onDestroy() {
+        FindPhone.stop(this)
         unregisterCallStateCallback()
         stopCallRefresh()
         serviceScope.cancel()
@@ -2135,6 +2141,10 @@ class LinkAllService : Service() {
                         Log.e(TAG, "Error executing remote file action", e)
                     }
                 }
+            }
+
+            LinkAllJni.CR_EVENT_FIND_DEVICE_REQUESTED -> {
+                if (LinkAllJni.eventFindRing(ev)) FindPhone.start(this) else FindPhone.stop(this)
             }
 
             LinkAllJni.CR_EVENT_OPEN_URL_ON_DEVICE_REQUESTED -> {
@@ -4315,6 +4325,9 @@ class LinkAllService : Service() {
         Log.i(TAG, "Applying settings: sync=$syncEnabled text=$syncText images=$syncImages files=$syncFiles")
         // Push to engine — JNI call updates the engine's sync filter flags atomically.
         withEngine { live -> LinkAllJni.applySyncSettings(live, syncEnabled, syncText, syncImages, syncFiles) }
+        val allowFind = p.getBoolean("allow_find_device", false)
+        withEngine { live -> LinkAllJni.setAllowFindDevice(live, allowFind) }
+        if (!allowFind) FindPhone.stop(this)
         // If sync was just disabled, cancel any pending clipboard notifications.
         if (!syncEnabled) {
             notificationManager.cancel(NOTIF_ID_CLIPBOARD_AVAILABLE)

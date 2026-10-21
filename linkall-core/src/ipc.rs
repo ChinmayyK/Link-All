@@ -57,6 +57,7 @@ pub fn parse_transfer_id(s: &str) -> anyhow::Result<[u8; 16]> {
 }
 
 /// Flattened partial-settings struct used by `SaveSettings` IPC variant.
+#[derive(Default)]
 pub struct PartialSettings {
     pub port: Option<u16>,
     pub device_name: Option<String>,

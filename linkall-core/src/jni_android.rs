@@ -2487,6 +2487,29 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventRemoteControlSuccess(
     }
 }
 
+/// Tells the engine whether paired computers may make this phone ring. The
+/// phone keeps the choice in its own preferences and pushes it here, like the
+/// sync switches. Returns 0 on success, -1 if the handle is invalid.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_setAllowFindDevice(
+    _env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    allow: jboolean,
+) -> jint {
+    if handle == 0 {
+        return -1;
+    }
+    let h = unsafe { &*(handle as *const AndroidHandle) };
+    match rt().block_on(h.engine.save_settings_partial(crate::ipc::PartialSettings {
+        allow_find_device: Some(allow != 0),
+        ..Default::default()
+    })) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
 /// 1 when a FindDevice request says to start ringing, 0 when it says to stop.
 #[no_mangle]
 pub extern "system" fn Java_app_linkall_LinkAllJni_eventFindRing(

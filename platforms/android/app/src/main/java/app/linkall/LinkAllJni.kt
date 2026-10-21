@@ -49,6 +49,8 @@ object LinkAllJni {
     const val CR_EVENT_FOLDER_TRANSFER_COMPLETE = 41
     /** A computer answered a remote-control action; see [eventRemoteControlSuccess]. */
     const val CR_EVENT_REMOTE_CONTROL_ACK      = 42
+    /** A paired computer asked this phone to start or stop ringing; see [eventFindRing]. */
+    const val CR_EVENT_FIND_DEVICE_REQUESTED   = 43
 
     // ── Core engine ───────────────────────────────────────────────────────────
     @JvmStatic external fun initContext(context: android.content.Context)
@@ -68,6 +70,10 @@ object LinkAllJni {
     /** Why [remoteControl] could not send, as a sentence, or null. */
     @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
     @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean
+    /** True when a [CR_EVENT_FIND_DEVICE_REQUESTED] says to start ringing, false to stop. */
+    @JvmStatic external fun eventFindRing(event: Long): Boolean
+    /** Whether paired computers may make this phone ring. Returns 0 on success. */
+    @JvmStatic external fun setAllowFindDevice(handle: Long, allow: Boolean): Int
     @JvmStatic external fun ackOpenUrlOnDevice(handle: Long, requesterDeviceId: String, success: Boolean, error: String?): Int
     @JvmStatic external fun eventOpenUrlAckSuccess(event: Long): Boolean
     @JvmStatic external fun pushImage(handle: Long, mimeType: String, data: ByteArray): Int

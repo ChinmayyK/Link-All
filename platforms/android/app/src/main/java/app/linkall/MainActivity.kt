@@ -63,6 +63,7 @@ class MainActivity : ComponentActivity() {
     private val syncText = mutableStateOf(true)
     private val syncImages = mutableStateOf(true)
     private val syncFiles = mutableStateOf(true)
+    private val findPhoneEnabled = mutableStateOf(false)
     private val callContinuityEnabled = mutableStateOf(false)
     private val notificationMirroringEnabled = mutableStateOf(false)
     private val autoForwardSms = mutableStateOf(false)
@@ -306,6 +307,7 @@ class MainActivity : ComponentActivity() {
                         syncText = syncText.value,
                         syncImages = syncImages.value,
                         syncFiles = syncFiles.value,
+                        findPhoneEnabled = findPhoneEnabled.value,
                         callContinuityEnabled = callContinuityEnabled.value,
                         notificationMirroringEnabled = notificationMirroringEnabled.value,
                         autoForwardSms = autoForwardSms.value,
@@ -336,6 +338,10 @@ class MainActivity : ComponentActivity() {
                         onSyncFilesChange = {
                             syncFiles.value = it
                             saveBooleanPref("sync_files", it)
+                        },
+                        onFindPhoneChange = {
+                            findPhoneEnabled.value = it
+                            saveBooleanPref("allow_find_device", it)
                         },
                         onCallContinuityChange = { enabled ->
                             val apply = {
@@ -671,6 +677,7 @@ class MainActivity : ComponentActivity() {
         syncText.value = prefs.getBoolean("sync_text", true)
         syncImages.value = prefs.getBoolean("sync_images", true)
         syncFiles.value = prefs.getBoolean("sync_files", true)
+        findPhoneEnabled.value = prefs.getBoolean("allow_find_device", false)
         callContinuityEnabled.value = prefs.getBoolean("call_continuity_enabled", false)
         notificationMirroringEnabled.value = prefs.getBoolean("notification_mirroring", false)
         autoForwardSms.value = prefs.getBoolean("auto_forward_sms", false)
