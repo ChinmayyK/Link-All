@@ -228,6 +228,19 @@ pub fn page(hub: &Hub) -> adw::PreferencesPage {
     );
     page.add(&drop);
 
+    let walk_away = adw::PreferencesGroup::builder()
+        .title("Walk-Away Lock")
+        .build();
+    switch(
+        hub,
+        &walk_away,
+        "lock_when_phone_leaves",
+        "Lock When My Phone Leaves",
+        "Locks this computer when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone",
+        &syncing,
+    );
+    page.add(&walk_away);
+
     let startup = adw::PreferencesGroup::builder().title("Startup").build();
     let login = adw::SwitchRow::builder()
         .title("Start at Login")

@@ -236,6 +236,7 @@ struct IpcSettings: Codable {
     let allow_file_browsing: Bool?
     let allow_remote_control: Bool?
     let drop_folder_enabled: Bool?
+    let lock_when_phone_leaves: Bool?
 }
 
 struct IpcResponse<T: Codable>: Codable {
@@ -750,7 +751,8 @@ extension LinkAllIPCClient {
             startOnLogin: false,
             allowFileBrowsing: s.allow_file_browsing ?? false,
             allowRemoteControl: s.allow_remote_control ?? false,
-            dropFolderEnabled: s.drop_folder_enabled ?? false
+            dropFolderEnabled: s.drop_folder_enabled ?? false,
+            lockWhenPhoneLeaves: s.lock_when_phone_leaves ?? false
         )
     }
 
@@ -779,6 +781,7 @@ extension LinkAllIPCClient {
             "allow_file_browsing":              snapshot.allowFileBrowsing,
             "allow_remote_control":             snapshot.allowRemoteControl,
             "drop_folder_enabled":              snapshot.dropFolderEnabled,
+            "lock_when_phone_leaves":           snapshot.lockWhenPhoneLeaves,
         ]
         _ = try await send(cmd: cmd)
     }

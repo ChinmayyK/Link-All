@@ -354,6 +354,13 @@ private struct GeneralPane: View {
             }
         }
 
+        PrefsSection(title: "Walk-Away Lock", icon: "figure.walk", tint: CRTheme.accentPurple) {
+            PrefsRow(icon: "lock.fill", label: "Lock when my phone leaves",
+                     description: "Locks this Mac when the paired phone that was connected has been gone for 30 seconds. A phone that sleeps or loses Wi-Fi counts as gone.") {
+                Toggle("", isOn: $copy.lockWhenPhoneLeaves).labelsHidden()
+            }
+        }
+
         PrefsSection(title: "Link All Drop", icon: "tray.and.arrow.up.fill", tint: CRTheme.accentIndigo) {
             PrefsRow(icon: "folder.fill.badge.plus", label: "Send files dropped in ~/Link All Drop",
                      description: "Anything you put in the Link All Drop folder in your home folder is sent to your paired devices on its own.") {

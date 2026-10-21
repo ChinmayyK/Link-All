@@ -214,6 +214,7 @@ struct LinkAllSettingsSnapshot: Equatable {
     var allowFileBrowsing: Bool
     var allowRemoteControl: Bool = false
     var dropFolderEnabled: Bool = false
+    var lockWhenPhoneLeaves: Bool = false
 }
 
 // MARK: - Sync Mode

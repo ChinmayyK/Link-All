@@ -26,6 +26,7 @@ namespace LinkAll.WinUI.Views
             _ = LoadFileBrowsingAsync();
             _ = LoadRemoteControlAsync();
             _ = LoadDropFolderAsync();
+            _ = LoadWalkAwayAsync();
             UpdateRow.Visibility = LinkAll.WinUI.Services.UpdateChecker.Supported ? Visibility.Visible : Visibility.Collapsed;
             _showingSavedUpdateCheck = true;
             UpdateCheckToggle.IsOn = LinkAll.WinUI.Services.UpdateChecker.Enabled;
@@ -112,6 +113,32 @@ namespace LinkAll.WinUI.Views
             var on = DropFolderToggle.IsOn;
             var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("drop_folder_enabled", on))));
             DaemonActions.ReportIfFailed("Link All Drop", resp);
+        }
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _showingSavedWalkAway;
+
+        private async Task LoadWalkAwayAsync()
+        {
+            var on = await Task.Run(() =>
+            {
+                using var doc = DaemonClient.GetSettings();
+                return doc != null
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("lock_when_phone_leaves", out var value)
+                    && value.ValueKind == JsonValueKind.True;
+            });
+            _showingSavedWalkAway = true;
+            WalkAwayToggle.IsOn = on;
+            _showingSavedWalkAway = false;
+        }
+
+        private async void OnWalkAwayToggled(object sender, RoutedEventArgs e)
+        {
+            if (_showingSavedWalkAway) return;
+            var on = WalkAwayToggle.IsOn;
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("lock_when_phone_leaves", on))));
+            DaemonActions.ReportIfFailed("Lock when my phone leaves", resp);
         }
 
         private async void OnFileBrowsingToggled(object sender, RoutedEventArgs e)
