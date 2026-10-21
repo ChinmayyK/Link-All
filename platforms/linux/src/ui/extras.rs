@@ -131,11 +131,46 @@ fn send_number(number: String) {
             toast("Connect a paired phone that runs Link All 2.1 or later");
             return;
         };
-        let reply: Result<Value, _> =
-            ipc::call(json!({ "cmd": "dial_number", "target": id, "number": number })).await;
-        match reply {
-            Ok(_) => toast(&format!("Check {name} and tap the notification")),
-            Err(e) => toast(&e.to_string()),
-        }
+        dial(&id, &name, &number).await;
     });
+}
+
+/// Asks for a number and offers it to the phone `id`, from that phone's page.
+pub fn call_on(id: &str, name: &str) {
+    let entry = adw::EntryRow::builder().title("Phone number").build();
+    let list = gtk::ListBox::builder()
+        .css_classes(["boxed-list"])
+        .selection_mode(gtk::SelectionMode::None)
+        .build();
+    list.append(&entry);
+    let dialog = adw::AlertDialog::builder()
+        .heading(format!("Call from {name}"))
+        .body(format!(
+            "{name} shows a notification. Tap it to open the dialer."
+        ))
+        .extra_child(&list)
+        .close_response("cancel")
+        .default_response("send")
+        .build();
+    dialog.add_responses(&[("cancel", "Cancel"), ("send", "Send to Phone")]);
+    dialog.set_response_appearance("send", adw::ResponseAppearance::Suggested);
+    let (id, name) = (id.to_string(), name.to_string());
+    dialog.connect_response(Some("send"), move |_, _| {
+        let number = entry.text().trim().to_string();
+        if number.is_empty() {
+            return;
+        }
+        let (id, name) = (id.clone(), name.clone());
+        glib::spawn_future_local(async move { dial(&id, &name, &number).await });
+    });
+    dialog.present(window().as_ref());
+}
+
+async fn dial(id: &str, name: &str, number: &str) {
+    let reply: Result<Value, _> =
+        ipc::call(json!({ "cmd": "dial_number", "target": id, "number": number })).await;
+    match reply {
+        Ok(_) => toast(&format!("Check {name} and tap the notification")),
+        Err(e) => toast(&e.to_string()),
+    }
 }

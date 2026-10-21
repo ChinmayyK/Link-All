@@ -1,12 +1,12 @@
-//! Transfers: send files, follow what's moving right now, and find what
-//! arrived recently.
+//! Files: send files, browse what a paired device shares, follow what's
+//! moving right now, and find what arrived recently.
 
 use super::{
     act, ago, human_bytes, icon_button, page_column, placeholder_row, section, send, show_in_folder,
 };
 use crate::{hub::Hub, ipc};
 use adw::prelude::*;
-use gtk::{gio, glib};
+use gtk::glib;
 use serde_json::{json, Value};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -83,47 +83,17 @@ pub fn page(hub: &Hub) -> gtk::ScrolledWindow {
     }
     card.add_controller(motion);
 
+    let (browse_box, browse_list) = section("Browse");
+    column.append(&browse_box);
+    follow_paired(hub, &browse_list);
+
     let (active_box, active_list) = section("In Progress");
     let idle = placeholder_row("Nothing is transferring");
     active_list.append(&idle);
     column.append(&active_box);
+    follow_active(hub, &active_list, move |n| idle.set_visible(n == 0));
     let (recent_box, recent_list) = section("Recent");
     column.append(&recent_box);
-
-    let live: Rc<RefCell<HashMap<String, Live>>> = Rc::default();
-    {
-        let hub2 = hub.clone();
-        hub.on_status(move |hub| {
-            let transfers = hub.status.borrow()["active_transfers"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
-            let mut live = live.borrow_mut();
-            let ids: Vec<String> = transfers
-                .iter()
-                .filter_map(|t| t["transfer_id"].as_str().map(str::to_string))
-                .collect();
-            live.retain(|id, l| {
-                let keep = ids.contains(id);
-                if !keep {
-                    active_list.remove(&l.row);
-                }
-                keep
-            });
-            for t in &transfers {
-                let Some(id) = t["transfer_id"].as_str() else {
-                    continue;
-                };
-                let entry = live.entry(id.to_string()).or_insert_with(|| {
-                    let l = live_row(&hub2, t);
-                    active_list.append(&l.row);
-                    l
-                });
-                update(entry, t);
-            }
-            idle.set_visible(live.is_empty());
-        });
-    }
 
     let add_recent = {
         let recent_list = recent_list.clone();
@@ -176,6 +146,96 @@ pub fn page(hub: &Hub) -> gtk::ScrolledWindow {
     hub.on_activity(move |_, e| add_recent(e, true));
 
     page_column(&column)
+}
+
+/// One row per paired device: a connected one opens its files, an offline one its page.
+fn follow_paired(hub: &Hub, list: &gtk::ListBox) {
+    let list = list.clone();
+    let signature = RefCell::new(String::new());
+    hub.on_status(move |hub| {
+        let paired: Vec<Value> = hub
+            .peers()
+            .into_iter()
+            .filter(|p| p["trusted"] == true)
+            .collect();
+        let sig: String = paired
+            .iter()
+            .map(|p| format!("{}{}{}", p["id"], p["friendly_name"], p["status"]))
+            .collect();
+        if *signature.borrow() == sig {
+            return;
+        }
+        *signature.borrow_mut() = sig;
+        list.remove_all();
+        if paired.is_empty() {
+            list.append(&placeholder_row("Pair a device to browse its files"));
+            return;
+        }
+        for p in &paired {
+            let id = p["id"].as_str().unwrap_or_default().to_string();
+            let connected = p["status"] == "connected";
+            let row = adw::ActionRow::builder()
+                .title(glib::markup_escape_text(
+                    p["friendly_name"].as_str().unwrap_or("Device"),
+                ))
+                .subtitle(if connected {
+                    "Browse its files"
+                } else {
+                    "Not connected"
+                })
+                .activatable(true)
+                .build();
+            row.add_prefix(&gtk::Image::from_icon_name(crate::theme::os_icon(
+                p["platform"].as_str().unwrap_or_default(),
+            )));
+            row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+            row.connect_activated(move |_| {
+                if connected {
+                    super::files::browse(&id);
+                } else {
+                    super::device::open(&id);
+                }
+            });
+            list.append(&row);
+        }
+    });
+}
+
+/// Keeps `list` showing the transfers moving now, one row each, with their
+/// controls; `on_count` hears how many there are after each change.
+pub fn follow_active(hub: &Hub, list: &gtk::ListBox, on_count: impl Fn(usize) + 'static) {
+    let live: Rc<RefCell<HashMap<String, Live>>> = Rc::default();
+    let (hub2, list) = (hub.clone(), list.clone());
+    hub.on_status(move |hub| {
+        let transfers = hub.status.borrow()["active_transfers"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        let mut live = live.borrow_mut();
+        let ids: Vec<String> = transfers
+            .iter()
+            .filter_map(|t| t["transfer_id"].as_str().map(str::to_string))
+            .collect();
+        live.retain(|id, l| {
+            let keep = ids.contains(id);
+            if !keep {
+                list.remove(&l.row);
+            }
+            keep
+        });
+        for t in &transfers {
+            let Some(id) = t["transfer_id"].as_str() else {
+                continue;
+            };
+            let entry = live.entry(id.to_string()).or_insert_with(|| {
+                let l = live_row(&hub2, t);
+                list.append(&l.row);
+                l
+            });
+            update(entry, t);
+        }
+        on_count(live.len());
+    });
 }
 
 fn live_row(hub: &Hub, t: &Value) -> Live {
@@ -386,12 +446,7 @@ fn recent_row(e: &Value) -> adw::ActionRow {
         let reveal = icon_button("folder-open-symbolic", "Show in Folder");
         {
             let path = path.clone();
-            open.connect_clicked(move |_| {
-                let _ = gio::AppInfo::launch_default_for_uri(
-                    &gio::File::for_path(&path).uri(),
-                    None::<&gio::AppLaunchContext>,
-                );
-            });
+            open.connect_clicked(move |_| super::open_file(std::path::Path::new(&path)));
         }
         reveal.connect_clicked(move |_| show_in_folder(std::path::Path::new(&path)));
         row.add_suffix(&open);

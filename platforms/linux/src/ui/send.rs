@@ -4,7 +4,7 @@
 use super::{act, toast, window};
 use crate::hub::Hub;
 use adw::prelude::*;
-use gtk::gio;
+use gtk::{gio, glib};
 use serde_json::json;
 use std::path::PathBuf;
 
@@ -141,4 +141,29 @@ pub fn accept_drops(
         true
     });
     widget.add_controller(drop);
+}
+
+/// Sends the text on this computer's clipboard to `target`, or to every connected device.
+pub fn send_clipboard(hub: &Hub, target: Option<String>) {
+    let Some(display) = gtk::gdk::Display::default() else {
+        return;
+    };
+    let hub = hub.clone();
+    glib::spawn_future_local(async move {
+        match display.clipboard().read_text_future().await {
+            Ok(Some(text)) if !text.trim().is_empty() => {
+                let req = match &target {
+                    Some(t) => json!({ "cmd": "push_text_to", "text": text.as_str(), "target": t }),
+                    None => json!({ "cmd": "push_text", "text": text.as_str() }),
+                };
+                let done = if target.is_some() {
+                    "Clipboard sent"
+                } else {
+                    "Clipboard sent to all devices"
+                };
+                act(req, Some(done), &hub)
+            }
+            _ => toast("Copy some text first, then send it"),
+        }
+    });
 }

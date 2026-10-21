@@ -136,7 +136,7 @@ fn main() -> gtk::glib::ExitCode {
                             app.activate();
                             ui::send::pick_files(&hub2, Some(id));
                         }
-                        tray::Command::SendClipboard => ui::devices::send_clipboard(&hub2, None),
+                        tray::Command::SendClipboard => ui::send::send_clipboard(&hub2, None),
                         tray::Command::Palette => {
                             app.activate();
                             app.activate_action("palette", None);

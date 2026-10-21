@@ -1,7 +1,8 @@
 //! Browse Files: the files a connected device shares, with previews, filters
-//! and search. Clicking a file downloads it to this computer.
+//! and search. Clicking a file downloads it to this computer. Pushed over the
+//! sections from a device's page or from Files.
 
-use super::{human_bytes, open_page, toast};
+use super::{human_bytes, toast};
 use crate::{hub::Hub, ipc};
 use adw::prelude::*;
 use base64::Engine as _;
@@ -57,6 +58,7 @@ struct State {
     offset: Cell<u32>,
     generation: Cell<u32>,
     wanted: RefCell<Option<String>>,
+    page: adw::NavigationPage,
 }
 
 thread_local! {
@@ -66,18 +68,18 @@ thread_local! {
 }
 const MAX_THUMBNAILS: usize = 4;
 
-/// Opens Browse Files on `device`.
+/// Opens Browse Files on `device`, over whatever is showing.
 pub fn browse(device: &str) {
     STATE.with(|s| {
         if let Some(state) = s.borrow().as_ref() {
             *state.wanted.borrow_mut() = Some(device.to_string());
             sync_devices(state);
+            super::push_over(&state.page);
         }
     });
-    open_page("files");
 }
 
-pub fn page(hub: &Hub) -> gtk::Box {
+pub fn page(hub: &Hub) -> adw::NavigationPage {
     let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
 
     let top = gtk::Box::builder()
@@ -161,6 +163,7 @@ pub fn page(hub: &Hub) -> gtk::Box {
     stack.add_named(&spinner, Some("loading"));
     stack.set_visible_child_name("empty");
     root.append(&stack);
+    let (page, _) = super::pushed_page("browse-files", "Browse Files", &root);
 
     let state = Rc::new(State {
         hub: hub.clone(),
@@ -175,6 +178,7 @@ pub fn page(hub: &Hub) -> gtk::Box {
         offset: Cell::new(0),
         generation: Cell::new(0),
         wanted: RefCell::default(),
+        page: page.clone(),
     });
 
     let mut first: Option<gtk::ToggleButton> = None;
@@ -238,7 +242,7 @@ pub fn page(hub: &Hub) -> gtk::Box {
         hub.on_status(move |_| sync_devices(&state));
     }
     STATE.with(|s| *s.borrow_mut() = Some(state));
-    root
+    page
 }
 
 /// Keeps the device list matching what's connected, and keeps the choice.
