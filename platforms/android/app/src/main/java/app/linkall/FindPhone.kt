@@ -74,7 +74,7 @@ object FindPhone {
             val app = context.applicationContext
             player?.let { runCatching { it.stop() }; it.release() }
             player = null
-            app.getSystemService(Vibrator::class.java)?.cancel()
+            runCatching { app.getSystemService(Vibrator::class.java)?.cancel() }
             if (savedVolume >= 0) {
                 app.getSystemService(AudioManager::class.java)
                     .setStreamVolume(AudioManager.STREAM_ALARM, savedVolume, 0)
