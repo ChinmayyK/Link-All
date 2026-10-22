@@ -1274,6 +1274,25 @@ impl PeerManager {
             .collect()
     }
 
+    /// Open incoming pairing requests from devices other than `except`: how
+    /// many in all, and how many of those are connected from `host`.
+    pub fn open_pairing_requests(&self, except: Uuid, host: Option<IpAddr>) -> (usize, usize) {
+        let mut all = 0;
+        let mut from_host = 0;
+        for p in self.store.iter() {
+            let open = p.pairing_requested && p.pairing_expires_in().is_some_and(|left| left > 0);
+            if *p.key() == except || !open {
+                continue;
+            }
+            all += 1;
+            let ip = self.live_endpoint(*p.key()).map(|e| e.ip().to_canonical());
+            if host.is_some() && ip == host {
+                from_host += 1;
+            }
+        }
+        (all, from_host)
+    }
+
     pub fn is_connected(&self, device_id: Uuid) -> bool {
         self.live.contains_key(&device_id)
     }
@@ -1439,6 +1458,31 @@ mod tests {
     use std::net::Ipv4Addr;
     use tempfile::NamedTempFile;
     use tokio::sync::oneshot;
+
+    #[test]
+    fn open_pairing_requests_counts_only_open_ones_from_others() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let ids: Vec<Uuid> = (0..3).map(|_| Uuid::new_v4()).collect();
+        for (i, id) in ids.iter().enumerate() {
+            manager
+                .upsert_peer(
+                    *id,
+                    format!("Phone {i}"),
+                    SocketAddr::from(([10, 0, 0, i as u8 + 1], 47823)),
+                    false,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+        }
+        manager.set_pairing_requested(ids[0], true).unwrap();
+        manager.set_pairing_requested(ids[1], true).unwrap();
+
+        assert_eq!(manager.open_pairing_requests(ids[2], None).0, 2);
+        assert_eq!(manager.open_pairing_requests(ids[0], None).0, 1);
+        manager.end_pairing(ids[1], None).unwrap();
+        assert_eq!(manager.open_pairing_requests(ids[2], None).0, 1);
+    }
 
     #[test]
     fn unreadable_store_is_set_aside_and_starts_empty() {

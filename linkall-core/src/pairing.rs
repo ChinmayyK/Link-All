@@ -195,6 +195,12 @@ pub const PAIRING_TIMEOUT: Duration = Duration::from_secs(60);
 /// `arm_pairing_expiry`).
 pub const PAIRING_RESEND: Duration = Duration::from_secs(10);
 
+/// Incoming pairing requests that may be open at once, overall and from one
+/// address. Each shows a prompt and keeps its device's untrusted record from
+/// being evicted, so a flood of fresh identities asking to pair is capped.
+pub const MAX_OPEN_PAIRING_REQUESTS: usize = 8;
+pub const MAX_OPEN_PAIRING_REQUESTS_PER_HOST: usize = 2;
+
 /// After our user declines a device, a new request from it within this window
 /// is declined automatically, so a declined device can't nag. Declining is
 /// otherwise "not now", never a block: the device may ask again later.
