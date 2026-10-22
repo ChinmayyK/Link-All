@@ -61,7 +61,11 @@ pub async fn call_with(req: Value, timeout: Duration) -> Result<Value> {
 
 /// For threads that aren't the GTK thread (clipboard watcher, tray).
 pub fn call_blocking(req: Value) -> Result<Value> {
-    runtime().block_on(send(req, DEFAULT_TIMEOUT))
+    call_blocking_with(req, DEFAULT_TIMEOUT)
+}
+
+pub fn call_blocking_with(req: Value, timeout: Duration) -> Result<Value> {
+    runtime().block_on(send(req, timeout))
 }
 
 pub fn is_running() -> bool {
