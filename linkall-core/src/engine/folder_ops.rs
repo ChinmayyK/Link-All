@@ -512,6 +512,12 @@ impl Engine {
                 !self.shared.folders.lock().unwrap().is_cancelled(batch_id),
                 "cancelled"
             );
+            // Registered before counting, so a file that finishes between the
+            // count and the wait still wakes us.
+            let left = self.shared.file_transfers.lock().await.outbound_left();
+            let finished = left.notified();
+            tokio::pin!(finished);
+            finished.as_mut().enable();
             let in_flight = self
                 .shared
                 .file_transfers
@@ -527,7 +533,8 @@ impl Engine {
             } else if gone_since.get_or_insert_with(Instant::now).elapsed() > TARGET_GONE_GRACE {
                 anyhow::bail!("the device disconnected");
             }
-            tokio::time::sleep(Duration::from_millis(200)).await;
+            // The poll only covers cancelling and the target going away.
+            let _ = tokio::time::timeout(Duration::from_millis(200), finished).await;
         }
     }
 
