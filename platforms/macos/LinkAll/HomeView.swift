@@ -20,7 +20,17 @@ struct HomeView: View {
                 ThisMacHeader(store: store)
                 attention(all)
 
-                if linked.isEmpty && others.isEmpty {
+                if linked.isEmpty && others.isEmpty && store.serviceStarting {
+                    // Before the service first answers: not "pair a device" to
+                    // someone who already has, for the second it takes.
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text("Looking for your devices…")
+                            .font(.system(size: 13))
+                            .foregroundStyle(CRTheme.inkSoft)
+                    }
+                    .padding(.top, 28)
+                } else if linked.isEmpty && others.isEmpty {
                     HomeEmptyState(store: store)
                         .padding(.top, 24)
                 } else {
