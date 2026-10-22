@@ -12,6 +12,7 @@ mod now_playing;
 pub mod pairing;
 pub mod palette;
 mod scratchpad;
+mod share;
 pub mod send;
 mod settings;
 mod transfers;
@@ -390,7 +391,7 @@ struct PageSpec {
     icon: &'static str,
 }
 
-const PAGES: [PageSpec; 5] = [
+const PAGES: [PageSpec; 6] = [
     PageSpec {
         id: "home",
         title: "Home",
@@ -405,6 +406,11 @@ const PAGES: [PageSpec; 5] = [
         id: "files",
         title: "Files",
         icon: "folder-symbolic",
+    },
+    PageSpec {
+        id: "share",
+        title: "Keyboard & Mouse",
+        icon: "input-keyboard-symbolic",
     },
     PageSpec {
         id: "activity",
@@ -543,10 +549,11 @@ pub fn build(app: &adw::Application, hub: &Hub, clipboard: &ClipboardTx) -> adw:
         .vhomogeneous(false)
         .build();
     let (settings_root, settings_pages) = settings::page(hub);
-    let sections: [gtk::Widget; 5] = [
+    let sections: [gtk::Widget; 6] = [
         home::page(hub, clipboard).upcast(),
         clipboard::page(hub, clipboard).upcast(),
         transfers::page(hub).upcast(),
+        share::page(hub).upcast(),
         activity::page(hub).upcast(),
         settings_root.upcast(),
     ];

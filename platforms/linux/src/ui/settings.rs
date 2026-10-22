@@ -224,6 +224,8 @@ pub fn page(hub: &Hub) -> (adw::PreferencesPage, Vec<adw::NavigationPage>) {
         &syncing,
     );
 
+    let share = edge_group();
+
     let walk_away = adw::PreferencesGroup::builder()
         .title("Walk-Away Lock")
         .build();
@@ -349,9 +351,9 @@ pub fn page(hub: &Hub) -> (adw::PreferencesPage, Vec<adw::NavigationPage>) {
             &preferences,
             "continuity",
             "Continuity",
-            "Remote control, Drop and walk-away lock",
+            "Remote control, Drop, keyboard and mouse sharing, walk-away lock",
             "phone-symbolic",
-            vec![&remote, &drop, &walk_away],
+            vec![&remote, &share, &drop, &walk_away],
         ),
         (
             &preferences,
@@ -399,6 +401,39 @@ pub fn page(hub: &Hub) -> (adw::PreferencesPage, Vec<adw::NavigationPage>) {
     page.add(&system);
     page.add(&about);
     (page, pages)
+}
+
+/// Shares this computer's keyboard and mouse with the ones next to it: a
+/// switch, and for each side of the screen which paired computer sits there.
+fn edge_group() -> adw::PreferencesGroup {
+    let group = adw::PreferencesGroup::builder()
+        .title("Keyboard & Mouse")
+        .description(
+            "Push the pointer past a screen edge to control the computer next to this one. \
+             The other computer needs Link All 2.1 and Remote control turned on. \
+             Press Ctrl+Alt+Esc to bring the keyboard and mouse back at any time. \
+             Works on X11 sessions, not Wayland.",
+        )
+        .build();
+    let on = adw::SwitchRow::builder()
+        .title("Share This Keyboard and Mouse")
+        .active(prefs::get_bool(crate::edge::ENABLED, false))
+        .build();
+    on.connect_active_notify(|r| {
+        prefs::set(crate::edge::ENABLED, r.is_active().into());
+        crate::edge::reload();
+    });
+    group.add(&on);
+
+    let open = adw::ActionRow::builder()
+        .title("Choose Where Each Computer Sits")
+        .subtitle("And check that each one is ready")
+        .activatable(true)
+        .build();
+    open.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
+    open.connect_activated(|_| super::open_page("share"));
+    group.add(&open);
+    group
 }
 
 /// Distro, desktop and session: what only this app knows, for the report.
