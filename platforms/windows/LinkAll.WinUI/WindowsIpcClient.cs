@@ -260,6 +260,9 @@ namespace LinkAll.WinUI
         public static JsonDocument? PendingRemoteClipboards() => Send(Req("pending_remote_clipboards"));
         public static JsonDocument? ApplyClipboard(string contentHash) => Send(Req("apply_clipboard", ("content_hash", contentHash)));
         public static JsonDocument? GetSettings() => Send(Req("get_settings"));
+
+        /// <summary>Where the keyboard and mouse hand-off stands. <c>peek</c> looks without clearing what the hand-off itself acts on.</summary>
+        public static JsonDocument? EdgeStatus(bool peek) => Send(Req("edge_status", ("peek", peek)));
         public static JsonDocument? GetMetrics() => Send(Req("get_metrics"));
 
         // ── Remote File Explorer ──────────────────────────────────────────────

@@ -383,6 +383,17 @@ namespace LinkAll.WinUI.Services
                             }
                             break;
                         }
+                        case NativeCore.PB_EVENT_EDGE_RETURNED:
+                        {
+                            LinkAll.WinUI.Services.EdgeControlService.Current?.OnReturned(NativeCore.linkall_event_edge_pos(ev));
+                            break;
+                        }
+                        case NativeCore.PB_EVENT_EDGE_ENDED:
+                        {
+                            var reason = NativeCore.PtrToUtf8String(NativeCore.linkall_event_text(ev)) ?? "The other computer ended it.";
+                            LinkAll.WinUI.Services.EdgeControlService.Current?.OnEnded(reason);
+                            break;
+                        }
                         case NativeCore.PB_EVENT_OPEN_URL_ON_DEVICE_ACK:
                         {
                             var success = NativeCore.linkall_event_open_url_ack_success(ev) != 0;

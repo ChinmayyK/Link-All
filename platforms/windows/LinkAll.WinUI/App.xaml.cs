@@ -148,6 +148,7 @@ public partial class App : Application
             queue?.TryEnqueue(() =>
             {
                 try { LinkAll.WinUI.Services.TrayService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
+                try { LinkAll.WinUI.Services.EdgeControlService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
                     try { var h = _engineHandle; _engineHandle = IntPtr.Zero; LinkAll.WinUI.NativeCore.linkall_shutdown(h); } catch (Exception ex) { App.HandleError(ex); }
@@ -257,6 +258,12 @@ public partial class App : Application
             try
             {
                 _dragMonitor = new LinkAll.WinUI.Services.GlobalDragMonitor(Clipboard);
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+
+            try
+            {
+                _ = new LinkAll.WinUI.Services.EdgeControlService();
             }
             catch (Exception ex) { App.HandleError(ex); }
 

@@ -23,6 +23,7 @@ namespace LinkAll.WinUI.Views
             _ = LoadStartupAsync();
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
             EdgeDropToggle.IsOn = LinkAll.WinUI.Services.LocalSettingsStore.GetBool(LinkAll.WinUI.Services.GlobalDragMonitor.EnabledKey, true);
+            LoadEdgeLayout();
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
             _ = LoadFileBrowsingAsync();
             _ = LoadRemoteControlAsync();
@@ -40,6 +41,28 @@ namespace LinkAll.WinUI.Views
                 _ => 0,
             };
         }
+
+        // ── Keyboard and mouse sharing ───────────────────────────────────────
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _loadingEdge;
+
+        private void LoadEdgeLayout()
+        {
+            _loadingEdge = true;
+            try { EdgeControlToggle.IsOn = LinkAll.WinUI.Services.LocalSettingsStore.GetBool(LinkAll.WinUI.Services.EdgeControlService.EnabledKey, false); }
+            finally { _loadingEdge = false; }
+        }
+
+        private void OnEdgeControlToggled(object sender, RoutedEventArgs e)
+        {
+            if (_loadingEdge) return;
+            LinkAll.WinUI.Services.LocalSettingsStore.SetBool(LinkAll.WinUI.Services.EdgeControlService.EnabledKey, EdgeControlToggle.IsOn);
+            LinkAll.WinUI.Services.EdgeControlService.Current?.Reload();
+        }
+
+        private void OnOpenKeyboardMouse(object sender, RoutedEventArgs e) =>
+            DashboardWindow.Current?.NavigateTo("KeyboardMouse");
 
         private void OnEdgeDropToggled(object sender, RoutedEventArgs e) =>
             LinkAll.WinUI.Services.LocalSettingsStore.SetBool(LinkAll.WinUI.Services.GlobalDragMonitor.EnabledKey, EdgeDropToggle.IsOn);
