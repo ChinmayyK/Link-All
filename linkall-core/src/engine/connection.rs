@@ -621,6 +621,9 @@ pub(super) fn reconcile_one_sided_trust(
             }
             // We forgot them but they still remember us: ask our user,
             // exactly as if they had sent a PairingRequest.
+            if !super::trust_ops::room_for_pairing_request(shared, peer_id) {
+                return;
+            }
             info!(peer_id = %peer_id, "peer still trusts us - prompting to re-pair");
             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
             arm_pairing_expiry(shared, peer_id);

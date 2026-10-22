@@ -488,6 +488,23 @@ pub(super) async fn notify_pairing_changed(shared: &EngineShared, peer_id: Uuid)
         .await;
 }
 
+/// Whether `peer_id` may open a new incoming pairing request (see
+/// `pairing::MAX_OPEN_PAIRING_REQUESTS`). Over the cap the request is left
+/// unanswered, and the device's own request times out.
+pub(super) fn room_for_pairing_request(shared: &EngineShared, peer_id: Uuid) -> bool {
+    let host = shared
+        .peer_manager
+        .live_endpoint(peer_id)
+        .map(|e| e.ip().to_canonical());
+    let (all, from_host) = shared.peer_manager.open_pairing_requests(peer_id, host);
+    let room = all < crate::pairing::MAX_OPEN_PAIRING_REQUESTS
+        && from_host < crate::pairing::MAX_OPEN_PAIRING_REQUESTS_PER_HOST;
+    if !room {
+        tracing::warn!(peer_id = %peer_id, open = all, from_host, "too many open pairing requests; ignoring a new one");
+    }
+    room
+}
+
 /// Runs the pairing request with `peer_id` until it is answered, restarted
 /// or `PAIRING_TIMEOUT` passes, then expires it. While we are the one asking,
 /// it re-asks every `PAIRING_RESEND`: an answer sent on a session that was
