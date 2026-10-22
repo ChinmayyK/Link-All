@@ -23,7 +23,7 @@ struct DeviceDetailView: View {
                 }
                 .buttonStyle(LinkButtonStyle())
                 .keyboardShortcut("[", modifiers: .command)
-                .help("Back to Home (⌘[)")
+                .help("Back to Home (Esc or ⌘[)")
 
                 // Who it is and how it's linked.
                 HStack(spacing: 16) {
@@ -59,6 +59,8 @@ struct DeviceDetailView: View {
         .sheet(item: $browsing) { device in
             RemoteExplorerView(store: store, device: device)
         }
+        // Esc goes back to Home, as ⌘[ does.
+        .onExitCommand { store.openDeviceId = nil }
         .fileImporter(isPresented: $choosingFiles, allowedContentTypes: [.item, .folder], allowsMultipleSelection: true) { result in
             if case .success(let urls) = result { store.send(urls, to: device) }
         }
