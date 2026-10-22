@@ -25,15 +25,30 @@ namespace LinkAll.WinUI
         private static readonly ConcurrentQueue<string> _queue = new();
         private static readonly Timer _flushTimer;
         private static int _flushing;
+        private static int _flushCount;
 
         static TraceLog()
         {
             try { Directory.CreateDirectory(LogDir); } catch { }
+            RollIfLarge();
             _flushTimer = new Timer(_ => Flush(), null, 500, 500);
         }
 
         // "u" appends Z, so the time must be UTC to line up with other devices' logs.
         public static void Write(string message) => _queue.Enqueue($"[{DateTime.UtcNow:u}] {message}\n");
+
+        // One earlier log is kept as .1; the trace is a diagnostic, not a record.
+        private const long MaxLogBytes = 5 * 1024 * 1024;
+
+        private static void RollIfLarge()
+        {
+            try
+            {
+                if (File.Exists(LogPath) && new FileInfo(LogPath).Length > MaxLogBytes)
+                    File.Move(LogPath, LogPath + ".1", true);
+            }
+            catch { }
+        }
 
         public static void Flush()
         {
@@ -43,7 +58,13 @@ namespace LinkAll.WinUI
             {
                 var sb = new StringBuilder();
                 while (_queue.TryDequeue(out var line)) sb.Append(line);
-                if (sb.Length > 0) File.AppendAllText(LogPath, sb.ToString());
+                if (sb.Length > 0)
+                {
+                    var text = sb.ToString();
+                    try { File.AppendAllText(LogPath, text); }
+                    catch { _queue.Enqueue(text); throw; }
+                    if (++_flushCount % 120 == 0) RollIfLarge();
+                }
             }
             catch { }
             finally { Interlocked.Exchange(ref _flushing, 0); }

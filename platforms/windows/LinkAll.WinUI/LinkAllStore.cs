@@ -1621,23 +1621,37 @@ namespace LinkAll.WinUI
 
                 if (isRunning)
                 {
-                    var state = DaemonClient.Status();
-                    if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
+                    // Each step on its own: one malformed entry should skip that section,
+                    // not every refresh step after it.
+                    try
                     {
-                        ParseDaemonState(dataElem);
+                        var state = DaemonClient.Status();
+                        if (state != null && state.RootElement.TryGetProperty("data", out var dataElem))
+                        {
+                            ParseDaemonState(dataElem);
+                        }
                     }
+                    catch (Exception ex) { App.HandleError(ex); }
 
-                    var activity = DaemonClient.ActivityRecent(80);
-                    if (activity != null && activity.RootElement.TryGetProperty("data", out var actDataElem))
+                    try
                     {
-                        ParseActivityFeed(actDataElem);
+                        var activity = DaemonClient.ActivityRecent(80);
+                        if (activity != null && activity.RootElement.TryGetProperty("data", out var actDataElem))
+                        {
+                            ParseActivityFeed(actDataElem);
+                        }
                     }
+                    catch (Exception ex) { App.HandleError(ex); }
 
-                    var pending = DaemonClient.PendingRemoteClipboards();
-                    if (pending != null && pending.RootElement.TryGetProperty("data", out var pendDataElem))
+                    try
                     {
-                        ParsePendingClipboards(pendDataElem);
+                        var pending = DaemonClient.PendingRemoteClipboards();
+                        if (pending != null && pending.RootElement.TryGetProperty("data", out var pendDataElem))
+                        {
+                            ParsePendingClipboards(pendDataElem);
+                        }
                     }
+                    catch (Exception ex) { App.HandleError(ex); }
 
                     var settings = DaemonClient.GetSettings();
                     if (settings != null && settings.RootElement.TryGetProperty("data", out var settingsDataElem))
