@@ -31,6 +31,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -727,8 +728,18 @@ internal fun SearchField(c: DdColors, value: String, placeholder: String, modifi
         if (value.isNotEmpty()) {
             Icon(
                 Icons.Rounded.Close, contentDescription = "Clear search", tint = c.textMuted,
-                modifier = Modifier.size(20.dp).clickable { onChange("") }
+                modifier = Modifier.iconTap(20.dp) { onChange("") }
             )
         }
     }
 }
+
+/**
+ * A small icon that acts as a button: drawn at [size] but with the 48dp touch
+ * target Android asks for, and announced to TalkBack as a button.
+ */
+fun Modifier.iconTap(size: androidx.compose.ui.unit.Dp, onClick: () -> Unit): Modifier =
+    this.minimumInteractiveComponentSize()
+        .size(size)
+        .clip(CircleShape)
+        .clickable(role = Role.Button, onClick = onClick)

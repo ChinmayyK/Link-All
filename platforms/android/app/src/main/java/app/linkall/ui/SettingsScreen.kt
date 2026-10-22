@@ -358,7 +358,7 @@ private fun SharedFoldersSection(c: DdColors) {
                             Icons.Rounded.Close,
                             contentDescription = "Stop sharing ${f.label}",
                             tint = c.textMuted,
-                            modifier = Modifier.size(20.dp).clickable {
+                            modifier = Modifier.iconTap(20.dp) {
                                 app.linkall.SharedFolders.remove(context, f.uri)
                                 folders = app.linkall.SharedFolders.list(context)
                             }

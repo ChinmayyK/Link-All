@@ -42,18 +42,18 @@ object CRTheme {
     val bgDark = Color(0xFF000000)
     
     val surfaceLight = Color.White.copy(alpha = 0.90f)
-    val surfaceDark = Color(0xFF1C1C1E).copy(alpha = 0.85f)
+    val surfaceDark = Color(0xFF131316)
     
     val surfaceElevatedLight = Color.White.copy(alpha = 1.0f)
-    val surfaceElevatedDark = Color(0xFF2C2C2E).copy(alpha = 1.0f)
+    val surfaceElevatedDark = Color(0xFF1C1C21)
     
     val textHighLight = Color(0xFF111827)
-    val textHighDark = Color(0xFFF9FAFB)
+    val textHighDark = Color(0xFFF4F4F6)
     val textMediumLight = Color(0xFF4B5563) // Darkened for contrast
-    val textMediumDark = Color(0xFFD4D4D8)  // Lightened for contrast
+    val textMediumDark = Color(0xFF9D9DA6)  // Same as Kit.kt DdColors.textMuted
     
     val strokeLight = Color(0xFFD1D5DB)     // Darkened stroke
-    val strokeDark = Color(0xFF3F3F46)      // Lightened stroke
+    val strokeDark = Color(0xFF26262C)      // Same as Kit.kt DdColors.line
     
     // STRICT ACCENT PALETTE
     val blueSoft = Color(0xFF0066FF)
