@@ -274,11 +274,35 @@ async fn save(
     length: u64,
 ) -> Result<String> {
     let name = clean_name(&query_value(&request.query, "name").unwrap_or_default());
-    let path = unique_path(&shared.dir, &name);
-    // Written under a temporary name and renamed when complete, so a cut-off
-    // upload never looks like a finished file.
-    let partial = path.with_extension("part-upload");
-    let mut file = tokio::fs::File::create(&partial).await?;
+    // The final name is claimed with an empty file so two uploads can't pick the
+    // same one; the data goes to a temporary name of its own and is renamed over
+    // the claim when complete, so a cut-off upload never looks like a finished file.
+    let path = reserve_path(&shared.dir, &name)?;
+    let partial = shared
+        .dir
+        .join(format!(".{}.part-upload", Uuid::new_v4().simple()));
+    let result = write_upload(stream, request, length, &partial).await;
+    if let Err(err) = result {
+        let _ = tokio::fs::remove_file(&partial).await;
+        let _ = tokio::fs::remove_file(&path).await;
+        return Err(err);
+    }
+    tokio::fs::rename(&partial, &path).await?;
+    let saved = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or(name);
+    (shared.on_file)(path, length, saved.clone());
+    Ok(saved)
+}
+
+async fn write_upload(
+    stream: &mut TcpStream,
+    request: &Request,
+    length: u64,
+    partial: &Path,
+) -> Result<()> {
+    let mut file = tokio::fs::File::create(partial).await?;
     let mut remaining = length;
     let take = request.leftover.len().min(remaining as usize);
     file.write_all(&request.leftover[..take]).await?;
@@ -288,24 +312,13 @@ async fn save(
         let want = buf.len().min(remaining as usize);
         let n = match tokio::time::timeout(READ_TIMEOUT, stream.read(&mut buf[..want])).await {
             Ok(Ok(n)) if n > 0 => n,
-            _ => {
-                drop(file);
-                let _ = tokio::fs::remove_file(&partial).await;
-                anyhow::bail!("upload cut off");
-            }
+            _ => anyhow::bail!("upload cut off"),
         };
         file.write_all(&buf[..n]).await?;
         remaining -= n as u64;
     }
     file.flush().await?;
-    drop(file);
-    tokio::fs::rename(&partial, &path).await?;
-    let saved = path
-        .file_name()
-        .map(|n| n.to_string_lossy().to_string())
-        .unwrap_or(name);
-    (shared.on_file)(path, length, saved.clone());
-    Ok(saved)
+    Ok(())
 }
 
 /// A file name that can't leave the folder or hide: no path, no control
@@ -331,20 +344,37 @@ pub fn clean_name(raw: &str) -> String {
     }
 }
 
-/// `dir/name`, or `dir/name (2).ext` and so on when that exists.
-fn unique_path(dir: &Path, name: &str) -> PathBuf {
+/// Claims `dir/name`, or `dir/name (2).ext` and so on when that exists, by
+/// creating it empty; `create_new` makes the claim atomic between uploads.
+fn reserve_path(dir: &Path, name: &str) -> std::io::Result<PathBuf> {
+    let claim = |p: &PathBuf| {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(p)
+            .map(|_| ())
+    };
     let first = dir.join(name);
-    if !first.exists() {
-        return first;
+    match claim(&first) {
+        Ok(()) => return Ok(first),
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+        Err(e) => return Err(e),
     }
     let (stem, ext) = match name.rsplit_once('.') {
         Some((s, e)) if !s.is_empty() => (s.to_string(), format!(".{e}")),
         _ => (name.to_string(), String::new()),
     };
-    (2..10_000)
-        .map(|n| dir.join(format!("{stem} ({n}){ext}")))
-        .find(|p| !p.exists())
-        .unwrap_or_else(|| dir.join(format!("{stem}-{}{ext}", Uuid::new_v4().simple())))
+    for n in 2..10_000 {
+        let candidate = dir.join(format!("{stem} ({n}){ext}"));
+        match claim(&candidate) {
+            Ok(()) => return Ok(candidate),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {}
+            Err(e) => return Err(e),
+        }
+    }
+    let fallback = dir.join(format!("{stem}-{}{ext}", Uuid::new_v4().simple()));
+    claim(&fallback)?;
+    Ok(fallback)
 }
 
 fn query_value(query: &str, key: &str) -> Option<String> {
@@ -457,10 +487,18 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("a.txt"), "x").unwrap();
         assert_eq!(
-            unique_path(dir.path(), "a.txt"),
+            reserve_path(dir.path(), "a.txt").unwrap(),
             dir.path().join("a (2).txt")
         );
-        assert_eq!(unique_path(dir.path(), "b.txt"), dir.path().join("b.txt"));
+        assert_eq!(
+            reserve_path(dir.path(), "b.txt").unwrap(),
+            dir.path().join("b.txt")
+        );
+        // The claim is real: the same name is not handed out twice.
+        assert_eq!(
+            reserve_path(dir.path(), "b.txt").unwrap(),
+            dir.path().join("b (2).txt")
+        );
     }
 
     #[test]

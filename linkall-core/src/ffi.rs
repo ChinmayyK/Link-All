@@ -115,7 +115,9 @@ pub unsafe extern "C" fn linkall_start(
 #[no_mangle]
 pub unsafe extern "C" fn linkall_stop(handle: *mut LinkAllHandle) {
     if !handle.is_null() {
-        drop(Box::from_raw(handle));
+        let handle = Box::from_raw(handle);
+        handle.engine.shutdown();
+        drop(handle);
     }
 }
 

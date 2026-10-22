@@ -448,11 +448,16 @@ fn json_merge(target: &mut serde_json::Value, patch: &serde_json::Value) {
 }
 
 /// For a store file that no longer parses: keep it beside the original as
-/// `<name>.corrupt` and start empty. Failing instead would stop the app from
+/// `<name>.corrupt.<unix time>` and start empty. Failing instead would stop the app from
 /// ever starting again; an empty trust store only means pairing again.
 pub(crate) fn set_aside_corrupt<T: Default>(path: &Path, err: &serde_json::Error) -> T {
+    // Timestamped, so a second corruption doesn't overwrite the first copy.
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let mut aside = path.as_os_str().to_owned();
-    aside.push(".corrupt");
+    aside.push(format!(".corrupt.{stamp}"));
     tracing::warn!(error = %err, path = ?path, "store does not parse; starting empty");
     if let Err(e) = std::fs::rename(path, &aside) {
         tracing::warn!(error = %e, "could not set the unreadable store aside");

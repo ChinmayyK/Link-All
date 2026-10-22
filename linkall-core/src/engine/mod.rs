@@ -201,6 +201,7 @@ impl Engine {
             ))),
             started_at: Instant::now(),
             network_hint: Arc::default(),
+            shutdown: tokio_util::sync::CancellationToken::new(),
         };
 
         let engine = Self {
@@ -386,6 +387,24 @@ impl Engine {
     /// a hotspot): re-read the interfaces now. A change rebinds the
     /// listener, restarts discovery and reconnects peers at once instead of
     /// at the next poll, which is 15 s on Android.
+    /// Stop the engine: free the listening port, end every session and stop
+    /// dialing. The host's runtime outlives the engine, so this is what lets
+    /// a later start bind the same port.
+    pub fn shutdown(&self) {
+        self.shared.shutdown.cancel();
+        if let Ok(sessions) = self.shared.peer_manager.shutdown_all_sessions("engine stopped") {
+            for session in sessions {
+                if let Some(tx) = session.shutdown_tx {
+                    let _ = tx.send(SessionShutdown {
+                        reason: "engine stopped".to_string(),
+                        send_bye: true,
+                        explicit_disconnect: false,
+                    });
+                }
+            }
+        }
+    }
+
     pub fn refresh_network(&self) {
         if let Some(hint) = self.shared.network_hint.get() {
             let _ = hint.try_send(());

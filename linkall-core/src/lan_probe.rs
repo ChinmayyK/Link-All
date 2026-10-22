@@ -102,6 +102,7 @@ pub fn spawn_lan_probe(
     discovery_handle: DiscoveryInputHandle,
     peer_manager: Arc<PeerManager>,
     local_sleeping: Arc<std::sync::atomic::AtomicBool>,
+    shutdown: tokio_util::sync::CancellationToken,
 ) {
     tokio::spawn(async move {
         // Consecutive sweeps that found nothing new — drives idle backoff.
@@ -114,7 +115,10 @@ pub fn spawn_lan_probe(
         let mut next_wait = Duration::ZERO;
 
         loop {
-            tokio::time::sleep(next_wait).await;
+            tokio::select! {
+                _ = tokio::time::sleep(next_wait) => {}
+                _ = shutdown.cancelled() => return,
+            }
             next_wait = HOTSPOT_SWEEP_INTERVAL;
 
             if peer_manager.connected_count() > 0

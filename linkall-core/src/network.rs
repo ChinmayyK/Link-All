@@ -784,17 +784,34 @@ impl PeerSession {
     }
 }
 
+/// Longest a write to the peer may stall. A peer advertising a zero TCP window
+/// would otherwise block the session loop, and its heartbeat, forever.
+const SESSION_WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+
 impl PeerSessionTx {
     pub async fn send(&mut self, msg: &mut AppMessage) -> Result<()> {
-        send_encrypted(&mut self.stream, &mut self.session, msg).await
+        tokio::time::timeout(
+            SESSION_WRITE_TIMEOUT,
+            send_encrypted(&mut self.stream, &mut self.session, msg),
+        )
+        .await
+        .context("write to peer timed out")?
     }
 
     pub async fn send_no_flush(&mut self, msg: &mut AppMessage) -> Result<()> {
-        send_encrypted_no_flush(&mut self.stream, &mut self.session, msg).await
+        tokio::time::timeout(
+            SESSION_WRITE_TIMEOUT,
+            send_encrypted_no_flush(&mut self.stream, &mut self.session, msg),
+        )
+        .await
+        .context("write to peer timed out")?
     }
 
     pub async fn flush(&mut self) -> Result<()> {
-        self.stream.flush().await.context("flushing stream")
+        tokio::time::timeout(SESSION_WRITE_TIMEOUT, self.stream.flush())
+            .await
+            .context("flush to peer timed out")?
+            .context("flushing stream")
     }
 }
 

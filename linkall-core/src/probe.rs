@@ -91,7 +91,20 @@ pub struct ProbeResult {
 
 impl ProbeResult {
     pub fn from_samples(mut samples: Vec<u64>) -> Self {
-        assert!(!samples.is_empty());
+        // Every ping timed out: report a poor link instead of panicking.
+        if samples.is_empty() {
+            let quality = LinkQuality::Poor;
+            return ProbeResult {
+                samples_us: samples,
+                min_us: 0,
+                max_us: 0,
+                p50_us: 0,
+                p95_us: 0,
+                jitter_us: 0,
+                quality,
+                recommended_chunk_size: quality.chunk_size(),
+            };
+        }
         samples.sort_unstable();
 
         let min_us = samples[0];
@@ -248,6 +261,14 @@ pub fn measure_rtt_us(sent_at: Instant) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn probe_result_from_no_samples_is_poor() {
+        let result = ProbeResult::from_samples(Vec::new());
+        assert_eq!(result.quality, LinkQuality::Poor);
+        assert_eq!(result.p50_us, 0);
+        assert!(result.samples_us.is_empty());
+    }
 
     #[test]
     fn probe_result_from_samples() {
