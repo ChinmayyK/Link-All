@@ -699,7 +699,7 @@ private fun NoteCard(
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(
                     Icons.Outlined.ContentCopy, contentDescription = "Copy", tint = c.textMuted,
-                    modifier = Modifier.size(34.dp).clip(CircleShape).clickable(onClick = onCopy).padding(7.dp),
+                    modifier = Modifier.iconTap(34.dp, onCopy).padding(7.dp),
                 )
                 if (note.pinned) Icon(Icons.Outlined.PushPin, contentDescription = "Pinned", tint = c.accent, modifier = Modifier.size(16.dp))
             }

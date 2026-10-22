@@ -13,6 +13,9 @@ fn now_secs() -> u64 {
         .as_secs()
 }
 
+/// Untrusted peers kept in memory; the oldest are dropped past this.
+const MAX_UNTRUSTED_PEERS: usize = 256;
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum TrustState {
@@ -238,6 +241,24 @@ impl TrustStore {
         Ok(())
     }
 
+    fn evict_excess_untrusted(&mut self) {
+        let mut untrusted: Vec<(Uuid, u64)> = self
+            .data
+            .devices
+            .values()
+            .filter(|r| r.state == TrustState::Untrusted)
+            .map(|r| (r.device_id, r.last_seen))
+            .collect();
+        if untrusted.len() <= MAX_UNTRUSTED_PEERS {
+            return;
+        }
+        untrusted.sort_by_key(|(_, last_seen)| *last_seen);
+        let excess = untrusted.len() - MAX_UNTRUSTED_PEERS;
+        for (id, _) in untrusted.into_iter().take(excess) {
+            self.data.devices.remove(&id);
+        }
+    }
+
     pub fn observe_peer(
         &mut self,
         device_id: Uuid,
@@ -285,7 +306,15 @@ impl TrustStore {
         record.key_fingerprint = fingerprint;
         record.last_seen = now;
         let snapshot = record.clone();
-        self.save()?;
+        // Any LAN host can complete a handshake with a fresh identity. Those are
+        // kept in memory only (capped), so a flood can neither grow trust.json nor
+        // cost an fsync per handshake; a record is stored once it is trusted,
+        // rejected or revoked.
+        if snapshot.state == TrustState::Untrusted {
+            self.evict_excess_untrusted();
+        } else {
+            self.save()?;
+        }
         Ok(snapshot)
     }
     pub fn rotate_peer_key(&mut self, device_id: Uuid, new_public_key: &[u8; 32]) -> Result<()> {
@@ -722,7 +751,9 @@ mod tests {
         std::fs::write(&path, b"{\"devices\":{\"half-writ").unwrap();
         let store = TrustStore::load(&path).expect("load must not fail");
         assert!(store.data.devices.is_empty());
-        assert!(dir.path().join("trust.json.corrupt").exists());
+        assert!(std::fs::read_dir(dir.path())
+            .unwrap()
+            .any(|e| e.unwrap().file_name().to_string_lossy().starts_with("trust.json.corrupt")));
     }
 
     #[test]

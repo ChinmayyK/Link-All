@@ -45,6 +45,7 @@ pub(crate) mod clipboard;
 mod connection;
 mod diagnostics;
 mod drop_folder;
+mod edge_ops;
 pub(crate) mod file_ops;
 mod folder_ops;
 mod guest_ops;
@@ -60,6 +61,7 @@ pub(crate) mod telemetry;
 mod transfer_ops;
 mod trust_ops;
 mod types;
+mod wake_ops;
 mod walk_away;
 
 use connection::*;
@@ -144,6 +146,9 @@ impl Engine {
         // Engine events pass through the folder tap on their way to the host.
         let host_event_tx = event_tx;
         let (event_tx, tap_rx) = mpsc::channel(1024);
+        for notice in crate::settings::take_aside_notices() {
+            let _ = event_tx.try_send(EngineEvent::Warning(notice));
+        }
         let shared = EngineShared {
             config: config.clone(),
             trust,
@@ -193,6 +198,8 @@ impl Engine {
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
+            edge: Arc::default(),
+            edge_notice: Arc::default(),
             guest: Arc::default(),
             now_playing_sent: Arc::default(),
             now_playing_remote: Arc::default(),
@@ -201,6 +208,7 @@ impl Engine {
             ))),
             started_at: Instant::now(),
             network_hint: Arc::default(),
+            shutdown: tokio_util::sync::CancellationToken::new(),
         };
 
         let engine = Self {
@@ -386,6 +394,24 @@ impl Engine {
     /// a hotspot): re-read the interfaces now. A change rebinds the
     /// listener, restarts discovery and reconnects peers at once instead of
     /// at the next poll, which is 15 s on Android.
+    /// Stop the engine: free the listening port, end every session and stop
+    /// dialing. The host's runtime outlives the engine, so this is what lets
+    /// a later start bind the same port.
+    pub fn shutdown(&self) {
+        self.shared.shutdown.cancel();
+        if let Ok(sessions) = self.shared.peer_manager.shutdown_all_sessions("engine stopped") {
+            for session in sessions {
+                if let Some(tx) = session.shutdown_tx {
+                    let _ = tx.send(SessionShutdown {
+                        reason: "engine stopped".to_string(),
+                        send_bye: true,
+                        explicit_disconnect: false,
+                    });
+                }
+            }
+        }
+    }
+
     pub fn refresh_network(&self) {
         if let Some(hint) = self.shared.network_hint.get() {
             let _ = hint.try_send(());

@@ -738,6 +738,42 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             },
             Err(_) => IpcResponse::error("unknown device".to_string()),
         }),
+        IpcRequest::WakePeer { target } => Ok(match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match state.engine.wake_peer(id).await {
+                Ok(sent) => IpcResponse::ok(json!({ "packets": sent })),
+                Err(e) => IpcResponse::error(e),
+            },
+            Err(_) => IpcResponse::error("unknown device".to_string()),
+        }),
+        IpcRequest::EdgeBegin { target, edge, pos } => Ok(match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match state.engine.edge_begin(id, edge, pos).await {
+                Ok(()) => IpcResponse::ok(json!({})),
+                Err(e) => IpcResponse::error(e),
+            },
+            Err(_) => IpcResponse::error("unknown device".to_string()),
+        }),
+        IpcRequest::EdgeInput {
+            dx,
+            dy,
+            scroll_x,
+            scroll_y,
+            buttons,
+            keys,
+        } => Ok(
+            match state
+                .engine
+                .edge_input_batch(dx, dy, scroll_x, scroll_y, &buttons, &keys)
+                .await
+            {
+                Ok(()) => IpcResponse::ok(json!({})),
+                Err(e) => IpcResponse::error(e),
+            },
+        ),
+        IpcRequest::EdgeEnd => {
+            state.engine.edge_end().await;
+            Ok(IpcResponse::ok(json!({})))
+        }
+        IpcRequest::EdgeStatus { peek } => Ok(IpcResponse::ok(json!(state.engine.edge_status(peek)))),
         IpcRequest::GuestDropStart => Ok(match state.engine.guest_drop_start().await {
             Ok(session) => IpcResponse::ok(session),
             Err(e) => IpcResponse::error(e),

@@ -39,6 +39,9 @@ namespace LinkAll.WinUI.Services
                 catch (Exception ex)
                 {
                     App.HandleError(ex);
+                    // Keep the unreadable file: the next Set would otherwise overwrite
+                    // it and lose every setting for good.
+                    try { File.Move(FilePath, FilePath + ".bad-" + DateTime.UtcNow.ToString("yyyyMMddHHmmss"), true); } catch { }
                     _cache = new();
                 }
                 return _cache;
@@ -60,7 +63,10 @@ namespace LinkAll.WinUI.Services
                 {
                     var dir = Path.GetDirectoryName(FilePath);
                     if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
-                    File.WriteAllText(FilePath, JsonSerializer.Serialize(dict, LinkAllJsonContext.Default.DictionaryStringString));
+                    // Temp file then replace, so a kill mid-write can't leave a truncated file.
+                    var tmp = FilePath + ".tmp";
+                    File.WriteAllText(tmp, JsonSerializer.Serialize(dict, LinkAllJsonContext.Default.DictionaryStringString));
+                    File.Move(tmp, FilePath, true);
                 }
                 catch (Exception ex) { App.HandleError(ex); }
             }

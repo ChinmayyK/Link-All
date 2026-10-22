@@ -38,7 +38,7 @@
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                            <TextBlock Text="{x:Bind DeviceName, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock Text="{x:Bind DeviceName, Mode=OneTime}" Style="{StaticResource AppBodyStrong}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border Width="7" Height="7" CornerRadius="3.5" VerticalAlignment="Center"
                                         Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}" />
@@ -52,6 +52,7 @@
             <!-- Categories: each jumps to its group below. -->
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" HorizontalScrollMode="Enabled">
                 <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Style="{StaticResource AppSecondaryButton}" Content="Keyboard &amp; mouse" Tag="CatShare" Click="OnCategoryClicked" />
                     <Button Style="{StaticResource AppSecondaryButton}" Content="Sync &amp; clipboard" Tag="CatSync" Click="OnCategoryClicked" />
                     <Button Style="{StaticResource AppSecondaryButton}" Content="Continuity" Tag="CatContinuity" Click="OnCategoryClicked" />
                     <Button Style="{StaticResource AppSecondaryButton}" Content="Files" Tag="CatFiles" Click="OnCategoryClicked" />
@@ -63,6 +64,51 @@
                     <Button Style="{StaticResource AppSecondaryButton}" Content="About" Tag="CatAbout" Click="OnCategoryClicked" />
                 </StackPanel>
             </ScrollViewer>
+
+            <!-- ============================ KEYBOARD &AMP; MOUSE -->
+            <StackPanel x:Name="CatShare" Spacing="8">
+                <TextBlock Text="Keyboard &amp; mouse" Style="{StaticResource AppSectionTitle}" />
+
+                <!-- One keyboard and mouse across computers. Off until turned on. -->
+                <Border Style="{StaticResource AppGroupCard}">
+                    <StackPanel>
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE765;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Share this keyboard and mouse" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Push the pointer past a screen edge to control the computer next to this one"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="EdgeControlToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnEdgeControlToggled"
+                                          AutomationProperties.Name="Share this keyboard and mouse" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="52" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="48,0,0,0"
+                                       Text="Choose which computer sits on each side, and check each is ready"
+                                       Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            <Button Grid.Column="1" Content="Open" Style="{StaticResource AppSecondaryButton}"
+                                    Click="OnOpenKeyboardMouse" />
+                        </Grid>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
 
             <!-- ============================ SYNC &AMP; CLIPBOARD -->
             <StackPanel x:Name="CatSync" Spacing="8">
@@ -133,6 +179,29 @@
                                           VerticalAlignment="Center"
                                           Toggled="OnScreenshotSyncToggled"
                                           AutomationProperties.Name="Send new screenshots automatically" />
+                        </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8A7;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Drop zone at the screen edge" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Drag a file to the right edge of your screen to pick a device to send it to"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="EdgeDropToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnEdgeDropToggled"
+                                          AutomationProperties.Name="Drop zone at the screen edge" />
                         </Grid>
                     </StackPanel>
                 </Border>
@@ -313,7 +382,7 @@
                                 <TextBlock Text="How this computer appears to your other devices"
                                            Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <TextBlock Grid.Column="2" Text="{x:Bind DeviceName, Mode=OneWay}"
+                            <TextBlock Grid.Column="2" Text="{x:Bind DeviceName, Mode=OneTime}"
                                        Style="{StaticResource AppMetric}"
                                        VerticalAlignment="Center" />
                         </Grid>

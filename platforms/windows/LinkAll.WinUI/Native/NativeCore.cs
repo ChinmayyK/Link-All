@@ -51,6 +51,8 @@ namespace LinkAll.WinUI
         public const int PB_EVENT_OPEN_URL_ON_DEVICE_ACK = 39;
         public const int PB_EVENT_NOTIFICATION_RECEIVED = 40;
         public const int PB_EVENT_FOLDER_TRANSFER_COMPLETE = 41;
+        public const int PB_EVENT_EDGE_RETURNED = 42;
+        public const int PB_EVENT_EDGE_ENDED = 43;
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr linkall_start(
@@ -58,6 +60,10 @@ namespace LinkAll.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern void linkall_stop(IntPtr handle);
+
+        // Stops the engine without freeing the handle; for an exiting process.
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void linkall_shutdown(IntPtr handle);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int linkall_push_text(
@@ -119,6 +125,28 @@ namespace LinkAll.WinUI
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern void linkall_free_event(IntPtr ev);
+
+        // Keyboard and mouse hand-off to another computer.
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_event_edge_pos(IntPtr ev);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_edge_begin(IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string deviceId, byte edge, ushort pos);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_edge_move(IntPtr handle, short dx, short dy);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_edge_button(IntPtr handle, byte button, int down);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_edge_scroll(IntPtr handle, short dx, short dy);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int linkall_edge_key(IntPtr handle, ushort scancode, int down);
+
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void linkall_edge_end(IntPtr handle);
 
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int linkall_accept_file_transfer(IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string transferIdHex);

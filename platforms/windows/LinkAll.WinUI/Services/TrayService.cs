@@ -50,8 +50,19 @@ namespace LinkAll.WinUI.Services
                         server ??= new NamedPipeServerStream("LinkAll_Main_Commands", PipeDirection.In);
                         server.WaitForConnection();
                         string? line;
+                        // A client that connects and never writes must not wedge the listener.
                         using (var reader = new StreamReader(server, leaveOpen: true))
-                            line = reader.ReadLine();
+                        {
+                            var read = reader.ReadLineAsync();
+                            if (!read.Wait(2000))
+                            {
+                                read.ContinueWith(t => _ = t.Exception, System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+                                server.Dispose();
+                                server = null;
+                                continue;
+                            }
+                            line = read.Result;
+                        }
                         server.Disconnect();
                         if (string.IsNullOrEmpty(line)) continue;
 
@@ -68,6 +79,10 @@ namespace LinkAll.WinUI.Services
                                 {
                                     ((App)App.Current).ShowMainWindowCommand?.Execute(null);
                                     DashboardWindow.Current?.NavigateTo("Settings");
+                                }
+                                else if (line == "QUIT")
+                                {
+                                    ((App)App.Current).ExitApplicationCommand.Execute(null);
                                 }
                                 else if (line == "RESCAN")
                                 {
@@ -95,13 +110,14 @@ namespace LinkAll.WinUI.Services
 
         private void CheckTrayHealth()
         {
+            Process[] procs = Array.Empty<Process>();
             try
             {
-                var procs = Process.GetProcessesByName("LinkAll.Tray");
+                procs = Process.GetProcessesByName("LinkAll.Tray");
                 if (procs.Length == 0)
                 {
                     _consecutiveIpcFailures = 0;
-                    EnsureTrayProcessRunning();
+                    EnsureTrayProcessRunning(respawn: true);
                     return;
                 }
 
@@ -121,10 +137,11 @@ namespace LinkAll.WinUI.Services
                     {
                         try { proc.Kill(); } catch { }
                     }
-                    EnsureTrayProcessRunning();
+                    EnsureTrayProcessRunning(respawn: true);
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }
+            finally { foreach (var p in procs) p.Dispose(); }
         }
 
         private bool IsIpcResponsive()
@@ -138,12 +155,14 @@ namespace LinkAll.WinUI.Services
             catch { return false; }
         }
 
-        private void EnsureTrayProcessRunning()
+        private void EnsureTrayProcessRunning(bool respawn = false)
         {
             try
             {
                 var procs = Process.GetProcessesByName("LinkAll.Tray");
-                if (procs.Length == 0)
+                var running = procs.Length > 0;
+                foreach (var p in procs) p.Dispose();
+                if (!running)
                 {
                     var baseDir = AppContext.BaseDirectory;
                     // The native tray helper (platforms/windows/tray), copied into
@@ -159,6 +178,7 @@ namespace LinkAll.WinUI.Services
                         Process.Start(new ProcessStartInfo
                         {
                             FileName = trayExe,
+                            Arguments = respawn ? "--respawn" : "",
                             UseShellExecute = true
                         });
                     }

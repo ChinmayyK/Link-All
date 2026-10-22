@@ -310,6 +310,16 @@ pub enum EngineEvent {
         device_id: Uuid,
         accepted: bool,
     },
+    /// The pointer came back over the edge it was handed over by, `pos` of the
+    /// way along it (0..=65535): take the keyboard and mouse back.
+    EdgeReturned {
+        pos: u16,
+    },
+    /// The hand-off ended without the pointer coming back (the other computer
+    /// let go, or went away).
+    EdgeEnded {
+        reason: String,
+    },
     Warning(String),
 }
 
@@ -597,9 +607,15 @@ pub(crate) struct EngineShared {
     pub qr_auth_token: Arc<Mutex<Option<QrAuthToken>>>,
     /// Callers blocked on a remote files or thumbnail reply.
     pub(crate) remote_waiters: RemoteWaiters,
+    /// Whether another computer's keyboard and mouse drive this one, or ours drive another.
+    pub(crate) edge: Arc<std::sync::Mutex<EdgeState>>,
+    /// What an app that does not poll events has yet to be told about a hand-off.
+    pub(crate) edge_notice: Arc<std::sync::Mutex<EdgeNotice>>,
     pub(crate) started_at: Instant,
     /// Asks the network monitor to re-check now (see `Engine::refresh_network`).
     pub(crate) network_hint: Arc<std::sync::OnceLock<mpsc::Sender<()>>>,
+    /// Cancelled by `Engine::shutdown`: stops accepting, dialing and probing.
+    pub(crate) shutdown: tokio_util::sync::CancellationToken,
 }
 
 /// Status reported between devices. The local half caches what this device
@@ -632,6 +648,9 @@ pub(crate) struct RemoteWaiters {
     /// A phone's answer to a find request, keyed by the phone's device id.
     pub(crate) find:
         Arc<Mutex<HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<Result<(), String>>>>>,
+    /// A computer's answer to an `EdgeEnter`, keyed by its device id.
+    pub(crate) edge:
+        Arc<Mutex<HashMap<uuid::Uuid, tokio::sync::oneshot::Sender<Result<(), String>>>>>,
 }
 
 /// The clipboard as Link All last set it on this device.
@@ -652,4 +671,60 @@ impl LatestClipboard {
             .map(|d| d.as_millis() as u64)
             .unwrap_or(0)
     }
+}
+
+impl EngineEvent {
+    /// Events the next one makes obsolete: progress ticks and "something
+    /// changed" pings. When the host is not draining its channel these are
+    /// dropped rather than letting the engine stall behind them.
+    pub fn is_droppable(&self) -> bool {
+        matches!(
+            self,
+            EngineEvent::FileTransferProgress { .. }
+                | EngineEvent::SpeedTestProgress { .. }
+                | EngineEvent::NowPlayingChanged
+                | EngineEvent::ScratchpadChanged
+        )
+    }
+
+    /// Send to a host channel: a droppable event is skipped if the channel is
+    /// full, any other waits its turn. `Err` means the receiver is gone.
+    pub async fn send_to_host(self, tx: &tokio::sync::mpsc::Sender<EngineEvent>) -> Result<(), ()> {
+        if self.is_droppable() {
+            return match tx.try_send(self) {
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => Err(()),
+                _ => Ok(()),
+            };
+        }
+        tx.send(self).await.map_err(|_| ())
+    }
+}
+
+/// Who is driving whom with one keyboard and mouse.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(crate) enum EdgeState {
+    #[default]
+    Idle,
+    /// Another computer's keyboard and mouse drive this one. `entry` is the
+    /// side its pointer arrived on, and `push` how far the pointer has been
+    /// pushed outward against that side since it last moved away from it.
+    Controlled {
+        peer: Uuid,
+        entry: crate::remote_input::Edge,
+        push: i32,
+    },
+    /// This computer's keyboard and mouse drive `peer`.
+    Hosting { peer: Uuid },
+}
+
+/// How a hand-off ended on this computer, kept until an app asks about it.
+#[derive(Debug, Default, Clone, PartialEq)]
+pub struct EdgeNotice {
+    /// The pointer came back, this far along the edge it left by (0..=65535).
+    pub returned_pos: Option<u16>,
+    /// The hand-off ended without the pointer coming back, and why.
+    pub ended_reason: Option<String>,
+    /// The last computer that refused to take the keyboard and mouse, and why.
+    /// Kept until the next attempt, so a page can say what to fix.
+    pub refused: Option<(Uuid, String)>,
 }

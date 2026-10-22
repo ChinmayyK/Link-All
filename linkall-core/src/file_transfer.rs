@@ -534,6 +534,7 @@ impl OutboundTransfer {
             None
         };
         self.status = TransferStatus::Transferring;
+        self.last_active_at = Instant::now();
     }
 
     pub fn is_all_sent(&self) -> bool {
@@ -675,6 +676,7 @@ impl InboundTransfer {
         self.file_handle = Some(BufWriter::with_capacity(4 * 1024 * 1024, file));
         self.status = TransferStatus::Transferring;
         self.started_at = Some(Instant::now());
+        self.last_active_at = Instant::now();
         Ok(())
     }
 
@@ -700,6 +702,7 @@ impl InboundTransfer {
         }
         self.queued_chunk_count = self.received_chunk_count;
         self.status = TransferStatus::Transferring;
+        self.last_active_at = Instant::now();
         Ok(self.received_chunk_count)
     }
 
@@ -881,6 +884,17 @@ impl InboundTransfer {
         }
 
         let partial = self.dest_path.as_ref().context("no dest path")?.clone();
+        // The hash covers bytes in memory; make sure they all reached the disk
+        // (a full disk can leave a short file even when every write "succeeded").
+        let on_disk = std::fs::metadata(&partial)
+            .context("reading downloaded file size")?
+            .len();
+        anyhow::ensure!(
+            on_disk == self.meta.size_bytes,
+            "file on disk is {} bytes, expected {}",
+            on_disk,
+            self.meta.size_bytes
+        );
         let final_name = self.final_name.as_deref().context("no final file name")?;
         let dir = partial.parent().context("partial file has no parent dir")?;
         // Reserve a free final name (create_new), then rename over the empty
@@ -1301,7 +1315,13 @@ impl FileTransferManager {
         let stale_inbound: Vec<_> = self
             .inbound
             .iter()
-            .filter(|(_, t)| now.duration_since(t.last_active_at) > timeout)
+            .filter(|(_, t)| {
+                // Paused, disconnect-paused (Pending) and queued transfers are
+                // waiting on a person or a reconnect, not dead.
+                !t.paused
+                    && !matches!(t.status, TransferStatus::Pending | TransferStatus::Queued)
+                    && now.duration_since(t.last_active_at) > timeout
+            })
             .map(|(tid, _)| *tid)
             .collect();
         for tid in stale_inbound {

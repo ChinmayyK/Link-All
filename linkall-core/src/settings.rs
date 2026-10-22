@@ -447,13 +447,31 @@ fn json_merge(target: &mut serde_json::Value, patch: &serde_json::Value) {
     }
 }
 
+/// One line per store set aside since the last `take_aside_notices`, for the
+/// engine to pass on to the app: the user would otherwise just find their
+/// pairings gone.
+static ASIDE_NOTICES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub(crate) fn take_aside_notices() -> Vec<String> {
+    std::mem::take(&mut *ASIDE_NOTICES.lock().unwrap_or_else(|e| e.into_inner()))
+}
+
 /// For a store file that no longer parses: keep it beside the original as
-/// `<name>.corrupt` and start empty. Failing instead would stop the app from
+/// `<name>.corrupt.<unix time>` and start empty. Failing instead would stop the app from
 /// ever starting again; an empty trust store only means pairing again.
 pub(crate) fn set_aside_corrupt<T: Default>(path: &Path, err: &serde_json::Error) -> T {
+    // Timestamped, so a second corruption doesn't overwrite the first copy.
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
     let mut aside = path.as_os_str().to_owned();
-    aside.push(".corrupt");
+    aside.push(format!(".corrupt.{stamp}"));
     tracing::warn!(error = %err, path = ?path, "store does not parse; starting empty");
+    ASIDE_NOTICES.lock().unwrap_or_else(|e| e.into_inner()).push(format!(
+        "Set aside an unreadable file: {}. Starting fresh, so you may need to pair your devices again.",
+        path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    ));
     if let Err(e) = std::fs::rename(path, &aside) {
         tracing::warn!(error = %e, "could not set the unreadable store aside");
     }

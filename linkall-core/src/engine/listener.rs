@@ -3,64 +3,98 @@
 
 use super::*;
 
+/// While the listener is down (a rebind failed), retry this often; otherwise
+/// a non-transient bind error would leave nothing listening until the next
+/// network-change event.
+const LISTENER_REBIND_RETRY: Duration = Duration::from_secs(30);
+
+/// Unauthenticated handshakes allowed in flight at once.
+const MAX_PENDING_HANDSHAKES: usize = 64;
+
 pub(super) fn spawn_listener_supervisor(
     shared: EngineShared,
     mut rx: mpsc::Receiver<ListenerCommand>,
 ) {
     tokio::spawn(async move {
         let mut listener_task: Option<tokio::task::JoinHandle<()>> = None;
+        let mut last_addr: Option<SocketAddr> = None;
+        let mut retry = tokio::time::interval(LISTENER_REBIND_RETRY);
+        retry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        retry.tick().await;
 
-        while let Some(command) = rx.recv().await {
-            match command {
-                ListenerCommand::Rebind(addr) => {
-                    if let Some(task) = listener_task.take() {
-                        task.abort();
-                        let _ = task.await;
+        loop {
+            let mut is_retry = false;
+            let addr = tokio::select! {
+                _ = shared.shutdown.cancelled() => break,
+                command = rx.recv() => match command {
+                    Some(ListenerCommand::Rebind(addr)) => addr,
+                    None => break,
+                },
+                _ = retry.tick() => {
+                    let failed = shared.network_state.lock().await.listener_error.is_some();
+                    match last_addr {
+                        Some(addr) if failed => {
+                            is_retry = true;
+                            addr
+                        }
+                        _ => continue,
                     }
+                }
+            };
+            last_addr = Some(addr);
 
-                    match bind_server_with_retry(addr).await {
-                        Ok(server) => {
-                            {
-                                let mut state = shared.network_state.lock().await;
-                                if let Ok(local_addr) = server.local_addr() {
-                                    state.bind_addr = local_addr;
-                                }
-                                state.listener_error = None;
-                            }
-                            let shared_clone = shared.clone();
-                            listener_task = Some(tokio::spawn(async move {
-                                run_server_loop(shared_clone, server).await;
-                            }));
+            if let Some(task) = listener_task.take() {
+                task.abort();
+                let _ = task.await;
+            }
+
+            match bind_server_with_retry(addr).await {
+                Ok(server) => {
+                    {
+                        let mut state = shared.network_state.lock().await;
+                        if let Ok(local_addr) = server.local_addr() {
+                            state.bind_addr = local_addr;
                         }
-                        Err(err) => {
-                            warn!(
-                                addr = %addr,
-                                error = %err,
-                                "listener rebind failed after network change"
-                            );
-                            // The old listener is gone; until a rebind works,
-                            // nothing can connect in (see engine::health).
-                            shared.network_state.lock().await.listener_error =
-                                Some(err.to_string());
-                            // AddrNotAvailable here means the interface address
-                            // this rebind targeted has already gone stale (the
-                            // network changed again mid-transition) — the next
-                            // NetworkChangeEvent will trigger another rebind
-                            // with a current address, so this is self-healing.
-                            // Surfacing it as a user-facing warning toast on
-                            // every network flap (Wi-Fi/VPN reconnects, sleep
-                            // wake) is just alarming noise with nothing for
-                            // the user to act on.
-                            if !is_addr_not_available(&err) {
-                                let message = format!(
-                                    "listener rebind to {addr} failed after network change: {err}"
-                                );
-                                let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
-                            }
-                        }
+                        state.listener_error = None;
+                    }
+                    let shared_clone = shared.clone();
+                    listener_task = Some(tokio::spawn(async move {
+                        run_server_loop(shared_clone, server).await;
+                    }));
+                }
+                Err(err) => {
+                    warn!(
+                        addr = %addr,
+                        error = %err,
+                        "listener rebind failed after network change"
+                    );
+                    // The old listener is gone; until a rebind works,
+                    // nothing can connect in (see engine::health).
+                    shared.network_state.lock().await.listener_error = Some(err.to_string());
+                    // AddrNotAvailable here means the interface address
+                    // this rebind targeted has already gone stale (the
+                    // network changed again mid-transition) — the next
+                    // NetworkChangeEvent will trigger another rebind
+                    // with a current address, so this is self-healing.
+                    // Surfacing it as a user-facing warning toast on
+                    // every network flap (Wi-Fi/VPN reconnects, sleep
+                    // wake) is just alarming noise with nothing for
+                    // the user to act on. Timed retries stay quiet too:
+                    // the first failure already told the user.
+                    if !is_retry && !is_addr_not_available(&err) {
+                        let message = format!(
+                            "listener rebind to {addr} failed after network change: {err}"
+                        );
+                        let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
                     }
                 }
             }
+        }
+
+        // Dropping the server frees the port for a restart in this process.
+        if let Some(task) = listener_task.take() {
+            task.abort();
+            let _ = task.await;
         }
     });
 }
@@ -195,6 +229,7 @@ pub(super) fn spawn_firewall_free_discovery(shared: EngineShared) {
         discovery_handle,
         shared.peer_manager.clone(),
         shared.local_sleeping.clone(),
+        shared.shutdown.clone(),
     );
 
     tokio::spawn(async move {
@@ -225,19 +260,37 @@ pub(super) fn spawn_firewall_free_discovery(shared: EngineShared) {
 }
 
 pub(super) async fn run_server_loop(shared: EngineShared, server: Server) {
+    let pending = Arc::new(tokio::sync::Semaphore::new(MAX_PENDING_HANDSHAKES));
+    let mut accept_errors = 0u32;
     loop {
-        match server.accept().await {
+        let accepted = tokio::select! {
+            _ = shared.shutdown.cancelled() => return,
+            accepted = server.accept() => accepted,
+        };
+        match accepted {
             Ok(stream) => {
+                accept_errors = 0;
+                // Bounds unauthenticated handshakes; a flood waits here
+                // rather than spawning a task per connection.
+                let Ok(permit) = pending.clone().acquire_owned().await else {
+                    return;
+                };
                 let shared = shared.clone();
                 tokio::spawn(async move {
-                    if let Err(err) = handle_incoming(shared, stream).await {
+                    if let Err(err) = handle_incoming(shared, stream, permit).await {
                         warn!(error = %err, "incoming connection failed");
                     }
                 });
             }
             Err(err) => {
-                error!(error = %err, "server accept error");
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                accept_errors = accept_errors.saturating_add(1);
+                // A persistent error (fd exhaustion) would otherwise log and
+                // spin at 20 Hz; back off and log on a power-of-two cadence.
+                if accept_errors.is_power_of_two() {
+                    error!(error = %err, failures = accept_errors, "server accept error");
+                }
+                let backoff_ms = 50u64 << accept_errors.min(6).saturating_sub(1);
+                tokio::time::sleep(Duration::from_millis(backoff_ms.min(2000))).await;
             }
         }
     }

@@ -122,7 +122,13 @@ impl Engine {
 }
 
 #[tracing::instrument(skip_all, fields(device_id = tracing::field::Empty))]
-pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream) -> Result<()> {
+/// `handshake_permit` bounds concurrent unauthenticated handshakes; it is
+/// released as soon as the handshake ends, not held for the session.
+pub(super) async fn handle_incoming(
+    shared: EngineShared,
+    mut stream: TcpStream,
+    handshake_permit: tokio::sync::OwnedSemaphorePermit,
+) -> Result<()> {
     network::optimize_stream(&stream, "incoming engine stream");
     let shared_clone = shared.clone();
     let hs = network::handshake_responder(
@@ -148,7 +154,9 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
             false
         },
     )
-    .await?;
+    .await;
+    drop(handshake_permit);
+    let hs = hs?;
 
     tracing::Span::current().record("device_id", tracing::field::display(hs.peer_device_id));
 
@@ -205,6 +213,7 @@ pub(super) async fn handle_incoming(shared: EngineShared, mut stream: TcpStream)
         hs.peer_app_version,
         hs.peer_platform,
         hs.peer_background_restricted,
+        hs.peer_mac,
     );
 
     register_session(
@@ -320,6 +329,9 @@ pub(super) async fn connect_once(
     discovery: DiscoverySource,
     is_manual_reconnect: bool,
 ) -> Result<()> {
+    if shared.shutdown.is_cancelled() {
+        return Ok(());
+    }
     if !is_manual_reconnect {
         if let Some(device_id) = expected_device_id {
             if shared.peer_manager.is_connected(device_id) {
@@ -448,6 +460,17 @@ pub(super) async fn connect_once(
         anyhow::bail!("aborting outbound connect — cannot connect to self");
     }
 
+    // Dials without an expected id (the LAN probe) only learn who answered
+    // here; honour a disconnect/forget the user just made, or the probe would
+    // re-dial that device within its next cycle.
+    if !is_manual_reconnect && shared.peer_manager.is_explicitly_disconnected(hs.peer_device_id) {
+        tracing::debug!(
+            peer_id = %hs.peer_device_id,
+            "aborting outbound connect — peer is explicitly disconnected"
+        );
+        return Ok(());
+    }
+
     // Another device answers where `expected` used to, most often the same
     // phone after a reinstall, which gives it a new identity. Dropping this
     // connection also ended the session the other side already had with us
@@ -498,6 +521,7 @@ pub(super) async fn connect_once(
         hs.peer_app_version,
         hs.peer_platform,
         hs.peer_background_restricted,
+        hs.peer_mac,
     );
 
     let answered_by = hs.peer_device_id;

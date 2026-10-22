@@ -203,7 +203,7 @@ internal fun TrackpadDialog(c: DdColors, peer: PeerSnapshot, onDismiss: () -> Un
                 }
                 Icon(
                     Icons.Outlined.Close, contentDescription = "Close", tint = c.text,
-                    modifier = Modifier.size(28.dp).clickable(onClick = onDismiss),
+                    modifier = Modifier.iconTap(28.dp, onDismiss),
                 )
             }
 

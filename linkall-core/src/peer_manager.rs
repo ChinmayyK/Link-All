@@ -159,6 +159,10 @@ pub struct PeerRecord {
     /// it didn't say: a computer, or an older build.
     #[serde(default)]
     pub background_restricted: Option<bool>,
+    /// The peer's network card address, kept from its last handshake so it
+    /// can be woken with Wake-on-LAN while it sleeps and is not connected.
+    #[serde(default)]
+    pub mac_address: Option<String>,
 
     // ── Multi-layer discovery state ──────────────────────────────────────────
     /// When this peer was last seen via any discovery layer (separate from
@@ -224,6 +228,7 @@ impl Default for PeerRecord {
             pairing_declined_at: None,
             app_version: None,
             background_restricted: None,
+            mac_address: None,
             last_discovery_at: None,
             discovery_sources: Vec::new(),
             addr_history: Vec::new(),
@@ -343,6 +348,11 @@ pub struct PeerManager {
     // thread for the full duration of a lock contention window (HIGH-02).
     manual_targets: dashmap::DashMap<SocketAddr, u32>,
     next_session_id: AtomicU64,
+    // Saves are fire-and-forget blocking tasks that may run out of order, so
+    // each carries a sequence number (assigned with its snapshot) and a writer
+    // holding `last_written_seq` skips a snapshot older than one on disk.
+    save_seq: std::sync::Mutex<u64>,
+    last_written_seq: std::sync::Arc<std::sync::Mutex<u64>>,
 }
 
 impl PeerManager {
@@ -407,47 +417,83 @@ impl PeerManager {
             live: dashmap::DashMap::new(),
             manual_targets: dashmap::DashMap::new(),
             next_session_id: AtomicU64::new(1),
+            save_seq: std::sync::Mutex::new(0),
+            last_written_seq: std::sync::Arc::new(std::sync::Mutex::new(0)),
         })
     }
 
     pub fn save(&self) -> Result<()> {
         let path = self.path.clone();
 
-        let store_to_save = PeerStoreData {
-            peers: self
-                .store
-                .iter()
-                .filter(|p| p.value().trusted || p.value().remembered)
-                .map(|p| (*p.key(), p.value().clone()))
-                .collect(),
+        // Snapshot and sequence number are taken together so a higher
+        // sequence always means a newer snapshot.
+        let (seq, bytes) = {
+            let mut seq = self.save_seq.lock().unwrap_or_else(|e| e.into_inner());
+            let store_to_save = PeerStoreData {
+                peers: self
+                    .store
+                    .iter()
+                    .filter(|p| p.value().trusted || p.value().remembered)
+                    .map(|p| (*p.key(), p.value().clone()))
+                    .collect(),
+            };
+            // Compact, not pretty — internal cache, not hand-edited, and this
+            // fires on every connect/reconnect/disconnect (so, repeatedly
+            // during a flaky hotspot/Wi-Fi session), same reasoning as
+            // history.rs's persist().
+            let bytes = serde_json::to_vec(&store_to_save)?;
+            *seq += 1;
+            (*seq, bytes)
         };
 
-        // Compact, not pretty — internal cache, not hand-edited, and this
-        // fires on every connect/reconnect/disconnect (so, repeatedly during
-        // a flaky hotspot/Wi-Fi session), same reasoning as history.rs's
-        // persist().
-        let bytes = serde_json::to_vec(&store_to_save)?;
-
-        let save_fn = move || {
+        let last_written = self.last_written_seq.clone();
+        let save_fn = move || -> Result<()> {
+            use rand::Rng;
+            use std::io::Write;
+            let mut last = last_written.lock().unwrap_or_else(|e| e.into_inner());
+            if seq <= *last {
+                return Ok(()); // a newer snapshot already landed
+            }
             if let Some(parent) = path.parent() {
                 let _ = std::fs::create_dir_all(parent);
             }
-            use rand::Rng;
             let rng_suffix: u32 = rand::thread_rng().gen();
             let tmp = path.with_extension(format!("tmp.{}", rng_suffix));
-            if std::fs::write(&tmp, &bytes).is_ok() {
-                let _ = std::fs::rename(&tmp, &path);
-            } else {
-                let _ = std::fs::remove_file(&tmp);
+            let result = (|| -> Result<()> {
+                let mut file =
+                    std::fs::File::create(&tmp).context("creating peer store temp file")?;
+                file.write_all(&bytes).context("writing peer store")?;
+                // Without this a power loss can leave a zero-length file
+                // after the rename, which load() treats as "no peers".
+                file.sync_all().context("syncing peer store")?;
+                drop(file);
+                std::fs::rename(&tmp, &path).context("renaming peer store")?;
+                Ok(())
+            })();
+            match result {
+                Ok(()) => {
+                    *last = seq;
+                    Ok(())
+                }
+                Err(err) => {
+                    let _ = std::fs::remove_file(&tmp);
+                    Err(err)
+                }
             }
         };
 
         if tokio::runtime::Handle::try_current().is_ok() {
-            tokio::task::spawn_blocking(save_fn);
+            // A runtime worker must not block on disk I/O, so failures here
+            // can only be logged; the sync path below propagates them.
+            tokio::task::spawn_blocking(move || {
+                if let Err(err) = save_fn() {
+                    tracing::warn!(error = %err, "failed to persist peer store");
+                }
+            });
+            Ok(())
         } else {
-            save_fn();
+            save_fn()
         }
-        Ok(())
     }
 
     pub fn list(&self) -> Vec<PeerRecord> {
@@ -1001,12 +1047,19 @@ impl PeerManager {
         version: String,
         platform: String,
         background_restricted: Option<bool>,
+        mac_address: Option<String>,
     ) {
         let changed = match self.store.get_mut(&device_id) {
             Some(mut entry) => {
                 entry.app_version = Some(version);
                 let mut changed = entry.background_restricted != background_restricted;
                 entry.background_restricted = background_restricted;
+                // A peer that did not say (older build, or a card we cannot
+                // read) keeps the address already known.
+                if mac_address.is_some() && entry.mac_address != mac_address {
+                    entry.mac_address = mac_address;
+                    changed = true;
+                }
                 if !platform.is_empty() && entry.platform.as_deref() != Some(platform.as_str()) {
                     entry.platform = Some(platform);
                     changed = true;
@@ -1394,7 +1447,9 @@ mod tests {
         std::fs::write(&path, b"\0\0\0garbage").unwrap();
         let manager = PeerManager::load(&path).expect("load must not fail");
         assert!(manager.list().is_empty());
-        assert!(dir.path().join("peers.json.corrupt").exists());
+        assert!(std::fs::read_dir(dir.path())
+            .unwrap()
+            .any(|e| e.unwrap().file_name().to_string_lossy().starts_with("peers.json.corrupt")));
     }
 
     #[test]
@@ -1558,7 +1613,7 @@ mod tests {
                     DiscoverySource::Mdns,
                 )
                 .unwrap();
-            manager.set_handshake_info(id, version.into(), String::new(), None);
+            manager.set_handshake_info(id, version.into(), String::new(), None, None);
             manager.set_outgoing_pairing_waiting(id, true).unwrap();
             manager
                 .end_pairing(id, Some(PairingOutcome::Declined))

@@ -334,10 +334,12 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
         }
         AppMessage::RemotePointerMove { dx, dy } => {
+            let before = crate::remote_input::cursor_position();
             input(ctx, move || {
                 crate::remote_input::pointer_move(dx.into(), dy.into())
             })
             .await;
+            super::super::edge_ops::after_move(ctx, dx, dy, before).await;
         }
         AppMessage::RemotePointerButton { button, down } => {
             match crate::remote_input::Button::from_wire(button) {
@@ -355,6 +357,18 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 crate::remote_input::scroll(dx.into(), dy.into())
             })
             .await;
+        }
+        AppMessage::EdgeEnter { edge, pos } => super::super::edge_ops::on_enter(ctx, edge, pos).await,
+        AppMessage::EdgeReply { accepted, error } => {
+            super::super::edge_ops::on_reply(ctx, accepted, error).await
+        }
+        AppMessage::EdgeLeave { pos } => super::super::edge_ops::on_leave(ctx, pos).await,
+        AppMessage::EdgeEnd => super::super::edge_ops::on_end(ctx).await,
+        AppMessage::RemoteKeyEvent { scancode, down } => {
+            // Only the computer whose hand-off is running may press keys.
+            if super::super::edge_ops::controlled_by(&ctx.shared, ctx.peer_id) {
+                input(ctx, move || crate::remote_input::raw_key(scancode, down)).await;
+            }
         }
         AppMessage::RemoteTypeText { text } => {
             input(ctx, move || crate::remote_input::type_text(&text)).await;

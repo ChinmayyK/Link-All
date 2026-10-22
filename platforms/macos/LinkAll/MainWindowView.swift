@@ -34,6 +34,7 @@ struct MainWindowView: View {
             case .home:      HomeSection(store: store)
             case .clipboard: TimelineSectionView(store: store, density: .comfortable)
             case .files:     FilesView(store: store)
+            case .share:     EdgeShareView(store: store)
             case .activity:  ActivityFeedView().environmentObject(store)
             case .settings:  PreferencesView(store: store)
             }
@@ -91,7 +92,7 @@ private struct MainSidebar: View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach([DashboardSection.home, .clipboard, .files, .activity]) { section in
+                    ForEach([DashboardSection.home, .clipboard, .files, .share, .activity]) { section in
                         SidebarSectionRow(section: section, store: store)
                     }
 

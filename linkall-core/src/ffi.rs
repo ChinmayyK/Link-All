@@ -77,7 +77,7 @@ pub unsafe extern "C" fn linkall_start(
                     crate::local_files::handle_event(&serving_engine, &ev);
                     #[cfg(target_os = "android")]
                     let _ = &serving_engine;
-                    if event_tx.send(ev).await.is_err() {
+                    if ev.send_to_host(&event_tx).await.is_err() {
                         break;
                     }
                 }
@@ -115,8 +115,164 @@ pub unsafe extern "C" fn linkall_start(
 #[no_mangle]
 pub unsafe extern "C" fn linkall_stop(handle: *mut LinkAllHandle) {
     if !handle.is_null() {
-        drop(Box::from_raw(handle));
+        let handle = Box::from_raw(handle);
+        handle.engine.shutdown();
+        drop(handle);
     }
+}
+
+/// Stop the engine but keep the handle valid.
+///
+/// A process that is about to exit uses this instead of `linkall_stop`: calls
+/// already in flight on other threads still hold the pointer, and freeing it
+/// under them is a use-after-free. The memory goes with the process.
+///
+/// # Safety
+/// `handle` must be a pointer returned by `linkall_start`.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_shutdown(handle: *mut LinkAllHandle) {
+    if !handle.is_null() {
+        (*handle).engine.shutdown();
+    }
+}
+
+// ── Keyboard and mouse hand-off (desktop hosts) ──────────────────────────────
+
+/// The pointer is back: take the keyboard and mouse back. Where along the
+/// edge it came back via `linkall_event_edge_pos`.
+pub const PB_EVENT_EDGE_RETURNED: c_int = 42;
+/// The hand-off ended without the pointer coming back; the reason is the
+/// event's text.
+pub const PB_EVENT_EDGE_ENDED: c_int = 43;
+
+/// Where along the edge the pointer came back, 0..=65535 (EDGE_RETURNED only;
+/// 0 otherwise).
+///
+/// # Safety
+/// `event` must be a valid event pointer or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_event_edge_pos(event: *const PbEvent) -> c_int {
+    if event.is_null() {
+        return 0;
+    }
+    match (*event).inner {
+        EngineEvent::EdgeReturned { pos } => c_int::from(pos),
+        _ => 0,
+    }
+}
+
+/// Ask the computer `device_id` to take this computer's keyboard and mouse.
+/// `edge` is the side of this screen the pointer left by (0 left, 1 right,
+/// 2 top, 3 bottom) and `pos` how far along it, 0..=65535. Blocks until the
+/// other computer answers (at most a few seconds). 0 on success, -1 when it
+/// could not be started.
+///
+/// # Safety
+/// `device_id` must be a valid, non-null UTF-8 C string.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_edge_begin(
+    handle: *mut LinkAllHandle,
+    device_id: *const c_char,
+    edge: u8,
+    pos: u16,
+) -> c_int {
+    if handle.is_null() || device_id.is_null() {
+        return -1;
+    }
+    let Ok(id) = uuid::Uuid::parse_str(&CStr::from_ptr(device_id).to_string_lossy()) else {
+        return -1;
+    };
+    let h = &*handle;
+    match runtime().block_on(h.engine.edge_begin(id, edge, pos)) {
+        Ok(()) => 0,
+        Err(e) => {
+            tracing::debug!(error = %e, "keyboard and mouse hand-off refused");
+            -1
+        }
+    }
+}
+
+unsafe fn edge_send(handle: *mut LinkAllHandle, message: crate::protocol::AppMessage) -> c_int {
+    if handle.is_null() {
+        return -1;
+    }
+    let h = &*handle;
+    match runtime().block_on(h.engine.edge_input(message)) {
+        Ok(()) => 0,
+        Err(_) => -1,
+    }
+}
+
+/// Move the other computer's pointer by (`dx`, `dy`). Dropped when the link
+/// is backed up. -1 when no hand-off is running.
+///
+/// # Safety
+/// `handle` must be a valid handle or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_edge_move(handle: *mut LinkAllHandle, dx: i16, dy: i16) -> c_int {
+    edge_send(handle, crate::protocol::AppMessage::RemotePointerMove { dx, dy })
+}
+
+/// Press (`down` non-zero) or release a mouse button on the other computer:
+/// 0 left, 1 right, 2 middle, 3 back, 4 forward.
+///
+/// # Safety
+/// `handle` must be a valid handle or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_edge_button(
+    handle: *mut LinkAllHandle,
+    button: u8,
+    down: c_int,
+) -> c_int {
+    edge_send(
+        handle,
+        crate::protocol::AppMessage::RemotePointerButton {
+            button,
+            down: down != 0,
+        },
+    )
+}
+
+/// Scroll the other computer by (`dx`, `dy`), in pixel-like units.
+///
+/// # Safety
+/// `handle` must be a valid handle or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_edge_scroll(handle: *mut LinkAllHandle, dx: i16, dy: i16) -> c_int {
+    edge_send(handle, crate::protocol::AppMessage::RemotePointerScroll { dx, dy })
+}
+
+/// Press or release a key on the other computer by scan code (PS/2 set 1,
+/// 0xE000 added for an extended key).
+///
+/// # Safety
+/// `handle` must be a valid handle or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_edge_key(
+    handle: *mut LinkAllHandle,
+    scancode: u16,
+    down: c_int,
+) -> c_int {
+    edge_send(
+        handle,
+        crate::protocol::AppMessage::RemoteKeyEvent {
+            scancode,
+            down: down != 0,
+        },
+    )
+}
+
+/// End the hand-off and take the keyboard and mouse back.
+///
+/// # Safety
+/// `handle` must be a valid handle or NULL.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_edge_end(handle: *mut LinkAllHandle) {
+    if handle.is_null() {
+        return;
+    }
+    let h = &*handle;
+    runtime().block_on(h.engine.edge_end());
 }
 
 // ── Push clipboard ────────────────────────────────────────────────────────────
@@ -426,6 +582,8 @@ pub unsafe extern "C" fn linkall_event_type(event: *const PbEvent) -> c_int {
         EngineEvent::SpeedTestComplete { .. } => PB_EVENT_SPEED_TEST_COMPLETE,
         EngineEvent::Warning(_) => PB_EVENT_WARNING,
         EngineEvent::PeerSyncStateChanged { .. } => PB_EVENT_SYSTEM_HEALTH_UPDATED,
+        EngineEvent::EdgeReturned { .. } => PB_EVENT_EDGE_RETURNED,
+        EngineEvent::EdgeEnded { .. } => PB_EVENT_EDGE_ENDED,
     }
 }
 
@@ -443,6 +601,7 @@ pub unsafe extern "C" fn linkall_event_text(event: *mut PbEvent) -> *const c_cha
             }
         }
         EngineEvent::Warning(s) => Some(s.clone()),
+        EngineEvent::EdgeEnded { reason } => Some(reason.clone()),
         EngineEvent::CallStateChanged { state, .. } => Some(state.clone()),
         EngineEvent::NotificationReceived { text, .. } => Some(text.clone()),
         EngineEvent::NetworkStateChanged { network_type, .. } => Some(network_type.clone()),

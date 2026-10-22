@@ -3,10 +3,11 @@ use std::ffi::c_void;
 use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use windows_sys::Win32::Foundation::{
-    CloseHandle, GetLastError, ERROR_PIPE_CONNECTED, GENERIC_WRITE, HWND, INVALID_HANDLE_VALUE,
-    LPARAM, LRESULT, POINT, WPARAM,
+    CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, ERROR_PIPE_CONNECTED, GENERIC_WRITE, HWND,
+    INVALID_HANDLE_VALUE, LPARAM, LRESULT, POINT, WAIT_ABANDONED, WAIT_OBJECT_0, WPARAM,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, ReadFile, WriteFile, OPEN_EXISTING, PIPE_ACCESS_INBOUND,
@@ -20,7 +21,9 @@ use windows_sys::Win32::System::Pipes::{
     PIPE_TYPE_BYTE, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
-use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+use windows_sys::Win32::System::Threading::{
+    CreateMutexW, OpenProcess, TerminateProcess, WaitForSingleObject, PROCESS_TERMINATE,
+};
 use windows_sys::Win32::UI::HiDpi::{
     SetProcessDpiAwarenessContext, DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2,
 };
@@ -67,9 +70,30 @@ thread_local! {
     static TRAY: RefCell<Option<Tray>> = const { RefCell::new(None) };
 }
 
+/// Takes the per-session single-instance mutex; false when another tray holds
+/// it. A tray that was just killed may still be releasing it (the watchdog
+/// respawns right after a Kill), so wait briefly before giving up.
+unsafe fn acquire_single_instance() -> bool {
+    let name = wide("Local\\LinkAll_Tray_Instance");
+    let mutex = CreateMutexW(null(), 1, name.as_ptr());
+    if mutex.is_null() {
+        // Can't tell; better a possible duplicate than no tray at all.
+        return true;
+    }
+    if GetLastError() != ERROR_ALREADY_EXISTS {
+        return true; // Owned until the process exits; the handle is kept open.
+    }
+    let wait = WaitForSingleObject(mutex, 3000);
+    wait == WAIT_OBJECT_0 || wait == WAIT_ABANDONED
+}
+
 pub fn run() {
     log("=== linkall-tray starting ===");
     unsafe {
+        if !acquire_single_instance() {
+            log("Another tray instance is already running - exiting");
+            return;
+        }
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
 
         let instance = GetModuleHandleW(null());
@@ -122,7 +146,10 @@ pub fn run() {
                 taskbar_created,
             })
         });
-        balloon("Link All is running in your system tray.");
+        // The watchdog respawns a dead tray with --respawn: no startup balloon then.
+        if !std::env::args().any(|a| a == "--respawn") {
+            balloon("Link All is running in your system tray.");
+        }
 
         let hwnd_addr = hwnd as usize;
         std::thread::spawn(move || pipe_server(hwnd_addr));
@@ -256,11 +283,40 @@ unsafe fn show_menu(hwnd: HWND) {
         ID_QUICK_ACCESS => send_to_main("QUICKACCESS"),
         ID_SETTINGS => send_to_main("SETTINGS"),
         ID_RESCAN => send_to_main("RESCAN"),
-        ID_QUIT => {
-            kill_processes(MAIN_EXE);
-            PostQuitMessage(0);
-        }
+        ID_QUIT => quit_main_and_tray(hwnd),
         _ => {}
+    }
+}
+
+/// Asks the main app to quit through its own exit path (engine stop, log
+/// flush), and hard-kills it only if it is still there after a few seconds.
+/// The tray follows once the main app is gone (or at once if it wasn't running).
+unsafe fn quit_main_and_tray(hwnd: HWND) {
+    if process_ids(MAIN_EXE).is_empty() || !try_send_to_main("QUIT") {
+        kill_processes(MAIN_EXE);
+        PostQuitMessage(0);
+        return;
+    }
+    let hwnd_addr = hwnd as usize;
+    std::thread::spawn(move || {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !process_ids(MAIN_EXE).is_empty() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+        if !process_ids(MAIN_EXE).is_empty() {
+            log("Main app did not exit after QUIT - terminating it");
+            kill_processes(MAIN_EXE);
+        }
+        post_line(hwnd_addr, "QUIT".to_string());
+    });
+}
+
+/// Hands a line to the UI thread's window procedure.
+fn post_line(hwnd_addr: usize, line: String) {
+    let boxed = Box::into_raw(Box::new(line));
+    let posted = unsafe { PostMessageW(hwnd_addr as HWND, WM_PIPE_LINE, 0, boxed as LPARAM) } != 0;
+    if !posted {
+        drop(unsafe { Box::from_raw(boxed) });
     }
 }
 
@@ -283,9 +339,11 @@ fn pipe_server(hwnd_addr: usize) {
             )
         };
         if pipe == INVALID_HANDLE_VALUE {
-            log(&format!("CreateNamedPipeW failed: {}", unsafe {
-                GetLastError()
-            }));
+            // Retried every second; log it once a minute, not once a second.
+            log_limited(
+                &LAST_PIPE_FAIL_LOG,
+                &format!("CreateNamedPipeW failed: {}", unsafe { GetLastError() }),
+            );
             std::thread::sleep(std::time::Duration::from_secs(1));
             continue;
         }
@@ -298,13 +356,7 @@ fn pipe_server(hwnd_addr: usize) {
             let line = read_line(pipe);
             unsafe { DisconnectNamedPipe(pipe) };
             if !line.is_empty() {
-                let boxed = Box::into_raw(Box::new(line));
-                let posted =
-                    unsafe { PostMessageW(hwnd_addr as HWND, WM_PIPE_LINE, 0, boxed as LPARAM) }
-                        != 0;
-                if !posted {
-                    drop(unsafe { Box::from_raw(boxed) });
-                }
+                post_line(hwnd_addr, line);
             }
         }
         unsafe { CloseHandle(pipe) };
@@ -344,8 +396,15 @@ fn read_line(pipe: *mut c_void) -> String {
 /// Sends one command line to the main app; if it isn't listening (not
 /// running yet), just open it, as the old helper did.
 fn send_to_main(command: &str) {
+    if !try_send_to_main(command) {
+        open_main_window();
+    }
+}
+
+/// Writes one command line to the main app's pipe; false if it isn't listening.
+fn try_send_to_main(command: &str) -> bool {
     let name = wide(MAIN_PIPE);
-    let sent = unsafe {
+    unsafe {
         WaitNamedPipeW(name.as_ptr(), 300);
         let h = CreateFileW(
             name.as_ptr(),
@@ -371,9 +430,6 @@ fn send_to_main(command: &str) {
             CloseHandle(h);
             ok
         }
-    };
-    if !sent {
-        open_main_window();
     }
 }
 
@@ -580,6 +636,7 @@ fn copy_wide(dst: &mut [u16], s: &str) {
 }
 
 /// Appends to %LOCALAPPDATA%\LinkAll\tray_debug.txt, like the old helper.
+/// Rolled to tray_debug.txt.1 past MAX_LOG_BYTES, so it can't grow forever.
 fn log(msg: &str) {
     let Some(base) = std::env::var_os("LOCALAPPDATA") else {
         return;
@@ -590,11 +647,31 @@ fn log(msg: &str) {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
+    let path = dir.join("tray_debug.txt");
+    if std::fs::metadata(&path).is_ok_and(|m| m.len() > MAX_LOG_BYTES) {
+        let _ = std::fs::rename(&path, dir.join("tray_debug.txt.1"));
+    }
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(dir.join("tray_debug.txt"))
+        .open(path)
     {
         let _ = writeln!(f, "[{secs}] {msg}");
+    }
+}
+
+const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+static LAST_PIPE_FAIL_LOG: AtomicU64 = AtomicU64::new(0);
+
+/// `log`, at most once a minute per `last` slot, for messages in a retry loop.
+fn log_limited(last: &AtomicU64, msg: &str) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let prev = last.load(Ordering::Relaxed);
+    if prev == 0 || now.saturating_sub(prev) >= 60 {
+        last.store(now, Ordering::Relaxed);
+        log(msg);
     }
 }

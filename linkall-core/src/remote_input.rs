@@ -435,12 +435,19 @@ pub fn clean_phone_number(raw: &str) -> Option<String> {
 /// Moves the pointer by (`dx`, `dy`) from where it is.
 pub fn pointer_move(dx: i32, dy: i32) -> Result<(), String> {
     release_stale();
+    if let Some(b) = testing::backend() {
+        return b.pointer_move(clamp_step(dx), clamp_step(dy));
+    }
     imp::pointer_move(clamp_step(dx), clamp_step(dy))
 }
 
 /// Presses or releases a mouse button.
 pub fn pointer_button(button: Button, down: bool) -> Result<(), String> {
     release_stale();
+    note_button(button, down);
+    if let Some(b) = testing::backend() {
+        return b.button(button, down);
+    }
     imp::pointer_button(button, down)
 }
 
@@ -487,6 +494,636 @@ pub fn verification_code(title: &str, text: &str) -> Option<String> {
     let code = text.trim();
     let digits = (4..=8).contains(&code.len()) && code.chars().all(|c| c.is_ascii_digit());
     (title.starts_with("Verification code") && digits).then(|| code.to_string())
+}
+
+
+/// A stand-in for the operating system, so a test can run the whole hand-off
+/// without moving this computer's real pointer.
+#[doc(hidden)]
+pub mod testing {
+    use super::Button;
+    use std::sync::{Arc, Mutex};
+
+    pub trait Backend: Send + Sync {
+        fn screen_size(&self) -> Option<(i32, i32)>;
+        fn cursor(&self) -> Option<(i32, i32)>;
+        fn set_cursor(&self, x: i32, y: i32) -> Result<(), String>;
+        fn pointer_move(&self, dx: i32, dy: i32) -> Result<(), String>;
+        fn button(&self, button: Button, down: bool) -> Result<(), String>;
+        fn key(&self, scancode: u16, down: bool) -> Result<(), String>;
+    }
+
+    static BACKEND: Mutex<Option<Arc<dyn Backend>>> = Mutex::new(None);
+
+    pub fn install(backend: Arc<dyn Backend>) {
+        *BACKEND.lock().unwrap() = Some(backend);
+    }
+
+    pub fn uninstall() {
+        *BACKEND.lock().unwrap() = None;
+    }
+
+    pub(super) fn backend() -> Option<Arc<dyn Backend>> {
+        BACKEND.lock().unwrap().clone()
+    }
+}
+
+// ── Keyboard and mouse hand-off ──────────────────────────────────────────────
+
+/// One side of a screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    Left,
+    Right,
+    Top,
+    Bottom,
+}
+
+impl Edge {
+    pub fn from_wire(n: u8) -> Option<Edge> {
+        match n {
+            0 => Some(Edge::Left),
+            1 => Some(Edge::Right),
+            2 => Some(Edge::Top),
+            3 => Some(Edge::Bottom),
+            _ => None,
+        }
+    }
+
+    pub fn to_wire(self) -> u8 {
+        match self {
+            Edge::Left => 0,
+            Edge::Right => 1,
+            Edge::Top => 2,
+            Edge::Bottom => 3,
+        }
+    }
+
+    /// The side a pointer arrives on after leaving the other screen by `self`.
+    pub fn opposite(self) -> Edge {
+        match self {
+            Edge::Left => Edge::Right,
+            Edge::Right => Edge::Left,
+            Edge::Top => Edge::Bottom,
+            Edge::Bottom => Edge::Top,
+        }
+    }
+}
+
+/// `value` out of `total` as a fraction of 0..=65535.
+pub fn to_fraction(value: i32, total: i32) -> u16 {
+    if total <= 1 {
+        return 0;
+    }
+    ((i64::from(value.clamp(0, total - 1)) * 65535) / i64::from(total - 1)) as u16
+}
+
+/// The inverse of [`to_fraction`]: a pixel in 0..total.
+pub fn from_fraction(pos: u16, total: i32) -> i32 {
+    if total <= 1 {
+        return 0;
+    }
+    ((i64::from(pos) * i64::from(total - 1)) / 65535) as i32
+}
+
+/// Where the pointer appears on a `width` x `height` screen after it came in
+/// over `arrived`, `pos` of the way along that edge.
+pub fn entry_point(arrived: Edge, pos: u16, width: i32, height: i32) -> (i32, i32) {
+    match arrived {
+        Edge::Left => (0, from_fraction(pos, height)),
+        Edge::Right => (width - 1, from_fraction(pos, height)),
+        Edge::Top => (from_fraction(pos, width), 0),
+        Edge::Bottom => (from_fraction(pos, width), height - 1),
+    }
+}
+
+/// How far a move of (`dx`, `dy`) pushes outward through `edge`; 0 or less
+/// when it moves away from it.
+pub fn outward_push(edge: Edge, dx: i32, dy: i32) -> i32 {
+    match edge {
+        Edge::Left => -dx,
+        Edge::Right => dx,
+        Edge::Top => -dy,
+        Edge::Bottom => dy,
+    }
+}
+
+/// True when (`x`, `y`) is on `edge` of a `width` x `height` screen, and where
+/// along it.
+pub fn on_edge(edge: Edge, x: i32, y: i32, width: i32, height: i32) -> Option<u16> {
+    match edge {
+        Edge::Left if x <= 0 => Some(to_fraction(y, height)),
+        Edge::Right if x >= width - 1 => Some(to_fraction(y, height)),
+        Edge::Top if y <= 0 => Some(to_fraction(x, width)),
+        Edge::Bottom if y >= height - 1 => Some(to_fraction(x, width)),
+        _ => None,
+    }
+}
+
+/// Keys and buttons pressed through a hand-off and not yet released, so a
+/// dropped link can't leave one stuck down.
+struct HeldRaw {
+    keys: Vec<u16>,
+    buttons: Vec<Button>,
+}
+
+static HELD_RAW: Mutex<HeldRaw> = Mutex::new(HeldRaw {
+    keys: Vec::new(),
+    buttons: Vec::new(),
+});
+
+/// The pointer's position on the screen it moves on.
+pub fn cursor_position() -> Option<(i32, i32)> {
+    if let Some(b) = testing::backend() {
+        return b.cursor();
+    }
+    edge_imp::cursor_position()
+}
+
+/// The width and height of the screen the pointer moves on.
+pub fn screen_size() -> Option<(i32, i32)> {
+    if let Some(b) = testing::backend() {
+        return b.screen_size();
+    }
+    edge_imp::screen_size()
+}
+
+/// Puts the pointer at (`x`, `y`).
+pub fn set_cursor_position(x: i32, y: i32) -> Result<(), String> {
+    if let Some(b) = testing::backend() {
+        return b.set_cursor(x, y);
+    }
+    edge_imp::set_cursor_position(x, y)
+}
+
+/// Presses or releases the key with this scan code (PS/2 set 1, with 0xE000
+/// added for an extended key), as the sender's keyboard reported it.
+pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
+    {
+        let mut held = HELD_RAW.lock().unwrap();
+        held.keys.retain(|k| *k != scancode);
+        if down {
+            held.keys.push(scancode);
+        }
+    }
+    if let Some(b) = testing::backend() {
+        return b.key(scancode, down);
+    }
+    edge_imp::raw_key(scancode, down)
+}
+
+/// Remembers which buttons a hand-off holds. Called for every button change.
+fn note_button(button: Button, down: bool) {
+    let mut held = HELD_RAW.lock().unwrap();
+    held.buttons.retain(|b| *b != button);
+    if down {
+        held.buttons.push(button);
+    }
+}
+
+/// Lets go of every key and button still held.
+pub fn release_all() {
+    let (keys, buttons) = {
+        let mut held = HELD_RAW.lock().unwrap();
+        (
+            std::mem::take(&mut held.keys),
+            std::mem::take(&mut held.buttons),
+        )
+    };
+    for k in keys {
+        let _ = match testing::backend() {
+            Some(be) => be.key(k, false),
+            None => edge_imp::raw_key(k, false),
+        };
+    }
+    for b in buttons {
+        let _ = match testing::backend() {
+            Some(be) => be.button(b, false),
+            None => imp::pointer_button(b, false),
+        };
+    }
+}
+
+#[cfg(windows)]
+mod edge_imp {
+    use windows_sys::Win32::Foundation::POINT;
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_EXTENDEDKEY,
+        KEYEVENTF_KEYUP, KEYEVENTF_SCANCODE,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        GetCursorPos, GetSystemMetrics, SetCursorPos, SM_CXSCREEN, SM_CYSCREEN,
+    };
+
+    pub fn cursor_position() -> Option<(i32, i32)> {
+        let mut p = POINT { x: 0, y: 0 };
+        (unsafe { GetCursorPos(&mut p) } != 0).then_some((p.x, p.y))
+    }
+
+    pub fn screen_size() -> Option<(i32, i32)> {
+        let (w, h) = unsafe { (GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN)) };
+        (w > 0 && h > 0).then_some((w, h))
+    }
+
+    pub fn set_cursor_position(x: i32, y: i32) -> Result<(), String> {
+        if unsafe { SetCursorPos(x, y) } != 0 {
+            Ok(())
+        } else {
+            Err("Windows didn't move the pointer".to_string())
+        }
+    }
+
+    pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
+        let mut flags = KEYEVENTF_SCANCODE;
+        if scancode & 0xE000 == 0xE000 {
+            flags |= KEYEVENTF_EXTENDEDKEY;
+        }
+        if !down {
+            flags |= KEYEVENTF_KEYUP;
+        }
+        let input = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: 0,
+                    wScan: scancode & 0xFF,
+                    dwFlags: flags,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        let sent = unsafe { SendInput(1, &input, std::mem::size_of::<INPUT>() as i32) };
+        if sent == 1 {
+            Ok(())
+        } else {
+            Err("Windows didn't accept the key".to_string())
+        }
+    }
+}
+
+/// The Linux (evdev) key code for a PS/2 set 1 scan code. The plain keys have
+/// the same number in both; the extended ones (0xE000 added) do not.
+pub fn scancode_to_evdev(scancode: u16) -> Option<u16> {
+    match scancode {
+        0x01..=0x58 => Some(scancode),
+        0xE01C => Some(96),  // keypad enter
+        0xE01D => Some(97),  // right control
+        0xE035 => Some(98),  // keypad slash
+        0xE037 => Some(99),  // print screen
+        0xE038 => Some(100), // right alt
+        0xE047 => Some(102), // home
+        0xE048 => Some(103), // up
+        0xE049 => Some(104), // page up
+        0xE04B => Some(105), // left
+        0xE04D => Some(106), // right
+        0xE04F => Some(107), // end
+        0xE050 => Some(108), // down
+        0xE051 => Some(109), // page down
+        0xE052 => Some(110), // insert
+        0xE053 => Some(111), // delete
+        0xE05B => Some(125), // left super
+        0xE05C => Some(126), // right super
+        0xE05D => Some(127), // menu
+        _ => None,
+    }
+}
+
+/// The inverse of [`scancode_to_evdev`]: the PS/2 set 1 scan code for a Linux
+/// key code, or None for a key the hand-off does not carry.
+pub fn evdev_to_scancode(code: u16) -> Option<u16> {
+    match code {
+        0x01..=0x58 => Some(code),
+        96 => Some(0xE01C),
+        97 => Some(0xE01D),
+        98 => Some(0xE035),
+        99 => Some(0xE037),
+        100 => Some(0xE038),
+        102 => Some(0xE047),
+        103 => Some(0xE048),
+        104 => Some(0xE049),
+        105 => Some(0xE04B),
+        106 => Some(0xE04D),
+        107 => Some(0xE04F),
+        108 => Some(0xE050),
+        109 => Some(0xE051),
+        110 => Some(0xE052),
+        111 => Some(0xE053),
+        125 => Some(0xE05B),
+        126 => Some(0xE05C),
+        127 => Some(0xE05D),
+        _ => None,
+    }
+}
+
+/// The macOS virtual key code for a PS/2 set 1 scan code, on a US layout. The
+/// shortcut keys follow the Mac's habits rather than the key's position:
+/// Control acts as Command, Alt as Option and the Windows key as Control, so
+/// Ctrl+C on the other keyboard copies here.
+pub fn scancode_to_mac(scancode: u16) -> Option<u16> {
+    Some(match scancode {
+        0x01 => 53, // escape
+        0x02 => 18,
+        0x03 => 19,
+        0x04 => 20,
+        0x05 => 21,
+        0x06 => 23,
+        0x07 => 22,
+        0x08 => 26,
+        0x09 => 28,
+        0x0A => 25,
+        0x0B => 29,
+        0x0C => 27,
+        0x0D => 24,
+        0x0E => 51, // backspace
+        0x0F => 48, // tab
+        0x10 => 12, // q
+        0x11 => 13,
+        0x12 => 14,
+        0x13 => 15,
+        0x14 => 17,
+        0x15 => 16,
+        0x16 => 32,
+        0x17 => 34,
+        0x18 => 31,
+        0x19 => 35,
+        0x1A => 33,
+        0x1B => 30,
+        0x1C => 36, // enter
+        0x1D => 55, // left control -> left command
+        0x1E => 0,  // a
+        0x1F => 1,
+        0x20 => 2,
+        0x21 => 3,
+        0x22 => 5,
+        0x23 => 4,
+        0x24 => 38,
+        0x25 => 40,
+        0x26 => 37,
+        0x27 => 41,
+        0x28 => 39,
+        0x29 => 50,
+        0x2A => 56, // left shift
+        0x2B => 42,
+        0x2C => 6, // z
+        0x2D => 7,
+        0x2E => 8,
+        0x2F => 9,
+        0x30 => 11,
+        0x31 => 45,
+        0x32 => 46,
+        0x33 => 43,
+        0x34 => 47,
+        0x35 => 44,
+        0x36 => 60, // right shift
+        0x37 => 67, // keypad *
+        0x38 => 58, // left alt -> left option
+        0x39 => 49, // space
+        0x3A => 57, // caps lock
+        0x3B => 122,
+        0x3C => 120,
+        0x3D => 99,
+        0x3E => 118,
+        0x3F => 96,
+        0x40 => 97,
+        0x41 => 98,
+        0x42 => 100,
+        0x43 => 101,
+        0x44 => 109,
+        0x45 => 71, // num lock -> clear
+        0x47 => 89,
+        0x48 => 91,
+        0x49 => 92,
+        0x4A => 78,
+        0x4B => 86,
+        0x4C => 87,
+        0x4D => 88,
+        0x4E => 69,
+        0x4F => 83,
+        0x50 => 84,
+        0x51 => 85,
+        0x52 => 82,
+        0x53 => 65,
+        0x57 => 103, // f11
+        0x58 => 111, // f12
+        0xE01C => 76, // keypad enter
+        0xE01D => 54, // right control -> right command
+        0xE035 => 75, // keypad /
+        0xE038 => 61, // right alt -> right option
+        0xE047 => 115,
+        0xE048 => 126,
+        0xE049 => 116,
+        0xE04B => 123,
+        0xE04D => 124,
+        0xE04F => 119,
+        0xE050 => 125,
+        0xE051 => 121,
+        0xE052 => 114,
+        0xE053 => 117,
+        0xE05B => 59, // left windows -> left control
+        0xE05C => 62, // right windows -> right control
+        _ => return None,
+    })
+}
+
+/// The flag a macOS modifier key sets while it is held (0 for other keys).
+pub fn mac_modifier_flag(keycode: u16) -> u64 {
+    match keycode {
+        56 | 60 => 0x0002_0000, // shift
+        59 | 62 => 0x0004_0000, // control
+        58 | 61 => 0x0008_0000, // option
+        55 | 54 => 0x0010_0000, // command
+        _ => 0,
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod edge_imp {
+    use std::ffi::c_void;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGPoint {
+        x: f64,
+        y: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGSize {
+        width: f64,
+        height: f64,
+    }
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    struct CGRect {
+        origin: CGPoint,
+        size: CGSize,
+    }
+
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFRelease(obj: *const c_void);
+    }
+
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGEventCreate(source: *const c_void) -> *mut c_void;
+        fn CGEventGetLocation(event: *const c_void) -> CGPoint;
+        fn CGMainDisplayID() -> u32;
+        fn CGDisplayBounds(display: u32) -> CGRect;
+        fn CGWarpMouseCursorPosition(to: CGPoint) -> i32;
+        fn CGAssociateMouseAndMouseCursorPosition(connected: bool) -> i32;
+        fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> *mut c_void;
+        fn CGEventSetFlags(event: *mut c_void, flags: u64);
+        fn CGEventPost(tap: u32, event: *mut c_void);
+    }
+
+    /// Modifier flags held through the hand-off.
+    static FLAGS: AtomicU64 = AtomicU64::new(0);
+
+    pub fn cursor_position() -> Option<(i32, i32)> {
+        unsafe {
+            let probe = CGEventCreate(std::ptr::null());
+            if probe.is_null() {
+                return None;
+            }
+            let at = CGEventGetLocation(probe);
+            CFRelease(probe);
+            Some((at.x.round() as i32, at.y.round() as i32))
+        }
+    }
+
+    pub fn screen_size() -> Option<(i32, i32)> {
+        let bounds = unsafe { CGDisplayBounds(CGMainDisplayID()) };
+        let (w, h) = (bounds.size.width.round() as i32, bounds.size.height.round() as i32);
+        (w > 0 && h > 0).then_some((w, h))
+    }
+
+    pub fn set_cursor_position(x: i32, y: i32) -> Result<(), String> {
+        let to = CGPoint { x: f64::from(x), y: f64::from(y) };
+        unsafe {
+            if CGWarpMouseCursorPosition(to) != 0 {
+                return Err("macOS didn't move the pointer".to_string());
+            }
+            // Without this the pointer ignores the mouse for a moment after a warp.
+            CGAssociateMouseAndMouseCursorPosition(true);
+        }
+        Ok(())
+    }
+
+    pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
+        let keycode = super::scancode_to_mac(scancode)
+            .ok_or_else(|| "that key has no Mac equivalent".to_string())?;
+        let flag = super::mac_modifier_flag(keycode);
+        if flag != 0 {
+            if down {
+                FLAGS.fetch_or(flag, Ordering::Relaxed);
+            } else {
+                FLAGS.fetch_and(!flag, Ordering::Relaxed);
+            }
+        }
+        unsafe {
+            let event = CGEventCreateKeyboardEvent(std::ptr::null(), keycode, down);
+            if event.is_null() {
+                return Err("macOS didn't create the key event".to_string());
+            }
+            CGEventSetFlags(event, FLAGS.load(Ordering::Relaxed));
+            CGEventPost(0, event);
+            CFRelease(event);
+        }
+        Ok(())
+    }
+}
+
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+mod edge_imp {
+    use std::sync::Mutex;
+    use x11_dl::xlib::{Display, Xlib};
+
+    /// One connection to the X server, opened on first use. Without X (a
+    /// Wayland-only session, a console) opening fails and the hand-off is
+    /// refused, with a reason.
+    struct X {
+        lib: Xlib,
+        display: *mut Display,
+    }
+    // SAFETY: the connection is only ever used while holding the mutex.
+    unsafe impl Send for X {}
+
+    static X11: Mutex<Option<X>> = Mutex::new(None);
+
+    fn with_x<T>(f: impl FnOnce(&X) -> T) -> Result<T, String> {
+        let mut guard = X11.lock().unwrap();
+        if guard.is_none() {
+            let lib = Xlib::open().map_err(|_| "this computer has no X11 library".to_string())?;
+            let display = unsafe { (lib.XOpenDisplay)(std::ptr::null()) };
+            if display.is_null() {
+                return Err("no X11 display: Wayland sessions can't be handed a pointer yet".to_string());
+            }
+            *guard = Some(X { lib, display });
+        }
+        Ok(f(guard.as_ref().unwrap()))
+    }
+
+    pub fn cursor_position() -> Option<(i32, i32)> {
+        with_x(|x| unsafe {
+            let (mut root_ret, mut child_ret) = (0, 0);
+            let (mut rx, mut ry, mut wx, mut wy) = (0, 0, 0, 0);
+            let mut mask = 0;
+            let root = (x.lib.XDefaultRootWindow)(x.display);
+            let ok = (x.lib.XQueryPointer)(
+                x.display, root, &mut root_ret, &mut child_ret, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask,
+            );
+            (ok != 0).then_some((rx, ry))
+        })
+        .ok()
+        .flatten()
+    }
+
+    pub fn screen_size() -> Option<(i32, i32)> {
+        with_x(|x| unsafe {
+            let screen = (x.lib.XDefaultScreen)(x.display);
+            (
+                (x.lib.XDisplayWidth)(x.display, screen),
+                (x.lib.XDisplayHeight)(x.display, screen),
+            )
+        })
+        .ok()
+        .filter(|(w, h)| *w > 0 && *h > 0)
+    }
+
+    pub fn set_cursor_position(px: i32, py: i32) -> Result<(), String> {
+        with_x(|x| unsafe {
+            let root = (x.lib.XDefaultRootWindow)(x.display);
+            (x.lib.XWarpPointer)(x.display, 0, root, 0, 0, 0, 0, px, py);
+            (x.lib.XFlush)(x.display);
+        })
+    }
+
+    pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
+        let code = super::scancode_to_evdev(scancode)
+            .ok_or_else(|| "that key has no Linux equivalent".to_string())?;
+        super::imp::evdev_key(code, down)
+    }
+}
+
+#[cfg(target_os = "android")]
+mod edge_imp {
+    const NO: &str = "this device can't be handed a keyboard and mouse";
+
+    pub fn cursor_position() -> Option<(i32, i32)> {
+        None
+    }
+    pub fn screen_size() -> Option<(i32, i32)> {
+        None
+    }
+    pub fn set_cursor_position(_: i32, _: i32) -> Result<(), String> {
+        Err(NO.into())
+    }
+    pub fn raw_key(_: u16, _: bool) -> Result<(), String> {
+        Err(NO.into())
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -992,6 +1629,10 @@ mod imp {
         for b in [BTN_LEFT, BTN_RIGHT, BTN_MIDDLE, BTN_SIDE, BTN_EXTRA] {
             ioctl(&file, UI_SET_KEYBIT, b as i32)?;
         }
+        // The keyboard keys too, for a keyboard handed over from another computer.
+        for k in 1u16..=248 {
+            ioctl(&file, UI_SET_KEYBIT, k as i32)?;
+        }
         for r in [REL_X, REL_Y, REL_WHEEL, REL_HWHEEL] {
             ioctl(&file, UI_SET_RELBIT, r as i32)?;
         }
@@ -1063,6 +1704,11 @@ mod imp {
 
     pub fn pointer_move(dx: i32, dy: i32) -> Result<(), String> {
         with_device(|d| emit(d, &[(EV_REL, REL_X, dx), (EV_REL, REL_Y, dy)]))
+    }
+
+    /// Presses or releases the key with this evdev code.
+    pub fn evdev_key(code: u16, down: bool) -> Result<(), String> {
+        with_device(|d| emit(d, &[(EV_KEY, code, i32::from(down))]))
     }
 
     pub fn pointer_button(button: Button, down: bool) -> Result<(), String> {
@@ -1347,5 +1993,153 @@ mod tests {
         assert_eq!(clamp_step(1_000_000), MAX_STEP);
         assert_eq!(clamp_step(-1_000_000), -MAX_STEP);
         assert_eq!(clamp_step(15), 15);
+    }
+}
+
+#[cfg(test)]
+mod edge_tests {
+    use super::*;
+
+    #[test]
+    fn edge_wire_round_trips_and_opposites() {
+        for n in 0..4 {
+            let edge = Edge::from_wire(n).unwrap();
+            assert_eq!(edge.to_wire(), n);
+            assert_eq!(edge.opposite().opposite(), edge);
+        }
+        assert_eq!(Edge::from_wire(4), None);
+        assert_eq!(Edge::Right.opposite(), Edge::Left);
+    }
+
+    #[test]
+    fn fractions_cover_the_whole_edge() {
+        assert_eq!(to_fraction(0, 1080), 0);
+        assert_eq!(to_fraction(1079, 1080), 65535);
+        assert_eq!(from_fraction(0, 1080), 0);
+        assert_eq!(from_fraction(65535, 1080), 1079);
+        // Out of range is clamped, a one-pixel screen is not a division by zero.
+        assert_eq!(to_fraction(-5, 1080), 0);
+        assert_eq!(to_fraction(5000, 1080), 65535);
+        assert_eq!(to_fraction(3, 1), 0);
+        assert_eq!(from_fraction(40000, 1), 0);
+    }
+
+    #[test]
+    fn a_pointer_arrives_on_the_opposite_side_at_the_same_height() {
+        // Left the host over its right edge, halfway down: it enters from the
+        // left of a 1920x1080 screen, halfway down.
+        let (x, y) = entry_point(Edge::Right.opposite(), 32768, 1920, 1080);
+        assert_eq!(x, 0);
+        assert!((538..=541).contains(&y), "y was {y}");
+        assert_eq!(entry_point(Edge::Right, 0, 1920, 1080), (1919, 0));
+        assert_eq!(entry_point(Edge::Top, 65535, 1920, 1080), (1919, 0));
+        assert_eq!(entry_point(Edge::Bottom, 0, 1920, 1080), (0, 1079));
+    }
+
+    #[test]
+    fn only_a_push_outward_counts() {
+        assert_eq!(outward_push(Edge::Left, -10, 4), 10);
+        assert_eq!(outward_push(Edge::Left, 10, 0), -10);
+        assert_eq!(outward_push(Edge::Right, 7, 0), 7);
+        assert_eq!(outward_push(Edge::Top, 0, -3), 3);
+        assert_eq!(outward_push(Edge::Bottom, 0, 9), 9);
+    }
+
+    #[test]
+    fn on_edge_says_where_along_the_edge() {
+        assert_eq!(on_edge(Edge::Left, 0, 0, 1920, 1080), Some(0));
+        assert_eq!(on_edge(Edge::Left, 1, 500, 1920, 1080), None);
+        assert_eq!(on_edge(Edge::Right, 1919, 1079, 1920, 1080), Some(65535));
+        assert_eq!(on_edge(Edge::Bottom, 960, 1079, 1920, 1080).is_some(), true);
+        assert_eq!(on_edge(Edge::Top, 960, 5, 1920, 1080), None);
+    }
+}
+
+#[cfg(test)]
+mod keymap_tests {
+    use super::*;
+
+    #[test]
+    fn plain_keys_keep_their_number_on_linux() {
+        // Escape, A, Enter, Space, F12.
+        for sc in [0x01, 0x1E, 0x1C, 0x39, 0x58] {
+            assert_eq!(scancode_to_evdev(sc), Some(sc));
+        }
+        assert_eq!(scancode_to_evdev(0xE048), Some(103), "up arrow");
+        assert_eq!(scancode_to_evdev(0xE053), Some(111), "delete");
+        assert_eq!(scancode_to_evdev(0xE0FF), None);
+        assert_eq!(scancode_to_evdev(0x59), None);
+    }
+
+    #[test]
+    fn linux_codes_round_trip_through_scan_codes() {
+        for sc in (0x01u16..=0x58).chain(0xE000..=0xE0FF) {
+            if let Some(evdev) = scancode_to_evdev(sc) {
+                assert_eq!(evdev_to_scancode(evdev), Some(sc), "{sc:#x}");
+            }
+        }
+        assert_eq!(evdev_to_scancode(0), None);
+    }
+
+    #[test]
+    fn letters_land_on_the_mac_letters() {
+        // A S D F on the home row, Q W E R on the one above.
+        assert_eq!(
+            [0x1E, 0x1F, 0x20, 0x21].map(|s| scancode_to_mac(s).unwrap()),
+            [0, 1, 2, 3]
+        );
+        assert_eq!(
+            [0x10, 0x11, 0x12, 0x13].map(|s| scancode_to_mac(s).unwrap()),
+            [12, 13, 14, 15]
+        );
+        assert_eq!(scancode_to_mac(0x1C), Some(36), "enter");
+        assert_eq!(scancode_to_mac(0xE04B), Some(123), "left arrow");
+    }
+
+    #[test]
+    fn control_acts_as_command_on_a_mac() {
+        let ctrl = scancode_to_mac(0x1D).unwrap();
+        assert_eq!(mac_modifier_flag(ctrl), 0x0010_0000, "command");
+        let win = scancode_to_mac(0xE05B).unwrap();
+        assert_eq!(mac_modifier_flag(win), 0x0004_0000, "control");
+        let alt = scancode_to_mac(0x38).unwrap();
+        assert_eq!(mac_modifier_flag(alt), 0x0008_0000, "option");
+        assert_eq!(mac_modifier_flag(scancode_to_mac(0x2A).unwrap()), 0x0002_0000, "shift");
+        assert_eq!(mac_modifier_flag(0), 0, "a letter sets no flag");
+    }
+
+    #[test]
+    fn no_two_keys_share_a_mac_code() {
+        let mut seen = std::collections::HashMap::new();
+        let all = (0x01u16..=0x58).chain(0xE000..=0xE0FF);
+        for sc in all {
+            if let Some(code) = scancode_to_mac(sc) {
+                if let Some(other) = seen.insert(code, sc) {
+                    panic!("{sc:#x} and {other:#x} both map to mac key {code}");
+                }
+            }
+        }
+    }
+}
+
+#[cfg(all(test, unix, not(target_os = "macos"), not(target_os = "android")))]
+mod x11_tests {
+    use super::*;
+
+    /// Runs against a real X server (Xvfb will do); skipped when there is none.
+    #[test]
+    fn the_pointer_can_be_placed_and_read_back() {
+        if std::env::var_os("DISPLAY").is_none() {
+            eprintln!("no DISPLAY: skipping");
+            return;
+        }
+        let (w, h) = screen_size().expect("an X screen");
+        assert!(w > 0 && h > 0);
+        set_cursor_position(120, 80).expect("placed");
+        assert_eq!(cursor_position(), Some((120, 80)));
+        let (x, y) = entry_point(Edge::Right, 32768, w, h);
+        set_cursor_position(x, y).expect("placed on the edge");
+        assert_eq!(cursor_position(), Some((w - 1, y)));
+        assert!(on_edge(Edge::Right, w - 1, y, w, h).is_some());
     }
 }

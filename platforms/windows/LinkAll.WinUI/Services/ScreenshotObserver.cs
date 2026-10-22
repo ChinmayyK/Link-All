@@ -7,8 +7,13 @@ namespace LinkAll.WinUI.Services
     public class ScreenshotObserver : IDisposable
     {
         private readonly ClipboardManager _clipboardManager;
-        private readonly FileSystemWatcher? _desktopWatcher;
-        private readonly FileSystemWatcher? _screenshotsWatcher;
+        private FileSystemWatcher? _desktopWatcher;
+        private FileSystemWatcher? _screenshotsWatcher;
+        private readonly string _desktopPath;
+        private readonly string _screenshotsPath;
+        // Windows creates PicturesScreenshots on the first Win+PrtScn, and a watcher
+        // stops after a buffer overflow or a folder change; check back now and then.
+        private readonly System.Threading.Timer _recheck;
 
         public ScreenshotObserver(ClipboardManager clipboardManager)
         {
@@ -18,11 +23,31 @@ namespace LinkAll.WinUI.Services
             string picturesPath = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
             string screenshotsPath = Path.Combine(picturesPath, "Screenshots");
 
-            _desktopWatcher = SetupWatcher(desktopPath);
-            if (Directory.Exists(screenshotsPath))
+            _desktopPath = desktopPath;
+            _screenshotsPath = screenshotsPath;
+            EnsureWatchers();
+            _recheck = new System.Threading.Timer(_ => EnsureWatchers(), null, 60_000, 60_000);
+        }
+
+        private readonly object _watchLock = new();
+
+        private void EnsureWatchers()
+        {
+            lock (_watchLock)
             {
-                _screenshotsWatcher = SetupWatcher(screenshotsPath);
+                _desktopWatcher ??= SetupWatcher(_desktopPath);
+                _screenshotsWatcher ??= SetupWatcher(_screenshotsPath);
             }
+        }
+
+        private void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            lock (_watchLock)
+            {
+                if (sender == _desktopWatcher) { _desktopWatcher.Dispose(); _desktopWatcher = null; }
+                else if (sender == _screenshotsWatcher) { _screenshotsWatcher.Dispose(); _screenshotsWatcher = null; }
+            }
+            EnsureWatchers();
         }
 
         private FileSystemWatcher? SetupWatcher(string path)
@@ -37,12 +62,33 @@ namespace LinkAll.WinUI.Services
                     EnableRaisingEvents = true
                 };
                 watcher.Created += OnFileCreated;
+                watcher.Error += OnWatcherError;
                 return watcher;
             }
             catch
             {
                 return null;
             }
+        }
+
+        // The file is still being written when Created fires; wait until it opens for
+        // reading and its size has stopped changing.
+        private static async Task<bool> WaitUntilWritten(string path)
+        {
+            long last = -1;
+            for (int i = 0; i < 20; i++)
+            {
+                await Task.Delay(500);
+                try
+                {
+                    if (!File.Exists(path)) return false;
+                    using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                    if (fs.Length > 0 && fs.Length == last) return true;
+                    last = fs.Length;
+                }
+                catch (IOException) { last = -1; }
+            }
+            return false;
         }
 
         private void OnFileCreated(object sender, FileSystemEventArgs e)
@@ -58,11 +104,11 @@ namespace LinkAll.WinUI.Services
                     
                     if (isScreenshotFolder || name.Contains("screenshot") || name.Contains("screen shot"))
                     {
-                        Task.Delay(1000).ContinueWith(_ =>
+                        Task.Run(async () =>
                         {
                             try
                             {
-                                if (File.Exists(e.FullPath))
+                                if (await WaitUntilWritten(e.FullPath))
                                 {
                                     _clipboardManager.PushFile(e.FullPath);
                                     
@@ -81,6 +127,7 @@ namespace LinkAll.WinUI.Services
 
         public void Dispose()
         {
+            _recheck.Dispose();
             if (_desktopWatcher != null)
             {
                 _desktopWatcher.EnableRaisingEvents = false;

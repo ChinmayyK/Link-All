@@ -77,6 +77,14 @@
                     </NavigationViewItem.InfoBadge>
                 </NavigationViewItem>
 
+                <NavigationViewItem Tag="KeyboardMouse" Content="Keyboard &amp; mouse" x:Name="NavKeyboardMouse"
+                                    Style="{StaticResource AppNavItem}"
+                                    AutomationProperties.Name="Keyboard and mouse">
+                    <NavigationViewItem.Icon>
+                        <FontIcon Glyph="&#xE765;" FontSize="16" />
+                    </NavigationViewItem.Icon>
+                </NavigationViewItem>
+
                 <NavigationViewItem Tag="Activity" Content="Activity" x:Name="NavActivity"
                                     Style="{StaticResource AppNavItem}"
                                     AutomationProperties.Name="Activity">
@@ -194,13 +202,13 @@
                         <!-- What stops sync right now (engine health), with its fix. -->
                         <StackPanel Grid.Row="0">
                             <!-- A newer Link All exists. Opens its release page; never installs. -->
-                            <InfoBar x:Name="UpdateBar" Margin="24,0,24,12"
+                            <InfoBar x:Name="UpdateBar" Margin="24,0,24,12" CornerRadius="14" Padding="4,2"
                                      Severity="Informational" IsClosable="True" IsOpen="False">
                                 <InfoBar.ActionButton>
                                     <Button Content="See what's new" Click="OnUpdateActionClick" />
                                 </InfoBar.ActionButton>
                             </InfoBar>
-                            <InfoBar Margin="24,0,24,12"
+                            <InfoBar Margin="24,0,24,12" CornerRadius="14" Padding="4,2"
                                      Severity="Warning" IsClosable="False"
                                      IsOpen="{x:Bind mgr.HasHealthIssue, Mode=OneWay}"
                                      Title="{x:Bind mgr.HealthTitle, Mode=OneWay}"

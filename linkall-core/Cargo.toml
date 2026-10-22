@@ -75,8 +75,13 @@ mdns-sd = "0.10"
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 
+# Reads and moves the pointer on X11 (loaded at run time, so Wayland-only and
+# headless systems just report that they can't).
+[target.'cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))'.dependencies]
+x11-dl = "2"
+
 [target."cfg(windows)".dependencies]
-windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Memory", "Win32_Storage_FileSystem", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_Shutdown", "Win32_System_Diagnostics_Debug"] }
+windows-sys = { version = "0.61.2", features = ["Win32_Security", "Win32_Security_Authorization", "Win32_Foundation", "Win32_System_Memory", "Win32_Storage_FileSystem", "Win32_UI_Input_KeyboardAndMouse", "Win32_UI_WindowsAndMessaging", "Win32_System_Shutdown", "Win32_System_Diagnostics_Debug", "Win32_System_Power"] }
 
 [target.'cfg(not(target_os="android"))'.dependencies]
 

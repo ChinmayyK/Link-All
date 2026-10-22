@@ -54,8 +54,16 @@ pub struct Choice {
 /// The first Link All version that understands remote control.
 pub const REMOTE_CONTROL_MIN: (u32, u32) = (2, 1);
 
+/// The first version that hands the keyboard and mouse across computers.
+pub const EDGE_CONTROL_MIN: (u32, u32) = (2, 1);
+
 /// True for a peer on 2.1.0 or later. `None` (it never reported a version) is too old.
 pub fn understands_remote_control(app_version: Option<&str>) -> bool {
+    at_least(app_version, REMOTE_CONTROL_MIN)
+}
+
+/// True when `app_version` is `min` (major, minor) or later; `None` is too old.
+pub fn at_least(app_version: Option<&str>, min: (u32, u32)) -> bool {
     let Some(v) = app_version else { return false };
     let mut parts = v.split(['.', '-', '+']).map(|p| {
         p.chars()
@@ -64,7 +72,7 @@ pub fn understands_remote_control(app_version: Option<&str>) -> bool {
             .parse::<u32>()
             .unwrap_or(0)
     });
-    (parts.next().unwrap_or(0), parts.next().unwrap_or(0)) >= REMOTE_CONTROL_MIN
+    (parts.next().unwrap_or(0), parts.next().unwrap_or(0)) >= min
 }
 
 fn is_phone(peer: &PeerRecord) -> bool {
@@ -331,5 +339,20 @@ mod tests {
             Some("Needs Link All 2.1 or later")
         );
         assert!(!offers_all(Purpose::Find, &got));
+    }
+}
+
+#[cfg(test)]
+mod edge_control_tests {
+    use super::*;
+
+    #[test]
+    fn the_hand_off_needs_2_1() {
+        assert!(!at_least(None, EDGE_CONTROL_MIN));
+        assert!(!at_least(Some("2.0.2"), EDGE_CONTROL_MIN));
+        assert!(!at_least(Some("1.9.9"), EDGE_CONTROL_MIN));
+        assert!(at_least(Some("2.1.0"), EDGE_CONTROL_MIN));
+        assert!(at_least(Some("2.10.1-beta"), EDGE_CONTROL_MIN));
+        assert!(at_least(Some("3.0.0"), EDGE_CONTROL_MIN));
     }
 }

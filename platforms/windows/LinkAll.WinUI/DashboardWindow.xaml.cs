@@ -231,6 +231,7 @@ namespace LinkAll.WinUI
                         "Transfers" => typeof(TransfersView),
                         "Settings" => typeof(SettingsView),
                         "Activity" => typeof(ActivityView),
+                        "KeyboardMouse" => typeof(KeyboardMouseView),
                         "Scratchpad" => typeof(ScratchpadView),
                         _ => typeof(DevicesView)
                     };

@@ -1,0 +1,112 @@
+<Page
+    x:Class="LinkAll.WinUI.Views.KeyboardMouseView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:ui="using:LinkAll.WinUI.UI"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!--
+        One keyboard and mouse across computers: whether it is on, where each
+        computer sits, what is happening now, and, for each linked computer,
+        whether it is ready or what to fix.
+    -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ui:PageColumn MaxContentWidth="860">
+            <StackPanel Padding="{StaticResource PagePadding}" Spacing="20">
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Keyboard &amp; mouse" Style="{StaticResource AppDisplayText}" />
+                    <TextBlock Text="Use this PC's keyboard and mouse on the computer next to it"
+                               Style="{StaticResource AppSecondary}" />
+                </StackPanel>
+
+                <!-- What is happening now. -->
+                <Border Style="{StaticResource AppGroupCard}">
+                    <Grid Padding="16,14" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border x:Name="StatusDot" Grid.Column="0" Width="10" Height="10" CornerRadius="5"
+                                VerticalAlignment="Center" Background="{ThemeResource AppNeutralBrush}" />
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock x:Name="StatusTitle" Text="Off" Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock x:Name="StatusDetail" Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <Button x:Name="EndButton" Grid.Column="2" Content="Take it back"
+                                Style="{StaticResource AppSecondaryButton}" Visibility="Collapsed"
+                                Click="OnEndClicked" />
+                    </Grid>
+                </Border>
+
+                <Border Style="{StaticResource AppGroupCard}">
+                    <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE765;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="Share this keyboard and mouse" Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock Text="Push the pointer against a screen edge for about a quarter of a second to move to the computer on that side"
+                                       Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="EdgeControlToggle" Grid.Column="2" MinWidth="0"
+                                      VerticalAlignment="Center" Toggled="OnEdgeControlToggled"
+                                      AutomationProperties.Name="Share this keyboard and mouse" />
+                    </Grid>
+                </Border>
+
+                <!-- Where each computer sits. -->
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Where each computer sits" Style="{StaticResource AppSectionTitle}" />
+                    <Border Style="{StaticResource AppGroupCard}">
+                        <Grid Padding="16" RowSpacing="8" ColumnSpacing="8" HorizontalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="170" />
+                                <ColumnDefinition Width="170" />
+                                <ColumnDefinition Width="170" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ComboBox x:Name="EdgeAbove" Grid.Row="0" Grid.Column="1" Tag="2" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnEdgeLinkChanged" AutomationProperties.Name="Computer above this one" />
+                            <ComboBox x:Name="EdgeLeft" Grid.Row="1" Grid.Column="0" Tag="0" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnEdgeLinkChanged" AutomationProperties.Name="Computer to the left" />
+                            <Border Grid.Row="1" Grid.Column="1" CornerRadius="10" Padding="12,10"
+                                    Background="{ThemeResource AppAccentSubtleBrush}">
+                                <TextBlock Text="This PC" HorizontalAlignment="Center"
+                                           Foreground="{ThemeResource AppAccentBrush}" Style="{StaticResource AppBodyStrong}" />
+                            </Border>
+                            <ComboBox x:Name="EdgeRight" Grid.Row="1" Grid.Column="2" Tag="1" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnEdgeLinkChanged" AutomationProperties.Name="Computer to the right" />
+                            <ComboBox x:Name="EdgeBelow" Grid.Row="2" Grid.Column="1" Tag="3" HorizontalAlignment="Stretch"
+                                      SelectionChanged="OnEdgeLinkChanged" AutomationProperties.Name="Computer below this one" />
+                        </Grid>
+                    </Border>
+                </StackPanel>
+
+                <!-- Is each linked computer ready? -->
+                <StackPanel x:Name="ReadinessSection" Spacing="8" Visibility="Collapsed">
+                    <TextBlock Text="Ready to share?" Style="{StaticResource AppSectionTitle}" />
+                    <Border Style="{StaticResource AppGroupCard}">
+                        <StackPanel x:Name="ReadinessList" Padding="0,4" />
+                    </Border>
+                </StackPanel>
+
+                <TextBlock Style="{StaticResource AppSecondary}" TextWrapping="Wrap"
+                           Text="Press Ctrl+Alt+Esc at any time to bring the keyboard and mouse back to this PC. Windows does not let one app type into an administrator window, so those windows will not respond on the other computer." />
+            </StackPanel>
+        </ui:PageColumn>
+    </ScrollViewer>
+</Page>

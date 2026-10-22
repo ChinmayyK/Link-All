@@ -3,6 +3,35 @@
 
 use super::*;
 
+/// Decompress an lz4 chunk (4-byte LE size prefix + block). The prefix is
+/// peer-controlled, so cap it before allocating.
+fn decompress_chunk(payload: &[u8]) -> Result<Vec<u8>, String> {
+    let max = crate::file_transfer::FILE_CHUNK_SIZE + 1024;
+    let prefix: [u8; 4] = payload
+        .get(..4)
+        .and_then(|p| p.try_into().ok())
+        .ok_or("chunk too short")?;
+    let size = u32::from_le_bytes(prefix) as usize;
+    if size > max {
+        return Err(format!("declared chunk size {size} exceeds limit"));
+    }
+    lz4_flex::block::decompress(&payload[4..], size).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod decompress_tests {
+    use super::decompress_chunk;
+
+    #[test]
+    fn roundtrip_and_oversize_rejected() {
+        let data = vec![7u8; 10_000];
+        let packed = lz4_flex::compress_prepend_size(&data);
+        assert_eq!(decompress_chunk(&packed).unwrap(), data);
+        assert!(decompress_chunk(&[0xff, 0xff, 0xff, 0xff, 0]).is_err());
+        assert!(decompress_chunk(&[1]).is_err());
+    }
+}
+
 pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
     let shared = &ctx.shared;
     let peer_id = ctx.peer_id;
@@ -321,12 +350,41 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
 
             let data = if compressed {
-                match lz4_flex::decompress_size_prepended(&payload) {
+                match decompress_chunk(&payload) {
                     Ok(d) => d,
                     Err(e) => {
                         tracing::error!("Failed to decompress file chunk: {}", e);
-                        let mut mgr = shared.file_transfers.lock().await;
-                        mgr.cancel_inbound(&transfer_id, "decompression failed");
+                        let reason = "decompression failed".to_string();
+                        {
+                            let mut mgr = shared.file_transfers.lock().await;
+                            mgr.cancel_inbound(&transfer_id, &reason);
+                        }
+                        // Tell the sender, or it keeps sending into a dead transfer.
+                        let _ = ctx
+                            .outbox_tx
+                            .send(AppMessage::FileTransferCancel {
+                                transfer_id,
+                                reason: reason.clone(),
+                            })
+                            .await;
+                        let _ = ctx
+                            .outbox_tx
+                            .send(AppMessage::FileTransferCompleteAck {
+                                transfer_id,
+                                success: false,
+                                error: Some(reason.clone()),
+                            })
+                            .await;
+                        let _ = shared
+                            .event_tx
+                            .send(EngineEvent::FileTransferFailed {
+                                in_folder: false,
+                                transfer_id,
+                                from_device: peer_id,
+                                reason,
+                            })
+                            .await;
+                        pump_transfer_queue(shared).await;
                         return Flow::Continue;
                     }
                 }

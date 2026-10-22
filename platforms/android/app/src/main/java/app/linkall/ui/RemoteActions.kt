@@ -7,6 +7,7 @@ import android.widget.Toast
 import app.linkall.LinkAllJni
 import app.linkall.LinkAllService
 import app.linkall.PeerSnapshot
+import app.linkall.parsePeerSnapshots
 
 /**
  * The things a phone asks a paired device to do, as plain calls a screen can make.
@@ -29,6 +30,36 @@ internal object RemoteActions {
                 else LinkAllJni.remoteControlError(handle, peer.id) ?: "Couldn't reach ${peer.name}."
             } ?: "Link All isn't running."
             say(context, problem)
+        }.start()
+    }
+
+    /**
+     * Wakes a sleeping computer with Wake-on-LAN, then watches for it to connect.
+     * Sending the packet says nothing about whether the computer heard it, so the
+     * answer comes from whether it shows up: a card that isn't set to listen while
+     * the computer sleeps never reacts, and this is how that is noticed.
+     */
+    fun wake(context: Context, peer: PeerSnapshot) {
+        Thread {
+            val problem = LinkAllService.withLiveEngine { handle -> LinkAllJni.wakePeer(handle, peer.id) }
+                ?: "Link All isn't running."
+            if (problem.isNotEmpty()) {
+                say(context, problem)
+                return@Thread
+            }
+            say(context, "Wake signal sent to ${peer.name}")
+            val deadline = System.currentTimeMillis() + 45_000
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(2_000)
+                val awake = LinkAllService.withLiveEngine { handle ->
+                    parsePeerSnapshots(LinkAllJni.peersJson(handle)).any { it.id == peer.id && it.isConnected }
+                } ?: return@Thread
+                if (awake) {
+                    say(context, "${peer.name} is awake")
+                    return@Thread
+                }
+            }
+            say(context, "${peer.name} didn't wake. Check that Wake-on-LAN is turned on in its network settings, and that it's on a cable.")
         }.start()
     }
 

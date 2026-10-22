@@ -73,7 +73,7 @@ internal fun FolderSyncSection(c: DdColors) {
                                 Icons.Rounded.Close,
                                 contentDescription = "Stop syncing ${job.label}",
                                 tint = c.textMuted,
-                                modifier = Modifier.size(20.dp).clickable {
+                                modifier = Modifier.iconTap(20.dp) {
                                     FolderSync.remove(context, job.id)
                                     jobs = FolderSync.list(context)
                                 },

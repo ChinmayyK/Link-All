@@ -14,6 +14,8 @@ mod autostart;
 #[cfg(target_os = "linux")]
 mod daemon;
 #[cfg(target_os = "linux")]
+mod edge;
+#[cfg(target_os = "linux")]
 mod hub;
 #[cfg(target_os = "linux")]
 mod ipc;
@@ -93,6 +95,7 @@ fn main() -> gtk::glib::ExitCode {
 
             let clipboard = agent::start_clipboard();
             agent::start(app, &hub, clipboard.clone());
+            edge::start();
             ui::build(app, &hub, &clipboard);
             install_actions(app, &hub);
             let palette = gio::SimpleAction::new("palette", None);

@@ -120,6 +120,11 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::RemotePointerScroll { .. }
         | M::RemoteTypeText { .. }
         | M::RemoteKeyPress { .. }
+        | M::EdgeEnter { .. }
+        | M::EdgeReply { .. }
+        | M::EdgeLeave { .. }
+        | M::EdgeEnd
+        | M::RemoteKeyEvent { .. }
         | M::DialNumber { .. }) => remote::handle(ctx, m).await,
         m @ M::ScratchpadNote { .. } => scratchpad::handle(ctx, m).await,
         M::CaptureRequest { mode } => remote::capture_request(ctx, mode).await,
@@ -488,8 +493,35 @@ pub(super) fn register_session(
                                 }
                                 Err(e) => {
                                     tracing::error!("Disk I/O error: {}", e);
-                                    let mut mgr = dw_shared.file_transfers.lock().await;
-                                    mgr.cancel_inbound(&transfer_id, "disk i/o error");
+                                    let reason = format!("disk i/o error: {e}");
+                                    dw_shared
+                                        .file_transfers
+                                        .lock()
+                                        .await
+                                        .cancel_inbound(&transfer_id, &reason);
+                                    // Tell the sender and the UI, or both wait forever.
+                                    let _ = dw_outbox_tx
+                                        .send(AppMessage::FileTransferCancel {
+                                            transfer_id,
+                                            reason: reason.clone(),
+                                        })
+                                        .await;
+                                    let _ = dw_outbox_tx
+                                        .send(AppMessage::FileTransferCompleteAck {
+                                            transfer_id,
+                                            success: false,
+                                            error: Some(reason.clone()),
+                                        })
+                                        .await;
+                                    let _ = dw_event_tx
+                                        .send(EngineEvent::FileTransferFailed {
+                                            in_folder: false,
+                                            transfer_id,
+                                            from_device: dw_peer_id,
+                                            reason,
+                                        })
+                                        .await;
+                                    pump_transfer_queue(&dw_shared).await;
                                 }
                             }
                         } else {
@@ -510,13 +542,21 @@ pub(super) fn register_session(
                                 .and_then(|t| t.file_handle.take())
                         };
 
+                        // A failed final flush (disk full) must fail the transfer,
+                        // not rename a short file and ack success.
+                        let mut flush_err: Option<String> = None;
                         if let Some(mut file) = file_handle {
-                            let _ = tokio::task::spawn_blocking(move || {
+                            let res = tokio::task::spawn_blocking(move || {
                                 use std::io::Write;
-                                let _ = file.flush();
-                                let _ = file.get_ref().sync_all();
+                                file.flush()?;
+                                file.get_ref().sync_all()
                             })
                             .await;
+                            flush_err = match res {
+                                Ok(Ok(())) => None,
+                                Ok(Err(e)) => Some(format!("flushing file failed: {e}")),
+                                Err(e) => Some(format!("flush task failed: {e}")),
+                            };
                         }
 
                         let result = {
@@ -524,9 +564,13 @@ pub(super) fn register_session(
                             if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
                                 let file_name = transfer.meta.file_name.clone();
                                 let file_bytes = transfer.meta.size_bytes;
-                                match transfer.finalize(sha256_checksum.clone()) {
-                                    Ok(dest) => Ok((dest, file_name, file_bytes)),
-                                    Err(e) => Err((e.to_string(), Some(file_name))),
+                                if let Some(e) = flush_err {
+                                    Err((e, Some(file_name)))
+                                } else {
+                                    match transfer.finalize(sha256_checksum.clone()) {
+                                        Ok(dest) => Ok((dest, file_name, file_bytes)),
+                                        Err(e) => Err((e.to_string(), Some(file_name))),
+                                    }
                                 }
                             } else {
                                 Err(("transfer not found".to_string(), None))
@@ -776,15 +820,20 @@ pub(super) fn register_session(
                     // Write a few queued chunks per flush, then go back to the
                     // select so pings, acks and clipboard never wait behind
                     // a long run of file data.
+                    let mut batch_err = None;
                     for _ in 0..3 {
                         match file_outbox_rx.try_recv() {
                             Ok(mut next_msg) => {
-                                if let Err(_err) = write_within(write_limit, sess_tx.send_no_flush(&mut next_msg)).await {
+                                if let Err(err) = write_within(write_limit, sess_tx.send_no_flush(&mut next_msg)).await {
+                                    batch_err = Some(err);
                                     break;
                                 }
                             }
                             Err(_) => break,
                         }
+                    }
+                    if let Some(err) = batch_err {
+                        break format!("send failed: {err}");
                     }
                     if let Err(err) = write_within(write_limit, sess_tx.flush()).await {
                         break format!("flush failed: {err}");

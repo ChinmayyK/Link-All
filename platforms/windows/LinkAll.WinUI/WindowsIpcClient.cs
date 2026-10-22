@@ -142,7 +142,7 @@ namespace LinkAll.WinUI
 
         private static NamedPipeClientStream? OpenPipe(int timeoutMs)
         {
-            var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.None);
+            var pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             try
             {
                 pipe.Connect(Math.Max(1, timeoutMs));
@@ -155,25 +155,33 @@ namespace LinkAll.WinUI
             }
         }
 
-        private static string? ReadLineWithTimeout(Stream stream, int timeoutMs)
+        // One read deadline for the whole reply. A blocking Read can't be
+        // interrupted by a clock check between bytes, so the read is async
+        // (the pipe is opened Asynchronous) and the deadline cancels it and
+        // disposes the pipe, which unblocks a stalled engine reply for good.
+        // ConfigureAwait(false) throughout: callers may be on the UI thread
+        // and block on this, and a captured context would deadlock them.
+        private static string? ReadLineWithTimeout(NamedPipeClientStream stream, int timeoutMs)
         {
-            var line = new System.IO.MemoryStream();
-            var buf  = new byte[1];
-            var dl   = DateTime.Now.AddMilliseconds(timeoutMs);
-            while (DateTime.Now < dl)
+            using var cts = new CancellationTokenSource(Math.Max(1, timeoutMs));
+            using var onTimeout = cts.Token.Register(() => { try { stream.Dispose(); } catch { } });
+            try { return ReadLineAsync(stream, cts.Token).GetAwaiter().GetResult(); }
+            catch { return null; }
+        }
+
+        private static async Task<string?> ReadLineAsync(Stream stream, CancellationToken ct)
+        {
+            var line = new MemoryStream();
+            var buf  = new byte[4096];
+            while (true)
             {
-                try
-                {
-                    if (stream.Read(buf, 0, 1) == 0) break;
-                }
-                catch (IOException)
-                {
-                    break;
-                }
-                if (buf[0] == '\n') break;
-                line.WriteByte(buf[0]);
+                int n = await stream.ReadAsync(buf.AsMemory(0, buf.Length), ct).ConfigureAwait(false);
+                if (n == 0) break;
+                int nl = Array.IndexOf(buf, (byte)'\n', 0, n);
+                if (nl >= 0) { line.Write(buf, 0, nl); break; }
+                line.Write(buf, 0, n);
             }
-            return line.Length > 0 ? Encoding.UTF8.GetString(line.ToArray()) : null;
+            return line.Length > 0 ? Encoding.UTF8.GetString(line.GetBuffer(), 0, (int)line.Length) : null;
         }
 
         public static JsonDocument? PushText(string text) =>
@@ -252,6 +260,9 @@ namespace LinkAll.WinUI
         public static JsonDocument? PendingRemoteClipboards() => Send(Req("pending_remote_clipboards"));
         public static JsonDocument? ApplyClipboard(string contentHash) => Send(Req("apply_clipboard", ("content_hash", contentHash)));
         public static JsonDocument? GetSettings() => Send(Req("get_settings"));
+
+        /// <summary>Where the keyboard and mouse hand-off stands. <c>peek</c> looks without clearing what the hand-off itself acts on.</summary>
+        public static JsonDocument? EdgeStatus(bool peek) => Send(Req("edge_status", ("peek", peek)));
         public static JsonDocument? GetMetrics() => Send(Req("get_metrics"));
 
         // ── Remote File Explorer ──────────────────────────────────────────────

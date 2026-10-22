@@ -148,9 +148,10 @@ public partial class App : Application
             queue?.TryEnqueue(() =>
             {
                 try { LinkAll.WinUI.Services.TrayService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
+                try { LinkAll.WinUI.Services.EdgeControlService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
-                    try { LinkAll.WinUI.NativeCore.linkall_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
+                    try { var h = _engineHandle; _engineHandle = IntPtr.Zero; LinkAll.WinUI.NativeCore.linkall_shutdown(h); } catch (Exception ex) { App.HandleError(ex); }
                 }
                 try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 try { Application.Current.Exit(); } catch (Exception ex) { App.HandleError(ex); }
@@ -181,7 +182,8 @@ public partial class App : Application
             if (!_keyInstance.IsCurrent)
             {
                 TraceLog.Write("Secondary instance detected. Redirecting activation to existing instance.");
-                _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
+                // Off the UI thread: waiting on this from the STA can hang the second launch.
+                System.Threading.Tasks.Task.Run(() => _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask()).Wait();
                 var existingHwnd = FindWindowW(null, "Link All");
                 if (existingHwnd == IntPtr.Zero) existingHwnd = FindWindowW(null, "LinkAll Dashboard");
                 if (existingHwnd != IntPtr.Zero)
@@ -207,26 +209,45 @@ public partial class App : Application
             NotificationHelper.EnsureRegistered();
 
             // Process initial launch arguments
-            ProcessActivationArgs(activatedArgs);
+            try { ProcessActivationArgs(activatedArgs); }
+            catch (Exception ex) { App.HandleError(ex); }
 
             // Initialize the in-process native core FFI
             System.Threading.Tasks.Task.Run(() =>
             {
-                try
+                // A NULL handle means the start failed (port taken, store unreadable);
+                // retry with backoff, since a port often frees up within seconds.
+                for (int attempt = 1; attempt <= 5 && !IsShuttingDown; attempt++)
                 {
-                    _engineHandle = LinkAll.WinUI.NativeCore.linkall_start(LinkAll.WinUI.Services.LocalSettingsStore.DeviceName, 0);
-                    TraceLog.Write("Native engine started gracefully. Handle: " + _engineHandle);
-                }
-                catch (Exception ex)
-                {
-                    TraceLog.Write("Native engine start failed: " + ex.Message);
+                    try
+                    {
+                        _engineHandle = LinkAll.WinUI.NativeCore.linkall_start(LinkAll.WinUI.Services.LocalSettingsStore.DeviceName, 0);
+                        if (_engineHandle != IntPtr.Zero)
+                        {
+                            TraceLog.Write("Native engine started gracefully. Handle: " + _engineHandle);
+                            return;
+                        }
+                        TraceLog.Write("Native engine start returned no handle (attempt " + attempt + ")");
+                    }
+                    catch (Exception ex)
+                    {
+                        TraceLog.Write("Native engine start failed: " + ex.Message);
+                    }
                     TraceLog.Flush();
+                    System.Threading.Thread.Sleep(Math.Min(30000, 2000 << attempt));
+                }
+                if (_engineHandle == IntPtr.Zero)
+                {
+                    TraceLog.Write("Native engine did not start; giving up");
+                    TraceLog.Flush();
+                    try { MainDispatcherQueue?.TryEnqueue(() => NotificationHelper.ShowToast("Link All could not start", "Devices can't connect. Quit Link All from the tray and open it again.")); } catch { }
                 }
             });
 
             Clipboard = new LinkAll.WinUI.Services.ClipboardManager();
-            new LinkAll.WinUI.Services.NowPlayingSource().Start();
             ClipboardReady.TrySetResult(Clipboard);
+            try { new LinkAll.WinUI.Services.NowPlayingSource().Start(); }
+            catch (Exception ex) { App.HandleError(ex); }
 
             try
             {
@@ -237,6 +258,12 @@ public partial class App : Application
             try
             {
                 _dragMonitor = new LinkAll.WinUI.Services.GlobalDragMonitor(Clipboard);
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+
+            try
+            {
+                _ = new LinkAll.WinUI.Services.EdgeControlService();
             }
             catch (Exception ex) { App.HandleError(ex); }
 
