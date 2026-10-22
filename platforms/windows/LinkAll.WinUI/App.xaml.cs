@@ -181,7 +181,8 @@ public partial class App : Application
             if (!_keyInstance.IsCurrent)
             {
                 TraceLog.Write("Secondary instance detected. Redirecting activation to existing instance.");
-                _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask().Wait();
+                // Off the UI thread: waiting on this from the STA can hang the second launch.
+                System.Threading.Tasks.Task.Run(() => _keyInstance.RedirectActivationToAsync(activatedArgs).AsTask()).Wait();
                 var existingHwnd = FindWindowW(null, "Link All");
                 if (existingHwnd == IntPtr.Zero) existingHwnd = FindWindowW(null, "LinkAll Dashboard");
                 if (existingHwnd != IntPtr.Zero)

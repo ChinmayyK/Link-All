@@ -17,6 +17,7 @@ namespace LinkAll.WinUI.Services
     {
         private readonly CancellationTokenSource _stop = new();
         private string _lastKey = "";
+        private bool _idleSent;
 
         public void Start() => _ = Task.Run(LoopAsync);
 
@@ -46,25 +47,29 @@ namespace LinkAll.WinUI.Services
             var session = manager.GetCurrentSession();
             if (session == null)
             {
-                Send("", "", "", "", false, 0, 0, null);
+                // Nothing to say twice: tell the peers once that playback stopped.
+                if (_idleSent) return;
+                _idleSent = Send("", "", "", "", false, 0, 0, null);
+                _lastKey = "";
                 return;
             }
+            _idleSent = false;
             var props = await session.TryGetMediaPropertiesAsync();
             var info = session.GetPlaybackInfo();
             var timeline = session.GetTimelineProperties();
             var playing = info.PlaybackStatus == GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
             var key = $"{props.Title}|{props.Artist}|{props.AlbumTitle}";
             string? art = null;
-            if (key != _lastKey)
-            {
-                _lastKey = key;
-                art = await CoverAsync(props.Thumbnail);
-            }
+            var newTrack = key != _lastKey;
+            if (newTrack) art = await CoverAsync(props.Thumbnail);
             var app = session.SourceAppUserModelId ?? "";
             // "Spotify.exe" or "Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic" -> a short name.
             app = app.Split('!')[^1].Split('.')[0];
-            Send(props.Title ?? "", props.Artist ?? "", props.AlbumTitle ?? "", app, playing,
-                 (long)timeline.Position.TotalMilliseconds, (long)(timeline.EndTime - timeline.StartTime).TotalMilliseconds, art);
+            // Remembered only once the engine took it, or a failed send would lose the
+            // cover for this track for good.
+            if (Send(props.Title ?? "", props.Artist ?? "", props.AlbumTitle ?? "", app, playing,
+                 (long)timeline.Position.TotalMilliseconds, (long)(timeline.EndTime - timeline.StartTime).TotalMilliseconds, art) && newTrack)
+                _lastKey = key;
         }
 
         /// <summary>The cover scaled to at most 300 pixels and encoded as a JPEG, as base64.</summary>
@@ -99,13 +104,15 @@ namespace LinkAll.WinUI.Services
             catch { return null; }
         }
 
-        private static void Send(string title, string artist, string album, string app, bool playing, long positionMs, long durationMs, string? art)
+        private static bool Send(string title, string artist, string album, string app, bool playing, long positionMs, long durationMs, string? art)
         {
             var request = DaemonClient.Req("set_now_playing",
                 ("title", title), ("artist", artist), ("album", album), ("app", app),
                 ("playing", playing), ("position_ms", Math.Max(0, positionMs)), ("duration_ms", Math.Max(0, durationMs)));
             if (art != null) request["art_base64"] = art;
-            DaemonClient.Send(request)?.Dispose();
+            var reply = DaemonClient.Send(request);
+            reply?.Dispose();
+            return reply != null;
         }
     }
 }

@@ -53,7 +53,17 @@ namespace LinkAll.WinUI.Services
 
         private async void Clipboard_ContentChanged(object? sender, object e)
         {
-            await CheckClipboardAsync();
+            // Right after ContentChanged the copying app often still holds the clipboard
+            // open (CLIPBRD_E_CANT_OPEN); without a retry that copy was never synced.
+            for (int attempt = 1; ; attempt++)
+            {
+                try { await CheckClipboardAsync(); return; }
+                catch (System.Runtime.InteropServices.COMException cx) when (cx.HResult == unchecked((int)0x800401D0) && attempt < 4)
+                {
+                    await Task.Delay(100 * attempt);
+                }
+                catch (System.Runtime.InteropServices.COMException cx) when (cx.HResult == unchecked((int)0x800401D0)) { return; }
+            }
         }
 
         private void OnPollTick(object? sender, object e)
@@ -540,6 +550,7 @@ namespace LinkAll.WinUI.Services
                 // Ctrl+C between local folders must never broadcast a file to peers.
                 // Files only leave the PC through an explicit send.
             }
+            catch (System.Runtime.InteropServices.COMException cx) when (cx.HResult == unchecked((int)0x800401D0)) { throw; }
             catch (Exception ex) { App.HandleError(ex); }
         }
 

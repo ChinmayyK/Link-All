@@ -34,7 +34,11 @@ namespace LinkAll.WinUI.Views
         // Why the last listing failed (the device refused, didn't answer, ...), shown in place of
         // "Nothing here yet". Null when the listing loaded.
         private string? _loadError;
-        private static readonly System.Collections.Generic.Dictionary<string, JsonDocument> _cache = new();
+        // Listings are kept briefly so moving between folders is quick, but a rename or
+        // delete on the phone must show up, and a long session must not pile them up.
+        private static readonly System.Collections.Generic.Dictionary<string, (JsonDocument Doc, DateTime At)> _cache = new();
+        private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(60);
+        private const int CacheMax = 32;
         private static readonly System.Collections.Generic.Dictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _thumbnailCache = new();
         // Insertion order for _thumbnailCache, so the oldest previews are
         // dropped once MaxCachedThumbnails is reached. A decoded 320px
@@ -148,9 +152,9 @@ namespace LinkAll.WinUI.Views
                 string cacheKey = $"{peer.device_id}_{_currentPath}";
                 JsonDocument? doc = null;
 
-                if (!forceRefresh && _cache.TryGetValue(cacheKey, out var cachedDoc))
+                if (!forceRefresh && _cache.TryGetValue(cacheKey, out var cached) && DateTime.UtcNow - cached.At < CacheTtl)
                 {
-                    doc = cachedDoc;
+                    doc = cached.Doc;
                 }
                 else
                 {
@@ -158,7 +162,8 @@ namespace LinkAll.WinUI.Views
                     // Only a listing is worth keeping; a refusal or timeout must be asked again next time.
                     if (doc != null && ErrorOf(doc) == null)
                     {
-                        _cache[cacheKey] = doc;
+                        if (_cache.Count >= CacheMax) _cache.Clear();
+                        _cache[cacheKey] = (doc, DateTime.UtcNow);
                     }
                 }
 

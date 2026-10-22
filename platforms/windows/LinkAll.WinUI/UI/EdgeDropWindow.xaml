@@ -32,35 +32,22 @@
                 Background="{ThemeResource AppScrimStrongBrush}"
                 Opacity="0" Visibility="Collapsed"
                 HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                Margin="12"
-                Padding="20,24">
+                Margin="10"
+                Padding="16">
 
-            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16">
-                <Border Width="48" Height="48"
-                        CornerRadius="{StaticResource RadiusMedium}"
-                        Background="{ThemeResource AppScrimSubtleBrush}"
-                        HorizontalAlignment="Center">
-                    <FontIcon Glyph="&#xE898;" FontSize="20"
-                              Foreground="White"
-                              HorizontalAlignment="Center" VerticalAlignment="Center" />
-                </Border>
-
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Drop to send"
+            <StackPanel Spacing="14">
+                <StackPanel Spacing="2">
+                    <TextBlock x:Name="HeaderText" Text="Send to"
                                Foreground="White"
                                FontFamily="{StaticResource AppDisplayFont}"
-                               FontSize="16" FontWeight="Bold"
-                               HorizontalAlignment="Center" />
+                               FontSize="16" FontWeight="Bold" />
                     <TextBlock x:Name="ExpandedSubText"
-                               Text="Release to send to your connected devices."
+                               Text="Drop on a device, or anywhere here to send to all."
                                Foreground="{ThemeResource AppScrimTextSecondaryBrush}"
                                FontFamily="{StaticResource AppTextFont}"
-                               FontSize="12"
-                               HorizontalAlignment="Center"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="180" />
+                               FontSize="12" TextWrapping="Wrap" />
                 </StackPanel>
+                <StackPanel x:Name="Targets" Spacing="8" />
             </StackPanel>
         </Border>
     </Grid>

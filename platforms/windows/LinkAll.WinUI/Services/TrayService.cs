@@ -50,8 +50,19 @@ namespace LinkAll.WinUI.Services
                         server ??= new NamedPipeServerStream("LinkAll_Main_Commands", PipeDirection.In);
                         server.WaitForConnection();
                         string? line;
+                        // A client that connects and never writes must not wedge the listener.
                         using (var reader = new StreamReader(server, leaveOpen: true))
-                            line = reader.ReadLine();
+                        {
+                            var read = reader.ReadLineAsync();
+                            if (!read.Wait(2000))
+                            {
+                                read.ContinueWith(t => _ = t.Exception, System.Threading.Tasks.TaskContinuationOptions.OnlyOnFaulted);
+                                server.Dispose();
+                                server = null;
+                                continue;
+                            }
+                            line = read.Result;
+                        }
                         server.Disconnect();
                         if (string.IsNullOrEmpty(line)) continue;
 

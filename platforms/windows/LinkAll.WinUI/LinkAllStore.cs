@@ -1617,6 +1617,18 @@ namespace LinkAll.WinUI
                 App.MainDispatcherQueue?.TryEnqueue(() =>
                 {
                     try { IsDaemonRunning = isRunning; } catch (Exception ex) { App.HandleError(ex); }
+                    // A stopped engine has no transfers; leaving the last ones up kept the
+                    // PC awake and showed rows that could never finish.
+                    if (!isRunning)
+                    {
+                        try
+                        {
+                            ActiveTransfers = new ObservableCollection<FileTransferState>();
+                            ActiveSpeedTests = new ObservableCollection<SpeedTestState>();
+                            NotifyTransferMetrics();
+                        }
+                        catch (Exception ex) { App.HandleError(ex); }
+                    }
                 });
 
                 if (isRunning)

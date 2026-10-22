@@ -53,82 +53,164 @@ namespace LinkAll.WinUI.UI
             return Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
         }
 
-        private void Grid_DragEnter(object sender, Microsoft.UI.Xaml.DragEventArgs e)
+        private const int MaxTiles = 5;
+
+        private static readonly Windows.UI.Color TileIdle = Windows.UI.Color.FromArgb(0x1A, 0xFF, 0xFF, 0xFF);
+        private static readonly Windows.UI.Color TileHot = Windows.UI.Color.FromArgb(0x59, 0xFF, 0xFF, 0xFF);
+
+        // One tile per connected device, plus "All devices" when there are several.
+        // Built here, not bound: the list is a snapshot for this drag.
+        private void BuildTargets()
         {
-            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+            Targets.Children.Clear();
+            var connected = System.Linq.Enumerable.ToList(LinkAllStore.Shared.ConnectedPeers);
+            if (connected.Count == 0)
+            {
+                HeaderText.Text = "No devices connected";
+                ExpandedSubText.Text = "Connect a device to send files.";
+                return;
+            }
+            HeaderText.Text = "Send to";
+            ExpandedSubText.Text = connected.Count == 1
+                ? "Release to send."
+                : "Drop on a device, or anywhere else here to send to all.";
+            foreach (var peer in System.Linq.Enumerable.Take(connected, MaxTiles))
+                Targets.Children.Add(MakeTile(peer.DeviceGlyph, peer.DisplayName, peer.device_id));
+            if (connected.Count > 1)
+                Targets.Children.Add(MakeTile("", "All devices", ""));
+        }
+
+        private Border MakeTile(string glyph, string name, string targetId)
+        {
+            var icon = new FontIcon { Glyph = glyph, FontSize = 18, Foreground = new SolidColorBrush(Microsoft.UI.Colors.White) };
+            var label = new TextBlock
+            {
+                Text = name,
+                Foreground = new SolidColorBrush(Microsoft.UI.Colors.White),
+                FontSize = 13,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            var row = new Grid { ColumnSpacing = 12 };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Grid.SetColumn(label, 1);
+            row.Children.Add(icon);
+            row.Children.Add(label);
+            var tile = new Border
+            {
+                Child = row,
+                Padding = new Thickness(12, 10, 12, 10),
+                CornerRadius = new CornerRadius(10),
+                Background = new SolidColorBrush(TileIdle),
+                AllowDrop = true,
+                Tag = targetId,
+            };
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(tile, "Send to " + name);
+            tile.DragEnter += (s, e) => { e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy; e.Handled = true; Highlight(tile, true); };
+            tile.DragOver += (s, e) => { e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy; e.Handled = true; };
+            tile.DragLeave += (s, e) => { e.Handled = true; Highlight(tile, false); };
+            tile.Drop += async (s, e) => { e.Handled = true; Highlight(tile, false); Collapse(); await SendAsync(e.DataView, (string)tile.Tag); };
+            return tile;
+        }
+
+        private static void Highlight(Border tile, bool on) =>
+            tile.Background = new SolidColorBrush(on ? TileHot : TileIdle);
+
+        private void Expand()
+        {
+            BuildTargets();
             RestingSliver.Visibility = Visibility.Collapsed;
             ExpandedCard.Visibility = Visibility.Visible;
             ExpandedCard.Opacity = 1.0;
-            ExpandedCard.Scale = new System.Numerics.Vector3(1.0f, 1.0f, 1.0f);
-            
             try
             {
                 int screenW = GetSystemMetrics(SM_CXSCREEN);
                 int screenH = GetSystemMetrics(SM_CYSCREEN);
-                GetAppWindow().MoveAndResize(new Windows.Graphics.RectInt32(screenW - 250, (screenH - 300) / 2, 250, 300));
+                var appWindow = GetAppWindow();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                int tiles = System.Math.Min(System.Math.Max(Targets.Children.Count, 1), MaxTiles + 1);
+                var size = LinkAll.WinUI.Services.WindowIconHelper.FitToWorkArea(appWindow, hwnd, 280, 120 + tiles * 52);
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - size.Width, (screenH - size.Height) / 2, size.Width, size.Height));
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
 
-        private void Grid_DragLeave(object sender, Microsoft.UI.Xaml.DragEventArgs e)
+        private void Collapse()
         {
             RestingSliver.Visibility = Visibility.Visible;
             ExpandedCard.Visibility = Visibility.Collapsed;
             ExpandedCard.Opacity = 0;
-            ExpandedCard.Scale = new System.Numerics.Vector3(0.95f, 0.95f, 1.0f);
-            
             try
             {
                 int screenW = GetSystemMetrics(SM_CXSCREEN);
                 int screenH = GetSystemMetrics(SM_CYSCREEN);
-                GetAppWindow().MoveAndResize(new Windows.Graphics.RectInt32(screenW - 20, (screenH - 200) / 2, 20, 200));
+                var appWindow = GetAppWindow();
+                var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                var size = LinkAll.WinUI.Services.WindowIconHelper.FitToWorkArea(appWindow, hwnd, 20, 200);
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - size.Width, (screenH - size.Height) / 2, size.Width, size.Height));
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
+
+        private void Grid_DragEnter(object sender, Microsoft.UI.Xaml.DragEventArgs e)
+        {
+            e.AcceptedOperation = Windows.ApplicationModel.DataTransfer.DataPackageOperation.Copy;
+            Expand();
+        }
+
+        private void Grid_DragLeave(object sender, Microsoft.UI.Xaml.DragEventArgs e) => Collapse();
 
         private async void Grid_Drop(object sender, Microsoft.UI.Xaml.DragEventArgs e)
         {
-            RestingSliver.Visibility = Visibility.Visible;
-            ExpandedCard.Visibility = Visibility.Collapsed;
-            ExpandedCard.Opacity = 0;
-            ExpandedCard.Scale = new System.Numerics.Vector3(0.95f, 0.95f, 1.0f);
+            Collapse();
+            await SendAsync(e.DataView, "");
+        }
+
+        // target is a device id, or "" for every connected device.
+        private static async System.Threading.Tasks.Task SendAsync(Windows.ApplicationModel.DataTransfer.DataPackageView data, string target)
+        {
             try
             {
-                // Only connected devices can take the drop. Peers also lists
-                // offline and unpaired devices, and the first of those used
-                // to get it. One connected device gets it; with several, all
-                // of them do, as the card says ("your connected devices").
                 var connected = System.Linq.Enumerable.ToList(LinkAllStore.Shared.ConnectedPeers);
                 if (connected.Count == 0)
                 {
                     NotificationHelper.ShowToast("No devices connected", "Connect a device to send files.");
                     return;
                 }
-                var target = connected.Count == 1 ? connected[0].device_id : "";
+                // With one device, "all" and that device are the same; send to it by id.
+                if (target.Length == 0 && connected.Count == 1) target = connected[0].device_id;
+                string where = target.Length == 0
+                    ? "your devices"
+                    : System.Linq.Enumerable.FirstOrDefault(connected, p => p.device_id == target)?.DisplayName ?? "your device";
 
-                if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
+                if (data.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.StorageItems))
                 {
-                    var items = await e.DataView.GetStorageItemsAsync();
+                    var items = await data.GetStorageItemsAsync();
+                    int sent = 0;
                     // Every dropped file and folder; PushFile sends a folder whole.
                     foreach (var item in items)
                     {
                         var path = item.Path;
                         if (string.IsNullOrEmpty(path)) continue;
+                        sent++;
                         DaemonActions.RunFireAndForget("Send File", () => DaemonClient.PushFile(target, path));
                     }
+                    if (sent > 0)
+                        NotificationHelper.ShowToast("Sending", sent == 1 ? "1 item to " + where : sent + " items to " + where);
                 }
-                else if (e.DataView.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
+                else if (data.Contains(Windows.ApplicationModel.DataTransfer.StandardDataFormats.Text))
                 {
-                    var text = await e.DataView.GetTextAsync();
+                    var text = await data.GetTextAsync();
+                    if (string.IsNullOrEmpty(text)) return;
                     if (string.IsNullOrEmpty(target))
                         DaemonActions.RunFireAndForget("Send Text", () => DaemonClient.PushText(text));
                     else
                         DaemonActions.RunFireAndForget("Send Text", () => DaemonClient.PushTextTo(text, target));
+                    NotificationHelper.ShowToast("Sending", "Text to " + where);
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
     }
 }
-
-
