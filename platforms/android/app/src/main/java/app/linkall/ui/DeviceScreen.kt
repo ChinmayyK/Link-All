@@ -36,6 +36,7 @@ import androidx.compose.material.icons.outlined.Mouse
 import androidx.compose.material.icons.outlined.NotificationsActive
 import androidx.compose.material.icons.outlined.NotificationsOff
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PowerSettingsNew
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
 import androidx.compose.material.icons.outlined.Speed
@@ -163,7 +164,20 @@ internal fun DeviceScreen(
                             style = DdType.small, color = c.textMuted,
                         )
                         Spacer(Modifier.height(14.dp))
-                        PillButton(c, "Connect now", filled = true, modifier = Modifier.fillMaxWidth(), onClick = onConnect)
+                        if (peer.canWake) {
+                            PillButton(c, "Wake ${peer.name}", filled = true, modifier = Modifier.fillMaxWidth()) {
+                                RemoteActions.wake(context, peer)
+                            }
+                            Spacer(Modifier.height(8.dp))
+                            PillButton(c, "Connect now", filled = false, modifier = Modifier.fillMaxWidth(), onClick = onConnect)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Waking works when the computer is on a cable and Wake-on-LAN is turned on in its network settings.",
+                                style = DdType.small, color = c.textMuted,
+                            )
+                        } else {
+                            PillButton(c, "Connect now", filled = true, modifier = Modifier.fillMaxWidth(), onClick = onConnect)
+                        }
                     }
                 }
             }
@@ -197,6 +211,7 @@ internal fun DeviceScreen(
                             TileSpec(Icons.Outlined.Mouse, "Mouse & keyboard", Tone.Violet) { showPad = true },
                             TileSpec(Icons.Outlined.Lock, "Lock", Tone.Violet) { RemoteActions.press(context, peer, "lock_screen") },
                             TileSpec(Icons.Outlined.DarkMode, "Screen off", Tone.Violet) { RemoteActions.press(context, peer, "sleep_display") },
+                            TileSpec(Icons.Outlined.PowerSettingsNew, "Sleep PC", Tone.Violet) { RemoteActions.press(context, peer, "sleep_computer") },
                         ),
                     )
                     GroupLabel(c, "Media")

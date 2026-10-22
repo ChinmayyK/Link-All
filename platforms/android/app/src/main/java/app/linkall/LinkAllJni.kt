@@ -77,6 +77,8 @@ object LinkAllJni {
     @JvmStatic external fun deviceChoicesJson(handle: Long, purpose: String, lastUsed: String?): String?
     /** Asks a computer to press a media, volume or slide key. 0 when sent, -1 when it could not be. */
     @JvmStatic external fun remoteControl(handle: Long, targetDeviceId: String, action: String): Int
+    /** Wakes a sleeping paired computer (Wake-on-LAN). Empty when the packet went out, else why not. */
+    @JvmStatic external fun wakePeer(handle: Long, targetDeviceId: String): String
     /** Why [remoteControl] could not send, as a sentence, or null. */
     @JvmStatic external fun remoteControlError(handle: Long, targetDeviceId: String): String?
     @JvmStatic external fun eventRemoteControlSuccess(event: Long): Boolean

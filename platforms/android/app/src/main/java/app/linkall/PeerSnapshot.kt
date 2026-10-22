@@ -36,7 +36,11 @@ data class PeerSnapshot(
     val remoteSyncEnabled: Boolean,
     /** The Link All version the device reported, e.g. "2.1.0"; null until it has connected. */
     val appVersion: String? = null,
+    /** The computer's network card address, kept from when it was last connected; lets us wake it. */
+    val macAddress: String? = null,
 ) {
+    /** A paired computer that is off the network and can be woken with Wake-on-LAN. */
+    val canWake: Boolean get() = trusted && !isConnected && platform != "Android" && !macAddress.isNullOrBlank()
     val isConnected: Boolean get() = status == "connected" && trusted
     val isConnecting: Boolean get() = status == "connecting"
     val isReconnectable: Boolean get() = trusted && remembered && autoConnect && !isConnected && !explicitDisconnect
@@ -96,6 +100,7 @@ fun parsePeerSnapshots(raw: String?): List<PeerSnapshot> {
             lifecycleState = obj.optString("lifecycle_state", "discovered"),
             remoteSyncEnabled = obj.optBoolean("remote_sync_enabled", true),
             appVersion = if (obj.isNull("app_version")) null else obj.optString("app_version").ifBlank { null },
+            macAddress = if (obj.isNull("mac_address")) null else obj.optString("mac_address").ifBlank { null },
         )
         
         val existing = uniquePeers[peer.id]
