@@ -26,6 +26,41 @@ namespace LinkAll.WinUI.Services
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassNameW(IntPtr hWnd, [Out] ushort[] buffer, int maxCount);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr MonitorFromPoint(POINT pt, uint flags);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetMonitorInfoW(IntPtr hMonitor, ref MONITORINFO info);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT
+        {
+            public int Left, Top, Right, Bottom;
+        }
+
+        private const uint MONITOR_DEFAULTTONEAREST = 2;
+        private const int SM_XVIRTUALSCREEN = 76;
+        private const int SM_CXVIRTUALSCREEN = 78;
+
+        // The monitor the drop zone sits on, set when the zone is shown.
+        public static Windows.Graphics.RectInt32 EdgeMonitor { get; private set; } = PrimaryMonitor();
+
+        private static Windows.Graphics.RectInt32 PrimaryMonitor() =>
+            new(0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
+
+        // Settings toggle; on by default.
+        public const string EnabledKey = "edge_drop_enabled";
+
         private const int SM_CXSCREEN = 0;
         private const int SM_CYSCREEN = 1;
         private const int SM_CXDRAG = 68;
@@ -44,7 +79,7 @@ namespace LinkAll.WinUI.Services
         private bool _wasLeftButtonDown = false;
         private UI.EdgeDropWindow? _dropZoneWindow;
         private readonly ClipboardManager _clipboardManager;
-        private readonly int _edgeThreshold = 20;
+        private const int EdgeThresholdPx = 20;
         // Edge ticks (100 ms each) the cursor must stay put before the zone shows, so
         // sweeping past the edge doesn't open it.
         private const int EdgeDwellTicks = 4;
@@ -72,7 +107,7 @@ namespace LinkAll.WinUI.Services
                 {
                     // A new press: remember where, and whether it landed on a file icon.
                     _press = down;
-                    _pressedOnFile = IsFileItem(down);
+                    _pressedOnFile = LocalSettingsStore.GetBool(EnabledKey, true) && IsFileItem(down);
                     _moved = false;
                     _edgeTicks = 0;
                 }
@@ -85,8 +120,7 @@ namespace LinkAll.WinUI.Services
                         int slop = GetSystemMetrics(SM_CXDRAG);
                         if (Math.Abs(p.X - _press.X) > slop || Math.Abs(p.Y - _press.Y) > slop) _moved = true;
 
-                        double screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                        if (_moved && p.X >= screenWidth - _edgeThreshold)
+                        if (_moved && AtRightEdge(p))
                         {
                             if (++_edgeTicks >= EdgeDwellTicks && _dropZoneWindow == null)
                             {
@@ -140,6 +174,20 @@ namespace LinkAll.WinUI.Services
             return false;
         }
 
+        // True at the right edge of the rightmost monitor. A seam between two
+        // monitors is not an edge: the cursor crosses it all the time.
+        private static bool AtRightEdge(POINT p)
+        {
+            var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            var mon = MonitorFromPoint(p, MONITOR_DEFAULTTONEAREST);
+            if (mon == IntPtr.Zero || !GetMonitorInfoW(mon, ref info)) return false;
+            int virtualRight = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            if (info.rcMonitor.Right < virtualRight || p.X < info.rcMonitor.Right - EdgeThresholdPx) return false;
+            EdgeMonitor = new Windows.Graphics.RectInt32(info.rcMonitor.Left, info.rcMonitor.Top,
+                info.rcMonitor.Right - info.rcMonitor.Left, info.rcMonitor.Bottom - info.rcMonitor.Top);
+            return true;
+        }
+
         private void ShowDropZone()
         {
             try
@@ -152,13 +200,11 @@ namespace LinkAll.WinUI.Services
                 var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(hwnd);
                 var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
                 
-                int screenW = GetSystemMetrics(SM_CXSCREEN);
-                int screenH = GetSystemMetrics(SM_CYSCREEN);
-                
+                var m = EdgeMonitor;
                 int w = 20;
                 int h = 200;
-                
-                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - w, (screenH - h) / 2, w, h));
+
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(m.X + m.Width - w, m.Y + (m.Height - h) / 2, w, h));
                 
                 // Shown without taking focus: the user is mid-drag in another
                 // app, and activating this window could end that drag.

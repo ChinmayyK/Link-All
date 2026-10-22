@@ -59,6 +59,10 @@ namespace LinkAll.WinUI
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern void linkall_stop(IntPtr handle);
 
+        // Stops the engine without freeing the handle; for an exiting process.
+        [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void linkall_shutdown(IntPtr handle);
+
         [DllImport(DLL, CallingConvention = CallingConvention.Cdecl)]
         public static extern int linkall_push_text(
             IntPtr handle, [MarshalAs(UnmanagedType.LPUTF8Str)] string text);

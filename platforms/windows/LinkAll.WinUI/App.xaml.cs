@@ -150,7 +150,7 @@ public partial class App : Application
                 try { LinkAll.WinUI.Services.TrayService.Current?.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 if (_engineHandle != IntPtr.Zero)
                 {
-                    try { LinkAll.WinUI.NativeCore.linkall_stop(_engineHandle); _engineHandle = IntPtr.Zero; } catch (Exception ex) { App.HandleError(ex); }
+                    try { var h = _engineHandle; _engineHandle = IntPtr.Zero; LinkAll.WinUI.NativeCore.linkall_shutdown(h); } catch (Exception ex) { App.HandleError(ex); }
                 }
                 try { GlobalHotKeyManager.Shared.Dispose(); } catch (Exception ex) { App.HandleError(ex); }
                 try { Application.Current.Exit(); } catch (Exception ex) { App.HandleError(ex); }

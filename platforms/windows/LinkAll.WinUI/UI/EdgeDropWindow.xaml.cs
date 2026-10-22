@@ -125,13 +125,12 @@ namespace LinkAll.WinUI.UI
             ExpandedCard.Opacity = 1.0;
             try
             {
-                int screenW = GetSystemMetrics(SM_CXSCREEN);
-                int screenH = GetSystemMetrics(SM_CYSCREEN);
+                var mon = LinkAll.WinUI.Services.GlobalDragMonitor.EdgeMonitor;
                 var appWindow = GetAppWindow();
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
                 int tiles = System.Math.Min(System.Math.Max(Targets.Children.Count, 1), MaxTiles + 1);
                 var size = LinkAll.WinUI.Services.WindowIconHelper.FitToWorkArea(appWindow, hwnd, 280, 120 + tiles * 52);
-                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - size.Width, (screenH - size.Height) / 2, size.Width, size.Height));
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(mon.X + mon.Width - size.Width, mon.Y + (mon.Height - size.Height) / 2, size.Width, size.Height));
             }
             catch (Exception ex) { App.HandleError(ex); }
         }
@@ -143,12 +142,11 @@ namespace LinkAll.WinUI.UI
             ExpandedCard.Opacity = 0;
             try
             {
-                int screenW = GetSystemMetrics(SM_CXSCREEN);
-                int screenH = GetSystemMetrics(SM_CYSCREEN);
+                var mon = LinkAll.WinUI.Services.GlobalDragMonitor.EdgeMonitor;
                 var appWindow = GetAppWindow();
                 var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
                 var size = LinkAll.WinUI.Services.WindowIconHelper.FitToWorkArea(appWindow, hwnd, 20, 200);
-                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(screenW - size.Width, (screenH - size.Height) / 2, size.Width, size.Height));
+                appWindow.MoveAndResize(new Windows.Graphics.RectInt32(mon.X + mon.Width - size.Width, mon.Y + (mon.Height - size.Height) / 2, size.Width, size.Height));
             }
             catch (Exception ex) { App.HandleError(ex); }
         }

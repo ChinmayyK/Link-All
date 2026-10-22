@@ -134,6 +134,29 @@
                                           Toggled="OnScreenshotSyncToggled"
                                           AutomationProperties.Name="Send new screenshots automatically" />
                         </Grid>
+
+                        <Border Style="{StaticResource AppDivider}" Margin="70,0,0,0" />
+
+                        <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                                <FontIcon Glyph="&#xE8A7;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                          HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                                <TextBlock Text="Drop zone at the screen edge" Style="{StaticResource AppBodyStrong}" />
+                                <TextBlock Text="Drag a file to the right edge of your screen to pick a device to send it to"
+                                           Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="EdgeDropToggle" Grid.Column="2" MinWidth="0"
+                                          VerticalAlignment="Center"
+                                          Toggled="OnEdgeDropToggled"
+                                          AutomationProperties.Name="Drop zone at the screen edge" />
+                        </Grid>
                     </StackPanel>
                 </Border>
             </StackPanel>

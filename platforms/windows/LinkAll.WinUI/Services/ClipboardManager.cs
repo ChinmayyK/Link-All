@@ -130,7 +130,7 @@ namespace LinkAll.WinUI.Services
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(async () => {
                                     try { await SetClipboardImageAsync(bytes); }
                                     catch (Exception ex) { App.HandleError(ex); }
-                                    AddHistoryItem("Image", from, "🖼️", "", CacheImage(bytes));
+                                    AddHistoryItem("Image", from, "🖼️", "", await CacheImageAsync(bytes));
                                 });
                             }
                             break;
@@ -336,7 +336,9 @@ namespace LinkAll.WinUI.Services
                             if (ShouldToastWarning(message))
                             {
                                 (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                    NotificationHelper.ShowToast("Folder not sent", message);
+                                    NotificationHelper.ShowToast(
+                                        message.StartsWith(CorruptStorePrefix, StringComparison.Ordinal) ? "Saved data was unreadable" : "Folder not sent",
+                                        message);
                                 });
                             }
                             break;
@@ -352,28 +354,32 @@ namespace LinkAll.WinUI.Services
                             var fromName = NativeCore.PtrToUtf8String(NativeCore.linkall_event_device_name(ev)) ?? "A device";
                             if (!string.IsNullOrEmpty(url) && !string.IsNullOrEmpty(requesterId))
                             {
-                                bool opened;
-                                string? openError = null;
-                                try
+                                // Starting a browser can stall; keep it off the UI thread.
+                                _ = Task.Run(() =>
                                 {
-                                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                                    bool opened;
+                                    string? openError = null;
+                                    try
                                     {
-                                        UseShellExecute = true
-                                    });
-                                    opened = true;
-                                }
-                                catch (Exception ex)
-                                {
-                                    opened = false;
-                                    openError = ex.Message;
-                                }
-                                DaemonActions.RunFireAndForget("Open Link Ack", () => DaemonClient.AckOpenUrlOnDevice(requesterId, opened, openError));
-                                if (opened)
-                                {
-                                    (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
-                                        NotificationHelper.ShowToast("Link opened", $"From {fromName}");
-                                    });
-                                }
+                                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                                        {
+                                            UseShellExecute = true
+                                        });
+                                        opened = true;
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        opened = false;
+                                        openError = ex.Message;
+                                    }
+                                    DaemonActions.RunFireAndForget("Open Link Ack", () => DaemonClient.AckOpenUrlOnDevice(requesterId, opened, openError));
+                                    if (opened)
+                                    {
+                                        (_dispatcher ?? App.MainDispatcherQueue)?.TryEnqueue(() => {
+                                            NotificationHelper.ShowToast("Link opened", $"From {fromName}");
+                                        });
+                                    }
+                                });
                             }
                             break;
                         }
@@ -439,7 +445,11 @@ namespace LinkAll.WinUI.Services
 
         // folder_ops.rs: "Stopped sending {folder}: {reason}".
         private static bool IsForThePerson(string message) =>
-            message.StartsWith("Stopped sending ", StringComparison.Ordinal);
+            message.StartsWith("Stopped sending ", StringComparison.Ordinal)
+            || message.StartsWith(CorruptStorePrefix, StringComparison.Ordinal);
+
+        // Sent by the engine when a trust or peer store did not parse and was set aside.
+        private const string CorruptStorePrefix = "Set aside an unreadable file";
 
         private bool ShouldToastWarning(string message)
         {
@@ -526,7 +536,7 @@ namespace LinkAll.WinUI.Services
                     // Copied images and Win+Shift+S screenshots.
                     var png = await ReadClipboardPngAsync(packageView);
                     if (png == null) return;
-                    var hash = Convert.ToHexString(SHA256.HashData(png));
+                    var hash = await Task.Run(() => Convert.ToHexString(SHA256.HashData(png)));
                     if (Environment.TickCount64 - _imageAppliedAtMs < ImageEchoWindowMs)
                     {
                         _lastImageHash = hash;
@@ -544,7 +554,7 @@ namespace LinkAll.WinUI.Services
                     {
                         DaemonActions.RunFireAndForget("Push Image", () => DaemonClient.PushImage(png));
                     }
-                    AddHistoryItem("Image", "local", "🖼️", "", CacheImage(png));
+                    AddHistoryItem("Image", "local", "🖼️", "", await CacheImageAsync(png));
                 }
                 // Files copied in Explorer (StorageItems) are deliberately not sent:
                 // Ctrl+C between local folders must never broadcast a file to peers.
@@ -607,8 +617,12 @@ namespace LinkAll.WinUI.Services
         // Images in history keep their bytes here, named by content hash, so
         // clicking one copies it again. The oldest go past MaxCachedImages.
         private const int MaxCachedImages = 100;
+        private const long MaxCachedBytes = 200L * 1024 * 1024;
         private static readonly string ImageCacheDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LinkAll", "clipboard_cache");
+
+        // Hashing, writing and scanning the folder run off the UI thread.
+        private static Task<string?> CacheImageAsync(byte[] bytes) => Task.Run(() => CacheImage(bytes));
 
         private static string? CacheImage(byte[] bytes)
         {
@@ -619,10 +633,14 @@ namespace LinkAll.WinUI.Services
                 var file = Path.Combine(ImageCacheDir, Convert.ToHexString(SHA256.HashData(bytes)) + (isJpeg ? ".jpg" : ".png"));
                 if (!File.Exists(file)) File.WriteAllBytes(file, bytes);
                 File.SetLastWriteTimeUtc(file, DateTime.UtcNow);
-                foreach (var old in new DirectoryInfo(ImageCacheDir).GetFiles()
-                             .OrderByDescending(f => f.LastWriteTimeUtc).Skip(MaxCachedImages))
+                // Newest first; past the count or the byte budget, the rest go.
+                long total = 0;
+                var kept = 0;
+                foreach (var f in new DirectoryInfo(ImageCacheDir).GetFiles().OrderByDescending(f => f.LastWriteTimeUtc))
                 {
-                    try { old.Delete(); } catch { }
+                    total += f.Length;
+                    if (kept++ < MaxCachedImages && (total <= MaxCachedBytes || kept == 1)) continue;
+                    try { f.Delete(); } catch { }
                 }
                 return file;
             }

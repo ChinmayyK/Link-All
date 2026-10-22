@@ -22,6 +22,7 @@ namespace LinkAll.WinUI.Views
                 VersionText.Text = $"Version {version.Major}.{version.Minor}.{version.Build}  \u00B7  No cloud, no account, no telemetry";
             _ = LoadStartupAsync();
             ScreenshotSyncToggle.IsOn = App.ScreenshotSyncEnabled;
+            EdgeDropToggle.IsOn = LinkAll.WinUI.Services.LocalSettingsStore.GetBool(LinkAll.WinUI.Services.GlobalDragMonitor.EnabledKey, true);
             PhoneNotificationsToggle.IsOn = App.PhoneNotificationMirroringEnabled;
             _ = LoadFileBrowsingAsync();
             _ = LoadRemoteControlAsync();
@@ -39,6 +40,9 @@ namespace LinkAll.WinUI.Views
                 _ => 0,
             };
         }
+
+        private void OnEdgeDropToggled(object sender, RoutedEventArgs e) =>
+            LinkAll.WinUI.Services.LocalSettingsStore.SetBool(LinkAll.WinUI.Services.GlobalDragMonitor.EnabledKey, EdgeDropToggle.IsOn);
 
         private void OnScreenshotSyncToggled(object sender, RoutedEventArgs e)
         {

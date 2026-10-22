@@ -110,9 +110,10 @@ namespace LinkAll.WinUI.Services
 
         private void CheckTrayHealth()
         {
+            Process[] procs = Array.Empty<Process>();
             try
             {
-                var procs = Process.GetProcessesByName("LinkAll.Tray");
+                procs = Process.GetProcessesByName("LinkAll.Tray");
                 if (procs.Length == 0)
                 {
                     _consecutiveIpcFailures = 0;
@@ -140,6 +141,7 @@ namespace LinkAll.WinUI.Services
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }
+            finally { foreach (var p in procs) p.Dispose(); }
         }
 
         private bool IsIpcResponsive()
@@ -158,7 +160,9 @@ namespace LinkAll.WinUI.Services
             try
             {
                 var procs = Process.GetProcessesByName("LinkAll.Tray");
-                if (procs.Length == 0)
+                var running = procs.Length > 0;
+                foreach (var p in procs) p.Dispose();
+                if (!running)
                 {
                     var baseDir = AppContext.BaseDirectory;
                     // The native tray helper (platforms/windows/tray), copied into
