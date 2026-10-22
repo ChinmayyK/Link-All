@@ -498,6 +498,8 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_eventType(
         CaptureRequested { .. } => 46,
         NowPlayingChanged => 47,
         MediaCommandReceived { .. } => 48,
+        // A phone neither shares nor takes a keyboard and mouse.
+        EdgeReturned { .. } | EdgeEnded { .. } => 0,
     }
 }
 
@@ -3395,5 +3397,37 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_sendMediaCommand(
     match rt().block_on(h.engine.send_media_command(id, &action, value)) {
         Ok(()) => 0,
         Err(_) => -1,
+    }
+}
+
+/// Wakes a paired computer that is asleep with Wake-on-LAN. Returns an empty
+/// string when the packet went out (not that the computer woke), otherwise a
+/// sentence saying why not.
+#[no_mangle]
+pub extern "system" fn Java_app_linkall_LinkAllJni_wakePeer(
+    mut env: JNIEnv,
+    _class: JClass,
+    handle: jlong,
+    target_device_id: JString,
+) -> jstring {
+    let message = (|| -> String {
+        if handle == 0 {
+            return "Link All isn't running.".to_string();
+        }
+        let Ok(target) = env.get_string(&target_device_id).map(String::from) else {
+            return "That isn't a device.".to_string();
+        };
+        let Ok(target) = uuid::Uuid::parse_str(&target) else {
+            return "That isn't a device.".to_string();
+        };
+        let h = unsafe { &*(handle as *const AndroidHandle) };
+        match rt().block_on(h.engine.wake_peer(target)) {
+            Ok(_) => String::new(),
+            Err(e) => e,
+        }
+    })();
+    match env.new_string(message) {
+        Ok(s) => s.into_raw(),
+        Err(_) => std::ptr::null_mut(),
     }
 }

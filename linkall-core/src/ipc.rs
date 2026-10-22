@@ -181,6 +181,42 @@ pub enum IpcRequest {
         #[serde(default)]
         value: i64,
     },
+    /// Wake a paired computer that is asleep with Wake-on-LAN. Says the packet
+    /// was sent, not that the computer woke.
+    WakePeer {
+        target: String,
+    },
+    /// Keyboard and mouse hand-off: ask `target` to take this computer's
+    /// keyboard and mouse. `edge` is 0 left, 1 right, 2 top, 3 bottom.
+    EdgeBegin {
+        target: String,
+        edge: u8,
+        pos: u16,
+    },
+    /// One batch of this computer's input, sent while a hand-off runs. Moves
+    /// and scrolls add up; buttons and keys are applied in order.
+    EdgeInput {
+        #[serde(default)]
+        dx: i32,
+        #[serde(default)]
+        dy: i32,
+        #[serde(default)]
+        scroll_x: i32,
+        #[serde(default)]
+        scroll_y: i32,
+        #[serde(default)]
+        buttons: Vec<(u8, bool)>,
+        #[serde(default)]
+        keys: Vec<(u16, bool)>,
+    },
+    /// End the hand-off and take the keyboard and mouse back.
+    EdgeEnd,
+    /// Where the hand-off stands, and what happened since the last ask. `peek`
+    /// looks without clearing it, for a page that only displays the state.
+    EdgeStatus {
+        #[serde(default)]
+        peek: bool,
+    },
     /// Start a Guest Drop session: a link and PIN for someone who isn't paired.
     GuestDropStart,
     GuestDropStop,
@@ -1045,6 +1081,39 @@ pub async fn handle_ipc_request(
             },
             Err(_) => IpcResponse::err("unknown device".to_string()),
         },
+        IpcRequest::WakePeer { target } => match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match eng.wake_peer(id).await {
+                Ok(sent) => IpcResponse::ok(serde_json::json!({ "packets": sent })),
+                Err(e) => IpcResponse::err(e),
+            },
+            Err(_) => IpcResponse::err("unknown device".to_string()),
+        },
+        IpcRequest::EdgeBegin { target, edge, pos } => match uuid::Uuid::parse_str(&target) {
+            Ok(id) => match eng.edge_begin(id, edge, pos).await {
+                Ok(()) => IpcResponse::ok(serde_json::json!({})),
+                Err(e) => IpcResponse::err(e),
+            },
+            Err(_) => IpcResponse::err("unknown device".to_string()),
+        },
+        IpcRequest::EdgeInput {
+            dx,
+            dy,
+            scroll_x,
+            scroll_y,
+            buttons,
+            keys,
+        } => match eng
+            .edge_input_batch(dx, dy, scroll_x, scroll_y, &buttons, &keys)
+            .await
+        {
+            Ok(()) => IpcResponse::ok(serde_json::json!({})),
+            Err(e) => IpcResponse::err(e),
+        },
+        IpcRequest::EdgeEnd => {
+            eng.edge_end().await;
+            IpcResponse::ok(serde_json::json!({}))
+        }
+        IpcRequest::EdgeStatus { peek } => IpcResponse::ok(serde_json::json!(eng.edge_status(peek))),
         IpcRequest::GuestDropStart => match eng.guest_drop_start().await {
             Ok(session) => IpcResponse::ok(session),
             Err(e) => IpcResponse::err(e),

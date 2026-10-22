@@ -18,10 +18,12 @@ pub enum Action {
     LockScreen,
     /// Turn the display off; the computer keeps running.
     SleepDisplay,
+    /// Put the computer to sleep. It can be woken again with Wake-on-LAN.
+    SleepComputer,
 }
 
 impl Action {
-    pub const ALL: [Action; 10] = [
+    pub const ALL: [Action; 11] = [
         Action::PlayPause,
         Action::NextTrack,
         Action::PreviousTrack,
@@ -32,6 +34,7 @@ impl Action {
         Action::SlidePrevious,
         Action::LockScreen,
         Action::SleepDisplay,
+        Action::SleepComputer,
     ];
 
     /// The name that travels in the message.
@@ -47,6 +50,7 @@ impl Action {
             Action::SlidePrevious => "slide_previous",
             Action::LockScreen => "lock_screen",
             Action::SleepDisplay => "sleep_display",
+            Action::SleepComputer => "sleep_computer",
         }
     }
 
@@ -231,6 +235,17 @@ function key(code) {
                 "-e",
                 "tell application \"System Events\" to keystroke \"q\" using {control down, command down}",
             ]),
+            Action::SleepComputer => {
+                let out = Command::new("/usr/bin/pmset")
+                    .arg("sleepnow")
+                    .output()
+                    .map_err(|e| format!("couldn't run pmset: {e}"))?;
+                if out.status.success() {
+                    Ok(())
+                } else {
+                    Err(String::from_utf8_lossy(&out.stderr).trim().to_string())
+                }
+            }
             Action::SleepDisplay => {
                 let out = Command::new("/usr/bin/pmset")
                     .arg("displaysleepnow")
@@ -250,6 +265,7 @@ function key(code) {
 mod imp {
     use super::Action;
     use windows_sys::Win32::System::Diagnostics::Debug::MessageBeep;
+    use windows_sys::Win32::System::Power::SetSuspendState;
     use windows_sys::Win32::System::Shutdown::LockWorkStation;
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, VK_LEFT,
@@ -324,6 +340,14 @@ mod imp {
                     Err("Windows didn't turn the display off".to_string())
                 };
             }
+            Action::SleepComputer => {
+                // Sleep, not hibernate, and without letting an app veto it.
+                return if unsafe { SetSuspendState(false, false, false) } {
+                    Ok(())
+                } else {
+                    Err("Windows didn't go to sleep".to_string())
+                };
+            }
             _ => {}
         }
         press(match action {
@@ -335,7 +359,9 @@ mod imp {
             Action::Mute => VK_VOLUME_MUTE,
             Action::SlideNext => VK_RIGHT,
             Action::SlidePrevious => VK_LEFT,
-            Action::LockScreen | Action::SleepDisplay => unreachable!("handled above"),
+            Action::LockScreen | Action::SleepDisplay | Action::SleepComputer => {
+                unreachable!("handled above")
+            }
         })
     }
 }
@@ -414,6 +440,10 @@ mod imp {
             Action::LockScreen => {
                 first_that_works(&[&["loginctl", "lock-session"], &["xdg-screensaver", "lock"]])
             }
+            Action::SleepComputer => first_that_works(&[
+                &["systemctl", "suspend"],
+                &["loginctl", "suspend"],
+            ]),
             Action::SleepDisplay => first_that_works(&[
                 &["xset", "dpms", "force", "off"],
                 &[

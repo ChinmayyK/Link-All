@@ -159,6 +159,10 @@ pub struct PeerRecord {
     /// it didn't say: a computer, or an older build.
     #[serde(default)]
     pub background_restricted: Option<bool>,
+    /// The peer's network card address, kept from its last handshake so it
+    /// can be woken with Wake-on-LAN while it sleeps and is not connected.
+    #[serde(default)]
+    pub mac_address: Option<String>,
 
     // ── Multi-layer discovery state ──────────────────────────────────────────
     /// When this peer was last seen via any discovery layer (separate from
@@ -224,6 +228,7 @@ impl Default for PeerRecord {
             pairing_declined_at: None,
             app_version: None,
             background_restricted: None,
+            mac_address: None,
             last_discovery_at: None,
             discovery_sources: Vec::new(),
             addr_history: Vec::new(),
@@ -1042,12 +1047,19 @@ impl PeerManager {
         version: String,
         platform: String,
         background_restricted: Option<bool>,
+        mac_address: Option<String>,
     ) {
         let changed = match self.store.get_mut(&device_id) {
             Some(mut entry) => {
                 entry.app_version = Some(version);
                 let mut changed = entry.background_restricted != background_restricted;
                 entry.background_restricted = background_restricted;
+                // A peer that did not say (older build, or a card we cannot
+                // read) keeps the address already known.
+                if mac_address.is_some() && entry.mac_address != mac_address {
+                    entry.mac_address = mac_address;
+                    changed = true;
+                }
                 if !platform.is_empty() && entry.platform.as_deref() != Some(platform.as_str()) {
                     entry.platform = Some(platform);
                     changed = true;
@@ -1601,7 +1613,7 @@ mod tests {
                     DiscoverySource::Mdns,
                 )
                 .unwrap();
-            manager.set_handshake_info(id, version.into(), String::new(), None);
+            manager.set_handshake_info(id, version.into(), String::new(), None, None);
             manager.set_outgoing_pairing_waiting(id, true).unwrap();
             manager
                 .end_pairing(id, Some(PairingOutcome::Declined))

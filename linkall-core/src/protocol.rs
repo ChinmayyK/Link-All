@@ -203,6 +203,10 @@ pub struct DeviceMetadata {
     /// so after time apart only the newer clipboard is sent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clipboard_at: Option<u64>,
+    /// The MAC address of the network card a computer is using, so a paired
+    /// device can wake it with Wake-on-LAN when it sleeps. Not sent by phones.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mac_address: Option<String>,
 }
 
 // ── File transfer metadata ────────────────────────────────────────────────────
@@ -670,6 +674,33 @@ pub enum AppMessage {
     MediaCommand {
         action: String,
         value: i64,
+    },
+    /// Keyboard and mouse hand-off, host -> computer: the host's pointer left
+    /// its screen by `edge` (0 left, 1 right, 2 top, 3 bottom) at `pos`, a
+    /// fraction of that edge in 0..=65535, and from now on its mouse and
+    /// keyboard drive this computer until `EdgeLeave` or `EdgeEnd`.
+    EdgeEnter {
+        edge: u8,
+        pos: u16,
+    },
+    /// Computer -> host: whether it took control. When refused, `error` says why.
+    EdgeReply {
+        accepted: bool,
+        error: Option<String>,
+    },
+    /// Computer -> host: the pointer went back out over the edge it was
+    /// handed in on, at `pos` along it. The host takes its input back.
+    EdgeLeave {
+        pos: u16,
+    },
+    /// Either side: the hand-off is over (hotkey, setting turned off). The
+    /// receiver lets go of any key or button still held.
+    EdgeEnd,
+    /// A key pressed or released on the host's keyboard, as a PS/2 set 1 scan
+    /// code (extended keys have 0xE000 added). Sent during a hand-off only.
+    RemoteKeyEvent {
+        scancode: u16,
+        down: bool,
     },
 }
 

@@ -45,6 +45,7 @@ pub(crate) mod clipboard;
 mod connection;
 mod diagnostics;
 mod drop_folder;
+mod edge_ops;
 pub(crate) mod file_ops;
 mod folder_ops;
 mod guest_ops;
@@ -60,6 +61,7 @@ pub(crate) mod telemetry;
 mod transfer_ops;
 mod trust_ops;
 mod types;
+mod wake_ops;
 mod walk_away;
 
 use connection::*;
@@ -196,6 +198,8 @@ impl Engine {
             dedup: Arc::new(Mutex::new(crate::dedup::Deduplicator::new())),
             qr_auth_token: Arc::new(Mutex::new(None)),
             remote_waiters: RemoteWaiters::default(),
+            edge: Arc::default(),
+            edge_notice: Arc::default(),
             guest: Arc::default(),
             now_playing_sent: Arc::default(),
             now_playing_remote: Arc::default(),

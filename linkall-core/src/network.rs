@@ -424,6 +424,8 @@ pub struct HandshakeResult {
     pub peer_background_restricted: Option<bool>,
     /// When the peer's clipboard last changed through Link All (unix ms).
     pub peer_clipboard_at: Option<u64>,
+    /// The peer's network card address, when it is a computer that said so.
+    pub peer_mac: Option<String>,
 }
 
 /// The OS this build runs on, as peers show it.
@@ -461,9 +463,20 @@ fn my_metadata_json(
         listen_port: announce.listen_port,
         background_restricted: announce.background_restricted,
         clipboard_at: announce.clipboard_at,
+        mac_address: own_mac(),
         ..Default::default()
     })
     .ok()
+}
+
+/// Our network card's address for a computer's peers, who may wake us with
+/// it. A phone has nothing to wake, and its address is not readable anyway.
+fn own_mac() -> Option<String> {
+    if cfg!(target_os = "android") {
+        None
+    } else {
+        crate::wol::local_mac()
+    }
 }
 
 fn parse_metadata(json: Option<String>) -> crate::protocol::DeviceMetadata {
@@ -603,6 +616,7 @@ pub async fn handshake_initiator(
         peer_listen_port: None,
         peer_background_restricted: ack_metadata.background_restricted,
         peer_clipboard_at: ack_metadata.clipboard_at,
+        peer_mac: ack_metadata.mac_address,
     })
 }
 
@@ -721,6 +735,7 @@ where
         peer_listen_port: peer_metadata.listen_port.filter(|port| *port != 0),
         peer_background_restricted: peer_metadata.background_restricted,
         peer_clipboard_at: peer_metadata.clipboard_at,
+        peer_mac: peer_metadata.mac_address,
     })
 }
 

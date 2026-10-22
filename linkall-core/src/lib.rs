@@ -64,6 +64,13 @@ pub mod probe;
 pub mod protocol;
 pub mod remote_control;
 pub mod remote_input;
+
+/// Wake-on-LAN: waking a computer that has gone to sleep.
+pub mod wol;
+
+/// Sharing an X11 computer's keyboard and mouse with the one next to it.
+#[cfg(all(unix, not(target_os = "macos"), not(target_os = "android")))]
+pub mod edge_x11;
 pub mod retry;
 pub mod scratchpad;
 pub mod settings;

@@ -213,6 +213,7 @@ pub(super) async fn handle_incoming(
         hs.peer_app_version,
         hs.peer_platform,
         hs.peer_background_restricted,
+        hs.peer_mac,
     );
 
     register_session(
@@ -520,6 +521,7 @@ pub(super) async fn connect_once(
         hs.peer_app_version,
         hs.peer_platform,
         hs.peer_background_restricted,
+        hs.peer_mac,
     );
 
     let answered_by = hs.peer_device_id;

@@ -120,6 +120,11 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         | M::RemotePointerScroll { .. }
         | M::RemoteTypeText { .. }
         | M::RemoteKeyPress { .. }
+        | M::EdgeEnter { .. }
+        | M::EdgeReply { .. }
+        | M::EdgeLeave { .. }
+        | M::EdgeEnd
+        | M::RemoteKeyEvent { .. }
         | M::DialNumber { .. }) => remote::handle(ctx, m).await,
         m @ M::ScratchpadNote { .. } => scratchpad::handle(ctx, m).await,
         M::CaptureRequest { mode } => remote::capture_request(ctx, mode).await,
