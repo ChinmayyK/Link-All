@@ -20,6 +20,9 @@ namespace LinkAll.WinUI.Services
         [DllImport("user32.dll")]
         private static extern IntPtr WindowFromPoint(POINT point);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hWnd);
+
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         private static extern int GetClassNameW(IntPtr hWnd, [Out] ushort[] buffer, int maxCount);
 
@@ -114,15 +117,27 @@ namespace LinkAll.WinUI.Services
         // The window under the press is the icon area itself, not a title bar or frame.
         private static bool IsFileItem(POINT p)
         {
+            // The window under the cursor can be a child of the list view (icon
+            // host, scroll bar, notify sink), so walk up to the list itself.
             var hwnd = WindowFromPoint(p);
-            if (hwnd == IntPtr.Zero) return false;
-            var buf = new ushort[64];
-            int n = GetClassNameW(hwnd, buf, buf.Length);
-            if (n <= 0) return false;
-            var chars = new char[n];
-            for (int i = 0; i < n; i++) chars[i] = (char)buf[i];
-            var cls = new string(chars);
-            return cls is "DirectUIHWND" or "SysListView32" or "SHELLDLL_DefView";
+            var seen = new System.Text.StringBuilder();
+            for (int depth = 0; hwnd != IntPtr.Zero && depth < 6; depth++, hwnd = GetParent(hwnd))
+            {
+                var buf = new ushort[64];
+                int n = GetClassNameW(hwnd, buf, buf.Length);
+                if (n <= 0) break;
+                var chars = new char[n];
+                for (int i = 0; i < n; i++) chars[i] = (char)buf[i];
+                var cls = new string(chars);
+                seen.Append(cls).Append('>');
+                if (cls is "DirectUIHWND" or "SysListView32" or "SHELLDLL_DefView")
+                {
+                    TraceLog.Write("Drag press on file list: " + seen);
+                    return true;
+                }
+            }
+            TraceLog.Write("Drag press ignored, not a file list: " + seen);
+            return false;
         }
 
         private void ShowDropZone()
