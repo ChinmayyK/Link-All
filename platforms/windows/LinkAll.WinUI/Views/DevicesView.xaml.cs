@@ -21,12 +21,18 @@ namespace LinkAll.WinUI.Views
             this.InitializeComponent();
             TraceLog.Write("DevicesView InitializeComponent done");
             StartNowPlaying();
+            _ = ShowFirewallNoteAsync();
+        }
+
+        private async System.Threading.Tasks.Task ShowFirewallNoteAsync()
+        {
+            if (await Services.FirewallCheck.IncomingBlockedAsync()) FirewallNote.Visibility = Visibility.Visible;
         }
 
         // A row opens its device's page, unless the tap was on one of its own buttons.
         private void OnOpenDeviceTapped(object sender, TappedRoutedEventArgs e)
         {
-            for (var el = e.OriginalSource as DependencyObject; el != null && el != sender; el = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(el))
+            for (var el = e.OriginalSource as DependencyObject; el != null && !ReferenceEquals(el, sender); el = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(el))
             {
                 if (el is ButtonBase) return;
             }

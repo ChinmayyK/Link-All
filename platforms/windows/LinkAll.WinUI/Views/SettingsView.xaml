@@ -38,7 +38,7 @@
                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                            <TextBlock Text="{x:Bind DeviceName, Mode=OneWay}" Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock Text="{x:Bind DeviceName, Mode=OneTime}" Style="{StaticResource AppBodyStrong}" />
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <Border Width="7" Height="7" CornerRadius="3.5" VerticalAlignment="Center"
                                         Background="{x:Bind winui:StringToBrushConverter.ToSolidColorBrush(mgr.HeaderStatusBrush), Mode=OneWay}" />
@@ -313,7 +313,7 @@
                                 <TextBlock Text="How this computer appears to your other devices"
                                            Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <TextBlock Grid.Column="2" Text="{x:Bind DeviceName, Mode=OneWay}"
+                            <TextBlock Grid.Column="2" Text="{x:Bind DeviceName, Mode=OneTime}"
                                        Style="{StaticResource AppMetric}"
                                        VerticalAlignment="Center" />
                         </Grid>
