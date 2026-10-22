@@ -199,10 +199,17 @@ fun MainScreen(
     // The keyboard covers the dock anyway; hiding it while typing keeps it off the search boxes.
     val keyboardOpen = androidx.compose.foundation.layout.WindowInsets.isImeVisible
     fun goTo(tab: AppTab) {
+        val target = tabs.indexOf(tab)
         scope.launch {
+            // Home to Settings used to slide through Files and Activity,
+            // building both on the way. Jump next to the tab, then slide one page.
+            val from = pagerState.currentPage
+            if (kotlin.math.abs(target - from) > 1) {
+                pagerState.scrollToPage(if (target > from) target - 1 else target + 1)
+            }
             pagerState.animateScrollToPage(
-                tabs.indexOf(tab),
-                animationSpec = tween(300, easing = androidx.compose.animation.core.FastOutSlowInEasing)
+                target,
+                animationSpec = tween(220, easing = androidx.compose.animation.core.FastOutSlowInEasing)
             )
         }
     }

@@ -132,6 +132,9 @@ async fn loopback_file_transfer_throughput() {
             }
             f.write_all(&buf).unwrap();
         }
+        // Flushed first, so the source's write-back doesn't compete with the
+        // receiver's writes and skew the number.
+        f.sync_all().unwrap();
     }
     let t0 = std::time::Instant::now();
     engine_a

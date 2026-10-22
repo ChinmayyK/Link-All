@@ -16,6 +16,11 @@ const REPLY_TIMEOUT: Duration = Duration::from_secs(3);
 /// before it goes back, so brushing the edge doesn't hand control back.
 const RETURN_PUSH: i32 = 24;
 
+/// How long a key or button may wait for room on a backed-up link. Brief
+/// stalls ride through; one this long ends the hand-off rather than drop an
+/// event that may be a release.
+const MUST_ARRIVE_WAIT: Duration = Duration::from_secs(2);
+
 /// How often a hand-off checks that the other computer is still connected.
 const WATCH_INTERVAL: Duration = Duration::from_secs(1);
 
@@ -80,7 +85,12 @@ impl Engine {
             Err(_) => Err("That computer isn't connected.".to_string()),
             Ok(()) => match tokio::time::timeout(REPLY_TIMEOUT, answered).await {
                 Ok(Ok(answer)) => answer,
-                _ => Err("That computer didn't answer.".to_string()),
+                _ => {
+                    // It may still take control after we gave up; tell it
+                    // it's over so it isn't left held by this computer.
+                    let _ = tokio::time::timeout(REPLY_TIMEOUT, tx.send(AppMessage::EdgeEnd)).await;
+                    Err("That computer didn't answer.".to_string())
+                }
             },
         };
         self.shared.remote_waiters.edge.lock().await.remove(&target);
@@ -99,9 +109,20 @@ impl Engine {
 
     /// Sends one mouse or keyboard event to the computer being driven. Moves
     /// and scrolls are dropped when the link is backed up (a move that arrives
-    /// late is worse than none); a button or key waits briefly, since losing
-    /// its release would leave it stuck down.
+    /// late is worse than none); a button or key waits up to
+    /// `MUST_ARRIVE_WAIT`, since losing its release would leave it stuck down.
     pub async fn edge_input(&self, message: AppMessage) -> Result<(), String> {
+        self.edge_input_until(message, tokio::time::Instant::now() + MUST_ARRIVE_WAIT)
+            .await
+    }
+
+    /// `edge_input` with a deadline shared by a whole batch, so a batch takes
+    /// no longer than `MUST_ARRIVE_WAIT` however many keys it holds.
+    async fn edge_input_until(
+        &self,
+        message: AppMessage,
+        deadline: tokio::time::Instant,
+    ) -> Result<(), String> {
         let must_arrive = match message {
             AppMessage::RemotePointerMove { .. } | AppMessage::RemotePointerScroll { .. } => false,
             AppMessage::RemotePointerButton { .. } | AppMessage::RemoteKeyEvent { .. } => true,
@@ -120,10 +141,27 @@ impl Engine {
             .map(|(_, tx)| tx)
             .ok_or_else(|| "That computer isn't connected.".to_string())?;
         if must_arrive {
-            match tokio::time::timeout(Duration::from_millis(250), tx.send(message)).await {
+            match tokio::time::timeout_at(deadline, tx.send(message)).await {
                 Ok(Ok(())) => Ok(()),
                 Ok(Err(_)) => Err("That computer isn't connected.".to_string()),
-                Err(_) => Ok(()),
+                Err(_) => {
+                    // A lost key or button may be a release, which would
+                    // leave it held down over there. End the hand-off: the
+                    // other computer releases everything on EdgeEnd.
+                    let why = "The link to that computer is too slow, so the keyboard and mouse came back.";
+                    {
+                        let mut state = self.shared.edge.lock().unwrap();
+                        if *state == (EdgeState::Hosting { peer }) {
+                            *state = EdgeState::Idle;
+                        }
+                    }
+                    tokio::spawn(async move {
+                        let _ =
+                            tokio::time::timeout(REPLY_TIMEOUT, tx.send(AppMessage::EdgeEnd)).await;
+                    });
+                    announce_ended(&self.shared, why).await;
+                    Err(why.to_string())
+                }
             }
         } else {
             match tx.try_send(message) {
@@ -230,23 +268,48 @@ pub(super) async fn on_enter(ctx: &InboundCtx, edge: u8, pos: u16) {
         Err(why)
     } else if let Some(left_by) = Edge::from_wire(edge) {
         let arrived = left_by.opposite();
-        match remote_input::screen_size() {
-            None => Err("This computer can't take a keyboard and mouse yet.".to_string()),
-            Some((w, h)) => {
-                let (x, y) = remote_input::entry_point(arrived, pos, w, h);
-                match remote_input::set_cursor_position(x, y) {
-                    Ok(()) => {
-                        *shared.edge.lock().unwrap() = EdgeState::Controlled {
-                            peer,
-                            entry: arrived,
-                            push: 0,
-                        };
-                        watch(shared.clone(), peer, false);
-                        Ok(())
-                    }
-                    Err(e) => Err(e),
+        // Off the session loop: the first X11 call opens the display.
+        let placed = tokio::task::spawn_blocking(move || {
+            let (w, h) = remote_input::screen_size()
+                .ok_or_else(|| "This computer can't take a keyboard and mouse yet.".to_string())?;
+            let (x, y) = remote_input::entry_point(arrived, pos, w, h);
+            remote_input::set_cursor_position(x, y)
+        })
+        .await
+        .unwrap_or_else(|e| Err(e.to_string()));
+        // Checked again: another computer may have taken over while the
+        // pointer was being placed.
+        let taken = placed.and_then(|()| {
+            let mut state = shared.edge.lock().unwrap();
+            let again = match *state {
+                EdgeState::Idle => false,
+                EdgeState::Controlled { peer: p, .. } if p == peer => true,
+                _ => {
+                    return Err(
+                        "This computer is already sharing its keyboard and mouse.".to_string()
+                    )
                 }
+            };
+            *state = EdgeState::Controlled {
+                peer,
+                entry: arrived,
+                push: 0,
+            };
+            Ok(again)
+        });
+        match taken {
+            // A second start from the same computer means it lost track of
+            // the first, whose end may never have arrived: let go of
+            // anything still held from it.
+            Ok(true) => {
+                let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
+                Ok(())
             }
+            Ok(false) => {
+                watch(shared.clone(), peer, false);
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
     } else {
         Err("That isn't a side of the screen.".to_string())
@@ -265,14 +328,20 @@ pub(super) async fn on_enter(ctx: &InboundCtx, edge: u8, pos: u16) {
 /// pushed out over the side it came in by, hand control back. Only the part of
 /// a move that the screen edge stopped counts as a push, so arriving at the
 /// edge quickly is not one.
-pub(super) async fn after_move(ctx: &InboundCtx, dx: i16, dy: i16, before: Option<(i32, i32)>) {
+pub(super) async fn after_move(
+    ctx: &InboundCtx,
+    dx: i16,
+    dy: i16,
+    before: Option<(i32, i32)>,
+    after: Option<(i32, i32)>,
+    size: Option<(i32, i32)>,
+) {
     let shared = &ctx.shared;
     let entry = match *shared.edge.lock().unwrap() {
         EdgeState::Controlled { peer, entry, .. } if peer == ctx.peer_id => entry,
         _ => return,
     };
-    let after = remote_input::cursor_position();
-    let at_edge = match (after, remote_input::screen_size()) {
+    let at_edge = match (after, size) {
         (Some((x, y)), Some((w, h))) => remote_input::on_edge(entry, x, y, w, h),
         _ => None,
     };
@@ -308,7 +377,7 @@ pub(super) async fn after_move(ctx: &InboundCtx, dx: i16, dy: i16, before: Optio
         }
     };
     if let Some(pos) = leave {
-        remote_input::release_all();
+        let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
         let _ = ctx.outbox_tx.send(AppMessage::EdgeLeave { pos }).await;
     }
 }
@@ -362,11 +431,17 @@ pub(super) async fn on_leave(ctx: &InboundCtx, pos: u16) {
 /// `EdgeEnd` arrived: whichever side this computer was on, it is over.
 pub(super) async fn on_end(ctx: &InboundCtx) {
     ctx.touch_last_seen();
+    end_with_peer(&ctx.shared, ctx.peer_id, "The other computer ended it.").await;
+}
+
+/// Ends a hand-off with `peer`, whichever side this computer is on. Keys and
+/// buttons it held down here are let go.
+pub(super) async fn end_with_peer(shared: &EngineShared, peer: Uuid, reason: &str) {
     let was = {
-        let mut state = ctx.shared.edge.lock().unwrap();
+        let mut state = shared.edge.lock().unwrap();
         match &*state {
-            EdgeState::Controlled { peer, .. } | EdgeState::Hosting { peer }
-                if *peer == ctx.peer_id =>
+            EdgeState::Controlled { peer: p, .. } | EdgeState::Hosting { peer: p }
+                if *p == peer =>
             {
                 std::mem::take(&mut *state)
             }
@@ -378,7 +453,7 @@ pub(super) async fn on_end(ctx: &InboundCtx) {
             let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
         }
         EdgeState::Hosting { .. } => {
-            announce_ended(&ctx.shared, "The other computer ended it.").await;
+            announce_ended(shared, reason).await;
         }
         EdgeState::Idle => {}
     }
@@ -462,27 +537,34 @@ impl Engine {
         buttons: &[(u8, bool)],
         keys: &[(u16, bool)],
     ) -> Result<(), String> {
+        let deadline = tokio::time::Instant::now() + MUST_ARRIVE_WAIT;
         let clamp = |v: i32| v.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
         if dx != 0 || dy != 0 {
-            self.edge_input(AppMessage::RemotePointerMove {
-                dx: clamp(dx),
-                dy: clamp(dy),
-            })
+            self.edge_input_until(
+                AppMessage::RemotePointerMove {
+                    dx: clamp(dx),
+                    dy: clamp(dy),
+                },
+                deadline,
+            )
             .await?;
         }
         if scroll_x != 0 || scroll_y != 0 {
-            self.edge_input(AppMessage::RemotePointerScroll {
-                dx: clamp(scroll_x),
-                dy: clamp(scroll_y),
-            })
+            self.edge_input_until(
+                AppMessage::RemotePointerScroll {
+                    dx: clamp(scroll_x),
+                    dy: clamp(scroll_y),
+                },
+                deadline,
+            )
             .await?;
         }
         for &(button, down) in buttons {
-            self.edge_input(AppMessage::RemotePointerButton { button, down })
+            self.edge_input_until(AppMessage::RemotePointerButton { button, down }, deadline)
                 .await?;
         }
         for &(scancode, down) in keys {
-            self.edge_input(AppMessage::RemoteKeyEvent { scancode, down })
+            self.edge_input_until(AppMessage::RemoteKeyEvent { scancode, down }, deadline)
                 .await?;
         }
         Ok(())

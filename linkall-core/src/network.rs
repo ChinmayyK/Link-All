@@ -799,9 +799,11 @@ impl PeerSession {
     }
 }
 
-/// Longest a write to the peer may stall. A peer advertising a zero TCP window
-/// would otherwise block the session loop, and its heartbeat, forever.
-const SESSION_WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+/// The last-resort limit on a write to the peer. The session loop sets the real
+/// one (`write_within`: a missed heartbeat, or two minutes while the peer
+/// sleeps); this only has to be longer than that, so a stalled write on any
+/// other path still ends instead of blocking forever.
+const SESSION_WRITE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(150);
 
 impl PeerSessionTx {
     pub async fn send(&mut self, msg: &mut AppMessage) -> Result<()> {

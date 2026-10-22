@@ -321,7 +321,6 @@ fn remote(d: &Display, cursor: xlib::Cursor, host: &mut dyn Host, control: &Cont
     let mut batch = Batch::default();
     let mut last_flush = Instant::now();
     let mut last_status = Instant::now();
-    let mut failures = 0;
 
     loop {
         if control.stop.load(Ordering::Relaxed) {
@@ -389,15 +388,24 @@ fn remote(d: &Display, cursor: xlib::Cursor, host: &mut dyn Host, control: &Cont
         if now.duration_since(last_flush) >= BATCH_EVERY {
             last_flush = now;
             if !batch.is_empty() {
-                match host.input(&batch) {
-                    Ok(()) => failures = 0,
-                    Err(_) => failures += 1,
-                }
-                batch = Batch::default();
-                if failures >= 5 {
+                // A failed batch may have stopped part-way through, and
+                // sending the next one could put its keys out of order, so
+                // the first failure ends the hand-off. It most often fails
+                // because the pointer just came back or the other side ended
+                // it, which the status says.
+                if host.input(&batch).is_err() {
+                    if let Ok(s) = host.status() {
+                        if let Some(pos) = s.returned_pos {
+                            return Outcome::Returned(pos);
+                        }
+                        if let Some(why) = s.ended_reason {
+                            return Outcome::Ended(why);
+                        }
+                    }
                     host.end();
                     return Outcome::Ended("The other computer stopped answering.".into());
                 }
+                batch = Batch::default();
             }
         }
         if now.duration_since(last_status) >= STATUS_EVERY {

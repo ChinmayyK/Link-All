@@ -10,6 +10,55 @@ const LISTENER_REBIND_RETRY: Duration = Duration::from_secs(30);
 
 /// Unauthenticated handshakes allowed in flight at once.
 const MAX_PENDING_HANDSHAKES: usize = 64;
+/// Of those, how many one remote address may hold. (Grouping IPv6 by /64
+/// would put every link-local peer on the LAN in one bucket.)
+const MAX_PENDING_HANDSHAKES_PER_HOST: usize = 4;
+
+type PendingPerHost = Arc<std::sync::Mutex<HashMap<IpAddr, usize>>>;
+
+/// One unauthenticated handshake's share of the listener's budget, given
+/// back when the handshake ends.
+pub(super) struct HandshakeSlot {
+    _permit: tokio::sync::OwnedSemaphorePermit,
+    host: IpAddr,
+    per_host: PendingPerHost,
+}
+
+impl HandshakeSlot {
+    /// None when the budget is spent, overall or for this connection's host.
+    fn claim(
+        pending: &Arc<tokio::sync::Semaphore>,
+        per_host: &PendingPerHost,
+        stream: &TcpStream,
+    ) -> Option<Self> {
+        let host = stream.peer_addr().ok()?.ip().to_canonical();
+        let mut counts = per_host.lock().unwrap_or_else(|e| e.into_inner());
+        if counts.get(&host).copied().unwrap_or(0) >= MAX_PENDING_HANDSHAKES_PER_HOST {
+            return None;
+        }
+        // Only a host that got a permit gets an entry, so `Drop` always
+        // removes what was added and the map can't grow past the permits.
+        let permit = pending.clone().try_acquire_owned().ok()?;
+        *counts.entry(host).or_insert(0) += 1;
+        Some(Self {
+            _permit: permit,
+            host,
+            per_host: per_host.clone(),
+        })
+    }
+}
+
+impl Drop for HandshakeSlot {
+    fn drop(&mut self) {
+        let mut counts = self.per_host.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(count) = counts.get_mut(&self.host) {
+            *count -= 1;
+            if *count == 0 {
+                counts.remove(&self.host);
+            }
+        }
+    }
+}
 
 pub(super) fn spawn_listener_supervisor(
     shared: EngineShared,
@@ -260,6 +309,7 @@ pub(super) fn spawn_firewall_free_discovery(shared: EngineShared) {
 
 pub(super) async fn run_server_loop(shared: EngineShared, server: Server) {
     let pending = Arc::new(tokio::sync::Semaphore::new(MAX_PENDING_HANDSHAKES));
+    let per_host = PendingPerHost::default();
     let mut accept_errors = 0u32;
     loop {
         let accepted = tokio::select! {
@@ -269,14 +319,17 @@ pub(super) async fn run_server_loop(shared: EngineShared, server: Server) {
         match accepted {
             Ok(stream) => {
                 accept_errors = 0;
-                // Bounds unauthenticated handshakes; a flood waits here
-                // rather than spawning a task per connection.
-                let Ok(permit) = pending.clone().acquire_owned().await else {
-                    return;
+                // Bounds unauthenticated handshakes without ever pausing
+                // accept(): a connection over budget is closed at once, and
+                // the per-host share keeps one LAN host from spending it all
+                // and locking out real peers.
+                let Some(slot) = HandshakeSlot::claim(&pending, &per_host, &stream) else {
+                    tracing::debug!("handshake budget spent; closing incoming connection");
+                    continue;
                 };
                 let shared = shared.clone();
                 tokio::spawn(async move {
-                    if let Err(err) = handle_incoming(shared, stream, permit).await {
+                    if let Err(err) = handle_incoming(shared, stream, slot).await {
                         warn!(error = %err, "incoming connection failed");
                     }
                 });
@@ -548,5 +601,47 @@ mod is_addr_not_available_tests {
     fn does_not_flag_non_io_errors() {
         let err = anyhow::anyhow!("mdns daemon failed for an unrelated reason");
         assert!(!is_addr_not_available(&err));
+    }
+}
+
+#[cfg(test)]
+mod handshake_slot_tests {
+    use super::*;
+
+    async fn connect_pair(listener: &tokio::net::TcpListener) -> (TcpStream, TcpStream) {
+        let addr = listener.local_addr().unwrap();
+        let client = TcpStream::connect(addr).await.unwrap();
+        let (server, _) = listener.accept().await.unwrap();
+        (client, server)
+    }
+
+    #[tokio::test]
+    async fn one_host_gets_its_share_and_gives_it_back() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pending = Arc::new(tokio::sync::Semaphore::new(MAX_PENDING_HANDSHAKES));
+        let per_host = PendingPerHost::default();
+        let mut streams = Vec::new();
+        let mut slots = Vec::new();
+        for _ in 0..MAX_PENDING_HANDSHAKES_PER_HOST {
+            let (client, server) = connect_pair(&listener).await;
+            slots.push(HandshakeSlot::claim(&pending, &per_host, &server).unwrap());
+            streams.push((client, server));
+        }
+        let (_c, extra) = connect_pair(&listener).await;
+        assert!(HandshakeSlot::claim(&pending, &per_host, &extra).is_none());
+        slots.pop();
+        assert!(HandshakeSlot::claim(&pending, &per_host, &extra).is_some());
+        drop(slots);
+        assert!(per_host.lock().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn no_entry_left_when_the_overall_budget_is_spent() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let pending = Arc::new(tokio::sync::Semaphore::new(0));
+        let per_host = PendingPerHost::default();
+        let (_c, server) = connect_pair(&listener).await;
+        assert!(HandshakeSlot::claim(&pending, &per_host, &server).is_none());
+        assert!(per_host.lock().unwrap().is_empty());
     }
 }
