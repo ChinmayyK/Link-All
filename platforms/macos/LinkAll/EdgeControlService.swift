@@ -81,7 +81,6 @@ final class EdgeControlService {
     private var since = [Date](repeating: .distantPast, count: 4)
     private var cooldownUntil = Date.distantPast
     private var lastEdge = 1
-    private var modifiersDown: [Int: Bool] = [:]
 
     private var batch = EdgeBatch()
     private var sending = false
@@ -203,10 +202,21 @@ final class EdgeControlService {
         Task { @MainActor in
             do {
                 try await LinkAllIPCClient.shared.edgeBegin(target: target, edge: edge, pos: pos)
+                // Sharing may have been turned off, or this edge relinked,
+                // while the other computer answered: with no tap there would
+                // be no way to bring the hidden pointer back.
+                guard self.mode == .starting, self.tap != nil, self.link(edge) == target else {
+                    if self.mode == .starting { self.mode = .idle }
+                    try? await LinkAllIPCClient.shared.edgeEnd()
+                    return
+                }
                 self.startRemote(edge: edge)
             } catch {
                 self.cooldownUntil = Date().addingTimeInterval(3)
                 self.mode = .idle
+                // A retried request can fail while the first one went through;
+                // ending is a no-op when nothing was started.
+                try? await LinkAllIPCClient.shared.edgeEnd()
             }
         }
     }
@@ -216,7 +226,6 @@ final class EdgeControlService {
         batch = EdgeBatch()
         failures = 0
         sending = false
-        modifiersDown = [:]
         lastStatus = Date()
         // The pointer stays where it is while the mouse's deltas keep coming.
         CGAssociateMouseAndMouseCursorPosition(0)
@@ -255,11 +264,24 @@ final class EdgeControlService {
             if let sc = Self.scancode(forMacKey: code) { batch.keys.append((sc, down)) }
         case .flagsChanged:
             let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
-            guard Self.modifierFlag(forMacKey: code) != nil, let sc = Self.scancode(forMacKey: code) else { return }
-            // One event arrives for each press and each release of a modifier,
-            // and left and right share a flag, so each key is tracked itself.
-            let down = !(modifiersDown[code] ?? false)
-            modifiersDown[code] = down
+            guard let sc = Self.scancode(forMacKey: code) else { return }
+            // Caps Lock reports each press once, as a lock change: send a tap.
+            if code == 57 {
+                batch.keys.append((sc, true))
+                batch.keys.append((sc, false))
+                return
+            }
+            // Left and right share a flag, so read the key's own device bit:
+            // it says whether this key is down now, even if it was already
+            // held when the hand-off began.
+            guard let bit = Self.deviceFlag(forMacKey: code),
+                  let flag = Self.modifierFlag(forMacKey: code) else { return }
+            // Synthetic events (remappers, virtual keyboards) may carry only
+            // the shared flag: when neither side of this modifier has its
+            // device bit, the shared flag decides.
+            let raw = event.flags.rawValue
+            let sides = Self.deviceFlags(sharing: flag)
+            let down = raw & sides != 0 ? raw & bit != 0 : event.flags.contains(flag)
             batch.keys.append((sc, down))
         default:
             break
@@ -278,8 +300,17 @@ final class EdgeControlService {
                 do { try await LinkAllIPCClient.shared.edgeInput(out); self.failures = 0 }
                 catch { self.failures += 1 }
                 self.sending = false
-                if self.failures >= 5 {
-                    self.endRemote(tellDaemon: true, note: "The other computer stopped answering.")
+                if self.failures >= 5, self.mode == .remote {
+                    // Input fails as soon as the pointer comes back or the other
+                    // side ends it; the status says which, before the next poll.
+                    let s = try? await LinkAllIPCClient.shared.edgeStatus()
+                    if let pos = s?.returnedPos {
+                        self.endRemote(tellDaemon: false, note: nil, returnedPos: pos)
+                    } else if let why = s?.endedReason {
+                        self.endRemote(tellDaemon: false, note: why)
+                    } else {
+                        self.endRemote(tellDaemon: true, note: "The other computer stopped answering.")
+                    }
                 }
             }
         }
@@ -339,14 +370,39 @@ final class EdgeControlService {
     /// Cmd+C on this keyboard copies over there.
     static func scancode(forMacKey code: Int) -> Int? { macToScancode[code] }
 
-    /// The flag a Mac modifier key sets while held.
+    /// The device-dependent flag bit (NX_DEVICE*KEYMASK) for one modifier key.
+    static func deviceFlag(forMacKey code: Int) -> UInt64? {
+        switch code {
+        case 59: return 0x0000_0001 // left Control
+        case 56: return 0x0000_0002 // left Shift
+        case 60: return 0x0000_0004 // right Shift
+        case 55: return 0x0000_0008 // left Command
+        case 54: return 0x0000_0010 // right Command
+        case 58: return 0x0000_0020 // left Option
+        case 61: return 0x0000_0040 // right Option
+        case 62: return 0x0000_2000 // right Control
+        default: return nil
+        }
+    }
+
+    /// The device bits of both keys (left and right) behind one shared flag.
+    static func deviceFlags(sharing flag: CGEventFlags) -> UInt64 {
+        switch flag {
+        case .maskShift: return 0x0000_0006
+        case .maskControl: return 0x0000_2001
+        case .maskAlternate: return 0x0000_0060
+        case .maskCommand: return 0x0000_0018
+        default: return 0
+        }
+    }
+
+    /// The shared flag a Mac modifier key sets while held.
     static func modifierFlag(forMacKey code: Int) -> CGEventFlags? {
         switch code {
         case 56, 60: return .maskShift
         case 59, 62: return .maskControl
         case 58, 61: return .maskAlternate
         case 55, 54: return .maskCommand
-        case 57: return .maskAlphaShift
         default: return nil
         }
     }

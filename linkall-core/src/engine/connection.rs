@@ -127,7 +127,7 @@ impl Engine {
 pub(super) async fn handle_incoming(
     shared: EngineShared,
     mut stream: TcpStream,
-    handshake_permit: tokio::sync::OwnedSemaphorePermit,
+    handshake_permit: super::listener::HandshakeSlot,
 ) -> Result<()> {
     network::optimize_stream(&stream, "incoming engine stream");
     let shared_clone = shared.clone();
@@ -222,6 +222,7 @@ pub(super) async fn handle_incoming(
         endpoint,
         hs.peer_device_id,
         hs.peer_device_name,
+        hs.peer_identity_pubkey_bytes,
         hs.session,
         trusted,
         None, // the responder never learns the initiator's verdict
@@ -535,6 +536,7 @@ pub(super) async fn connect_once(
         endpoint,
         hs.peer_device_id,
         hs.peer_device_name,
+        hs.peer_identity_pubkey_bytes,
         hs.session,
         trusted,
         Some(hs.peer_already_trusted),
@@ -640,8 +642,17 @@ pub(super) async fn observe_trust(
     _pin: &crate::pairing::PairingPin,
 ) -> Result<bool> {
     let record = {
+        let peers = &shared.peer_manager;
         let mut trust = shared.trust.lock().await;
-        trust.observe_peer(device_id, device_name.clone(), &identity_pubkey)?
+        // Only a record a pairing approval could still trust needs keeping;
+        // keeping every connected one would let a flood of idle sessions
+        // lock out new devices.
+        trust.observe_peer_keeping(device_id, device_name.clone(), &identity_pubkey, |id| {
+            peers
+                .get(id)
+                .and_then(|p| p.pairing_expires_in())
+                .is_some_and(|left| left > 0)
+        })?
     };
 
     match record.state {

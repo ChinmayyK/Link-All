@@ -81,6 +81,9 @@ namespace LinkAll.WinUI.Services
             if (Enabled && any) StartHooks();
             else
             {
+                // A start still waiting for its answer is called off; Begin
+                // sees the mode changed and ends it in the engine.
+                Interlocked.CompareExchange(ref _mode, (int)Mode.Idle, (int)Mode.Starting);
                 EndRemote("Sharing was turned off.", tellEngine: true);
                 StopHooks();
             }
@@ -289,6 +292,18 @@ namespace LinkAll.WinUI.Services
                         Volatile.Write(ref _mode, (int)Mode.Idle);
                         return;
                     }
+                    // Sharing may have been turned off, or this edge relinked,
+                    // while the other computer answered: Reload then moved the
+                    // mode off Starting (or the link changed). Going Remote
+                    // would leave no hooks running, and the next StartHooks
+                    // would swallow all local input.
+                    if (_links[edge] != id ||
+                        Volatile.Read(ref _mode) != (int)Mode.Starting)
+                    {
+                        Interlocked.CompareExchange(ref _mode, (int)Mode.Idle, (int)Mode.Starting);
+                        NativeCore.linkall_edge_end(handle);
+                        return;
+                    }
                     _lastEdge = edge;
                     _centerX = GetSystemMetrics(SM_CXSCREEN) / 2;
                     _centerY = GetSystemMetrics(SM_CYSCREEN) / 2;
@@ -300,7 +315,11 @@ namespace LinkAll.WinUI.Services
                     _failures = 0;
                     while (_ops.TryDequeue(out _)) { }
                     SetCursorPos(_centerX, _centerY);
-                    Volatile.Write(ref _mode, (int)Mode.Remote);
+                    if (Interlocked.CompareExchange(ref _mode, (int)Mode.Remote, (int)Mode.Starting) != (int)Mode.Starting)
+                    {
+                        NativeCore.linkall_edge_end(handle);
+                        return;
+                    }
                     TraceLog.Write($"Edge control: keyboard and mouse handed to the computer on the {EdgeNames[edge]}");
                 }
                 catch (Exception ex)

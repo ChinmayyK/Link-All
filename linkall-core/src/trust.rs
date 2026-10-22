@@ -241,22 +241,37 @@ impl TrustStore {
         Ok(())
     }
 
-    fn evict_excess_untrusted(&mut self) {
-        let mut untrusted: Vec<(Uuid, u64)> = self
+    /// Makes room for one more untrusted record by dropping the oldest ones
+    /// `keep` doesn't protect. An untrusted record pins the key a pending
+    /// approval will trust, so dropping one still in use would let another
+    /// host take over its device ID. Returns false when only protected
+    /// records are left to drop.
+    fn make_room_for_untrusted(&mut self, keep: impl Fn(Uuid) -> bool) -> bool {
+        let untrusted = self
             .data
             .devices
             .values()
             .filter(|r| r.state == TrustState::Untrusted)
+            .count();
+        if untrusted < MAX_UNTRUSTED_PEERS {
+            return true;
+        }
+        let mut evictable: Vec<(Uuid, u64)> = self
+            .data
+            .devices
+            .values()
+            .filter(|r| r.state == TrustState::Untrusted && !keep(r.device_id))
             .map(|r| (r.device_id, r.last_seen))
             .collect();
-        if untrusted.len() <= MAX_UNTRUSTED_PEERS {
-            return;
+        let excess = untrusted + 1 - MAX_UNTRUSTED_PEERS;
+        if evictable.len() < excess {
+            return false;
         }
-        untrusted.sort_by_key(|(_, last_seen)| *last_seen);
-        let excess = untrusted.len() - MAX_UNTRUSTED_PEERS;
-        for (id, _) in untrusted.into_iter().take(excess) {
+        evictable.sort_by_key(|(_, last_seen)| *last_seen);
+        for (id, _) in evictable.into_iter().take(excess) {
             self.data.devices.remove(&id);
         }
+        true
     }
 
     pub fn observe_peer(
@@ -264,6 +279,18 @@ impl TrustStore {
         device_id: Uuid,
         device_name: String,
         public_key: &[u8; 32],
+    ) -> Result<TrustRecord> {
+        self.observe_peer_keeping(device_id, device_name, public_key, |_| false)
+    }
+
+    /// Like `observe_peer`, but never evicts an untrusted record `keep`
+    /// protects (one with a pairing request still open).
+    pub fn observe_peer_keeping(
+        &mut self,
+        device_id: Uuid,
+        device_name: String,
+        public_key: &[u8; 32],
+        keep: impl Fn(Uuid) -> bool,
     ) -> Result<TrustRecord> {
         let fingerprint = fingerprint_of(public_key);
         let now = now_secs();
@@ -275,6 +302,9 @@ impl TrustStore {
             now,
         )?;
         self.restore_if_retired(device_id, fingerprint);
+        if !self.data.devices.contains_key(&device_id) && !self.make_room_for_untrusted(keep) {
+            anyhow::bail!("too many devices are waiting to pair; not recording {device_id}");
+        }
         let record = self
             .data
             .devices
@@ -310,9 +340,7 @@ impl TrustStore {
         // kept in memory only (capped), so a flood can neither grow trust.json nor
         // cost an fsync per handshake; a record is stored once it is trusted,
         // rejected or revoked.
-        if snapshot.state == TrustState::Untrusted {
-            self.evict_excess_untrusted();
-        } else {
+        if snapshot.state != TrustState::Untrusted {
             self.save()?;
         }
         Ok(snapshot)
@@ -924,6 +952,46 @@ mod tests {
         let mut store = TrustStore::load(file.path()).unwrap();
         assert!(store.clear_old_installs_once().unwrap().is_empty());
         assert!(store.is_trusted(twin) && store.is_trusted(newest));
+    }
+
+    #[test]
+    fn untrusted_flood_never_evicts_a_kept_record() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        let waiting = Uuid::new_v4();
+        store
+            .observe_peer(waiting, "Laptop".into(), &[1u8; 32])
+            .unwrap();
+        let keep = |id: Uuid| id == waiting;
+
+        for i in 0..MAX_UNTRUSTED_PEERS + 10 {
+            let mut key = [0u8; 32];
+            key[..8].copy_from_slice(&(i as u64 + 2).to_le_bytes());
+            store
+                .observe_peer_keeping(Uuid::new_v4(), format!("Flood{i}"), &key, keep)
+                .unwrap();
+        }
+        assert_eq!(store.data.devices.len(), MAX_UNTRUSTED_PEERS);
+        assert!(store.get(waiting).is_some());
+        assert!(store
+            .observe_peer_keeping(waiting, "Laptop".into(), &[3u8; 32], keep)
+            .is_err());
+    }
+
+    #[test]
+    fn untrusted_cap_full_of_kept_records_refuses_new_ones() {
+        let file = NamedTempFile::new().unwrap();
+        let mut store = TrustStore::load(file.path()).unwrap();
+        for i in 0..MAX_UNTRUSTED_PEERS {
+            let mut key = [0u8; 32];
+            key[..8].copy_from_slice(&(i as u64 + 1).to_le_bytes());
+            store
+                .observe_peer(Uuid::new_v4(), format!("Dev{i}"), &key)
+                .unwrap();
+        }
+        assert!(store
+            .observe_peer_keeping(Uuid::new_v4(), "New".into(), &[2u8; 32], |_| true)
+            .is_err());
     }
 
     #[test]

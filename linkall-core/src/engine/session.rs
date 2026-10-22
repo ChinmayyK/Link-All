@@ -36,6 +36,8 @@ pub(super) struct InboundCtx {
     pub(super) shared: EngineShared,
     pub(super) peer_id: Uuid,
     pub(super) peer_name: String,
+    /// The peer's identity key fingerprint, as proven in this handshake.
+    pub(super) peer_fingerprint: [u8; 32],
     /// Queue for replies to this peer (the session writer drains it).
     pub(super) outbox_tx: mpsc::Sender<AppMessage>,
     pub(super) session_pin: Option<String>,
@@ -49,6 +51,18 @@ pub(super) struct InboundCtx {
 }
 
 impl InboundCtx {
+    /// Whether the key pinned for this peer is the one this session proved.
+    /// Pairing trusts the pinned key by device id, so a session must not
+    /// raise or complete pairing for a key it doesn't hold.
+    pub(super) async fn pinned_key_is_ours(&self) -> bool {
+        self.shared
+            .trust
+            .lock()
+            .await
+            .get(self.peer_id)
+            .is_some_and(|r| r.key_fingerprint == self.peer_fingerprint)
+    }
+
     /// Any traffic proves the peer is alive; the heartbeat reads this.
     pub(super) fn touch_last_seen(&self) {
         self.last_seen.store(
@@ -147,6 +161,7 @@ pub(super) fn register_session(
     endpoint: SocketAddr,
     peer_id: Uuid,
     peer_name: String,
+    peer_key: [u8; 32],
     session: crate::crypto::SessionKey,
     trusted: bool,
     peer_trusts_us: Option<bool>,
@@ -378,6 +393,7 @@ pub(super) fn register_session(
         let rx_peer_name = peer_name.clone();
 
         let rx_peer_id = peer_id;
+        let rx_peer_fingerprint = crate::crypto::fingerprint_of(&peer_key);
         let rx_session_pin = session_pin.clone();
 
         // Two 4 MB chunks waiting for the disk keep writes overlapped with the
@@ -658,6 +674,7 @@ pub(super) fn register_session(
             shared: rx_shared,
             peer_id: rx_peer_id,
             peer_name: rx_peer_name,
+            peer_fingerprint: rx_peer_fingerprint,
             outbox_tx: session_outbox_tx,
             endpoint,
             session_id,
@@ -856,6 +873,15 @@ pub(super) fn register_session(
             .mark_disconnected_if_current(peer_id, session_id, reason.clone())
         {
             Ok(Some(connected_at)) => {
+                // A hand-off can't outlive its session, even if the peer is
+                // back before the watch notices it was gone. Done before any
+                // other await, so it can't end one a newer session started.
+                super::edge_ops::end_with_peer(
+                    &shared,
+                    peer_id,
+                    "The other computer disconnected.",
+                )
+                .await;
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
