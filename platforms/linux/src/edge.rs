@@ -34,7 +34,8 @@ pub fn start() {
 /// Reads the settings again; call after any of them changes.
 pub fn reload() {
     let c = control();
-    c.enabled.store(prefs::get_bool(ENABLED, false), Ordering::Relaxed);
+    c.enabled
+        .store(prefs::get_bool(ENABLED, false), Ordering::Relaxed);
     let mut linked = c.linked.lock().unwrap();
     for (edge, slot) in linked.iter_mut().enumerate() {
         *slot = prefs::get_string(&link_key(edge)).is_some_and(|id| !id.is_empty());
@@ -58,9 +59,11 @@ impl Host for DaemonHost {
         if target.is_empty() {
             return Err("no computer is linked to that edge".into());
         }
-        ipc::call_blocking(json!({ "cmd": "edge_begin", "target": target, "edge": edge, "pos": pos }))
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+        ipc::call_blocking(
+            json!({ "cmd": "edge_begin", "target": target, "edge": edge, "pos": pos }),
+        )
+        .map(|_| ())
+        .map_err(|e| e.to_string())
     }
 
     fn input(&mut self, b: &Batch) -> Result<(), String> {
@@ -82,7 +85,8 @@ impl Host for DaemonHost {
     }
 
     fn status(&mut self) -> Result<Status, String> {
-        let reply = ipc::call_blocking(json!({ "cmd": "edge_status" })).map_err(|e| e.to_string())?;
+        let reply =
+            ipc::call_blocking(json!({ "cmd": "edge_status" })).map_err(|e| e.to_string())?;
         let reply = data(&reply);
         Ok(Status {
             returned_pos: reply["returned_pos"].as_u64().map(|p| p as u16),

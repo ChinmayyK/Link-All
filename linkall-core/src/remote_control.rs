@@ -440,10 +440,9 @@ mod imp {
             Action::LockScreen => {
                 first_that_works(&[&["loginctl", "lock-session"], &["xdg-screensaver", "lock"]])
             }
-            Action::SleepComputer => first_that_works(&[
-                &["systemctl", "suspend"],
-                &["loginctl", "suspend"],
-            ]),
+            Action::SleepComputer => {
+                first_that_works(&[&["systemctl", "suspend"], &["loginctl", "suspend"]])
+            }
             Action::SleepDisplay => first_that_works(&[
                 &["xset", "dpms", "force", "off"],
                 &[

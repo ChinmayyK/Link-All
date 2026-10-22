@@ -496,7 +496,6 @@ pub fn verification_code(title: &str, text: &str) -> Option<String> {
     (title.starts_with("Verification code") && digits).then(|| code.to_string())
 }
 
-
 /// A stand-in for the operating system, so a test can run the whole hand-off
 /// without moving this computer's real pointer.
 #[doc(hidden)]
@@ -904,8 +903,8 @@ pub fn scancode_to_mac(scancode: u16) -> Option<u16> {
         0x51 => 85,
         0x52 => 82,
         0x53 => 65,
-        0x57 => 103, // f11
-        0x58 => 111, // f12
+        0x57 => 103,  // f11
+        0x58 => 111,  // f12
         0xE01C => 76, // keypad enter
         0xE01D => 54, // right control -> right command
         0xE035 => 75, // keypad /
@@ -996,12 +995,18 @@ mod edge_imp {
 
     pub fn screen_size() -> Option<(i32, i32)> {
         let bounds = unsafe { CGDisplayBounds(CGMainDisplayID()) };
-        let (w, h) = (bounds.size.width.round() as i32, bounds.size.height.round() as i32);
+        let (w, h) = (
+            bounds.size.width.round() as i32,
+            bounds.size.height.round() as i32,
+        );
         (w > 0 && h > 0).then_some((w, h))
     }
 
     pub fn set_cursor_position(x: i32, y: i32) -> Result<(), String> {
-        let to = CGPoint { x: f64::from(x), y: f64::from(y) };
+        let to = CGPoint {
+            x: f64::from(x),
+            y: f64::from(y),
+        };
         unsafe {
             if CGWarpMouseCursorPosition(to) != 0 {
                 return Err("macOS didn't move the pointer".to_string());
@@ -1059,7 +1064,9 @@ mod edge_imp {
             let lib = Xlib::open().map_err(|_| "this computer has no X11 library".to_string())?;
             let display = unsafe { (lib.XOpenDisplay)(std::ptr::null()) };
             if display.is_null() {
-                return Err("no X11 display: Wayland sessions can't be handed a pointer yet".to_string());
+                return Err(
+                    "no X11 display: Wayland sessions can't be handed a pointer yet".to_string(),
+                );
             }
             *guard = Some(X { lib, display });
         }
@@ -1073,7 +1080,15 @@ mod edge_imp {
             let mut mask = 0;
             let root = (x.lib.XDefaultRootWindow)(x.display);
             let ok = (x.lib.XQueryPointer)(
-                x.display, root, &mut root_ret, &mut child_ret, &mut rx, &mut ry, &mut wx, &mut wy, &mut mask,
+                x.display,
+                root,
+                &mut root_ret,
+                &mut child_ret,
+                &mut rx,
+                &mut ry,
+                &mut wx,
+                &mut wy,
+                &mut mask,
             );
             (ok != 0).then_some((rx, ry))
         })
@@ -2050,7 +2065,7 @@ mod edge_tests {
         assert_eq!(on_edge(Edge::Left, 0, 0, 1920, 1080), Some(0));
         assert_eq!(on_edge(Edge::Left, 1, 500, 1920, 1080), None);
         assert_eq!(on_edge(Edge::Right, 1919, 1079, 1920, 1080), Some(65535));
-        assert_eq!(on_edge(Edge::Bottom, 960, 1079, 1920, 1080).is_some(), true);
+        assert!(on_edge(Edge::Bottom, 960, 1079, 1920, 1080).is_some());
         assert_eq!(on_edge(Edge::Top, 960, 5, 1920, 1080), None);
     }
 }
@@ -2104,7 +2119,11 @@ mod keymap_tests {
         assert_eq!(mac_modifier_flag(win), 0x0004_0000, "control");
         let alt = scancode_to_mac(0x38).unwrap();
         assert_eq!(mac_modifier_flag(alt), 0x0008_0000, "option");
-        assert_eq!(mac_modifier_flag(scancode_to_mac(0x2A).unwrap()), 0x0002_0000, "shift");
+        assert_eq!(
+            mac_modifier_flag(scancode_to_mac(0x2A).unwrap()),
+            0x0002_0000,
+            "shift"
+        );
         assert_eq!(mac_modifier_flag(0), 0, "a letter sets no flag");
     }
 

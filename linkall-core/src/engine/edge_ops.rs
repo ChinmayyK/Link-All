@@ -428,8 +428,16 @@ impl Engine {
         EdgeStatus {
             hosting,
             controlled,
-            returned_pos: if peek { notice.returned_pos } else { notice.returned_pos.take() },
-            ended_reason: if peek { notice.ended_reason.clone() } else { notice.ended_reason.take() },
+            returned_pos: if peek {
+                notice.returned_pos
+            } else {
+                notice.returned_pos.take()
+            },
+            ended_reason: if peek {
+                notice.ended_reason.clone()
+            } else {
+                notice.ended_reason.take()
+            },
             peer,
             refused_target: refused.as_ref().map(|(id, _)| id.to_string()),
             refused_reason: refused.map(|(_, why)| why),
@@ -456,8 +464,11 @@ impl Engine {
     ) -> Result<(), String> {
         let clamp = |v: i32| v.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
         if dx != 0 || dy != 0 {
-            self.edge_input(AppMessage::RemotePointerMove { dx: clamp(dx), dy: clamp(dy) })
-                .await?;
+            self.edge_input(AppMessage::RemotePointerMove {
+                dx: clamp(dx),
+                dy: clamp(dy),
+            })
+            .await?;
         }
         if scroll_x != 0 || scroll_y != 0 {
             self.edge_input(AppMessage::RemotePointerScroll {
@@ -467,10 +478,12 @@ impl Engine {
             .await?;
         }
         for &(button, down) in buttons {
-            self.edge_input(AppMessage::RemotePointerButton { button, down }).await?;
+            self.edge_input(AppMessage::RemotePointerButton { button, down })
+                .await?;
         }
         for &(scancode, down) in keys {
-            self.edge_input(AppMessage::RemoteKeyEvent { scancode, down }).await?;
+            self.edge_input(AppMessage::RemoteKeyEvent { scancode, down })
+                .await?;
         }
         Ok(())
     }

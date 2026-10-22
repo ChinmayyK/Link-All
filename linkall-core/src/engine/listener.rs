@@ -82,9 +82,8 @@ pub(super) fn spawn_listener_supervisor(
                     // the user to act on. Timed retries stay quiet too:
                     // the first failure already told the user.
                     if !is_retry && !is_addr_not_available(&err) {
-                        let message = format!(
-                            "listener rebind to {addr} failed after network change: {err}"
-                        );
+                        let message =
+                            format!("listener rebind to {addr} failed after network change: {err}");
                         let _ = shared.event_tx.send(EngineEvent::Warning(message)).await;
                     }
                 }

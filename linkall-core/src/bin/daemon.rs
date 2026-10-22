@@ -773,7 +773,9 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             state.engine.edge_end().await;
             Ok(IpcResponse::ok(json!({})))
         }
-        IpcRequest::EdgeStatus { peek } => Ok(IpcResponse::ok(json!(state.engine.edge_status(peek)))),
+        IpcRequest::EdgeStatus { peek } => {
+            Ok(IpcResponse::ok(json!(state.engine.edge_status(peek))))
+        }
         IpcRequest::GuestDropStart => Ok(match state.engine.guest_drop_start().await {
             Ok(session) => IpcResponse::ok(session),
             Err(e) => IpcResponse::error(e),

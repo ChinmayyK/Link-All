@@ -70,7 +70,10 @@ impl Backend for FakeScreen {
         if down {
             s.buttons_down.push(button);
         }
-        s.log.push(format!("button {button:?} {}", if down { "down" } else { "up" }));
+        s.log.push(format!(
+            "button {button:?} {}",
+            if down { "down" } else { "up" }
+        ));
         Ok(())
     }
     fn key(&self, scancode: u16, down: bool) -> Result<(), String> {
@@ -79,7 +82,10 @@ impl Backend for FakeScreen {
         if down {
             s.keys_down.push(scancode);
         }
-        s.log.push(format!("key {scancode:#x} {}", if down { "down" } else { "up" }));
+        s.log.push(format!(
+            "key {scancode:#x} {}",
+            if down { "down" } else { "up" }
+        ));
         Ok(())
     }
 }
@@ -124,7 +130,10 @@ async fn the_hand_off_runs_from_start_to_finish() {
     desk.engine.apply_settings(settings).await;
 
     // ── Start: left the host over its right edge, halfway down ──
-    host.engine.edge_begin(desk.id, 1, 32768).await.expect("taken");
+    host.engine
+        .edge_begin(desk.id, 1, 32768)
+        .await
+        .expect("taken");
     let (x, y) = screen.cursor_now();
     assert_eq!(x, 0, "arrives at the left edge");
     assert!((538..=541).contains(&y), "halfway down, was {y}");
@@ -141,11 +150,17 @@ async fn the_hand_off_runs_from_start_to_finish() {
     assert_eq!(screen.cursor_now().1, y + 20);
 
     host.engine
-        .edge_input(AppMessage::RemoteKeyEvent { scancode: 0x1E, down: true })
+        .edge_input(AppMessage::RemoteKeyEvent {
+            scancode: 0x1E,
+            down: true,
+        })
         .await
         .unwrap();
     host.engine
-        .edge_input(AppMessage::RemotePointerButton { button: 0, down: true })
+        .edge_input(AppMessage::RemotePointerButton {
+            button: 0,
+            down: true,
+        })
         .await
         .unwrap();
     eventually("the key and button", || {
@@ -162,7 +177,10 @@ async fn the_hand_off_runs_from_start_to_finish() {
             .await
             .unwrap();
     }
-    eventually("the pointer to reach the edge", || screen.cursor_now().0 == 0).await;
+    eventually("the pointer to reach the edge", || {
+        screen.cursor_now().0 == 0
+    })
+    .await;
     // Pushing on against it is.
     host.engine
         .edge_input(AppMessage::RemotePointerMove { dx: -30, dy: 0 })
@@ -179,7 +197,10 @@ async fn the_hand_off_runs_from_start_to_finish() {
     })
     .await;
     let pos = returned.get().unwrap();
-    assert!((30000..=36000).contains(&pos), "came back near the middle, was {pos}");
+    assert!(
+        (30000..=36000).contains(&pos),
+        "came back near the middle, was {pos}"
+    );
     assert_eq!(screen.held(), (vec![], vec![]), "nothing is left held down");
     assert!(
         host.engine
@@ -190,7 +211,10 @@ async fn the_hand_off_runs_from_start_to_finish() {
     );
 
     // ── A brush against the edge is not a return ──
-    host.engine.edge_begin(desk.id, 1, 0).await.expect("taken again");
+    host.engine
+        .edge_begin(desk.id, 1, 0)
+        .await
+        .expect("taken again");
     host.engine
         .edge_input(AppMessage::RemotePointerMove { dx: -10, dy: 0 })
         .await
@@ -206,7 +230,10 @@ async fn the_hand_off_runs_from_start_to_finish() {
 
     // ── Ending it from the host lets go of whatever is held ──
     host.engine
-        .edge_input(AppMessage::RemoteKeyEvent { scancode: 0x2A, down: true })
+        .edge_input(AppMessage::RemoteKeyEvent {
+            scancode: 0x2A,
+            down: true,
+        })
         .await
         .unwrap();
     eventually("the key", || screen.held().0 == [0x2A]).await;
@@ -219,7 +246,10 @@ async fn the_hand_off_runs_from_start_to_finish() {
     let before = screen.log().len();
     let _ = desk
         .engine
-        .edge_input(AppMessage::RemoteKeyEvent { scancode: 0x1F, down: true })
+        .edge_input(AppMessage::RemoteKeyEvent {
+            scancode: 0x1F,
+            down: true,
+        })
         .await;
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(screen.log().len(), before);

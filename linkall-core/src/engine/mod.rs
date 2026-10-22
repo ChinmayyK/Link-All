@@ -399,7 +399,11 @@ impl Engine {
     /// a later start bind the same port.
     pub fn shutdown(&self) {
         self.shared.shutdown.cancel();
-        if let Ok(sessions) = self.shared.peer_manager.shutdown_all_sessions("engine stopped") {
+        if let Ok(sessions) = self
+            .shared
+            .peer_manager
+            .shutdown_all_sessions("engine stopped")
+        {
             for session in sessions {
                 if let Some(tx) = session.shutdown_tx {
                     let _ = tx.send(SessionShutdown {

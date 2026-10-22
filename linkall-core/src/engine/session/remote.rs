@@ -358,7 +358,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             })
             .await;
         }
-        AppMessage::EdgeEnter { edge, pos } => super::super::edge_ops::on_enter(ctx, edge, pos).await,
+        AppMessage::EdgeEnter { edge, pos } => {
+            super::super::edge_ops::on_enter(ctx, edge, pos).await
+        }
         AppMessage::EdgeReply { accepted, error } => {
             super::super::edge_ops::on_reply(ctx, accepted, error).await
         }

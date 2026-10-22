@@ -36,7 +36,11 @@ impl Host for Recorder {
 }
 
 fn xdotool(args: &[&str]) {
-    let ok = Command::new("xdotool").args(args).status().map(|s| s.success()).unwrap_or(false);
+    let ok = Command::new("xdotool")
+        .args(args)
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
     assert!(ok, "xdotool {args:?}");
 }
 
@@ -53,7 +57,9 @@ fn wait(what: &str, mut check: impl FnMut() -> bool) {
 
 #[test]
 fn pushing_a_linked_edge_hands_the_keyboard_and_mouse_over_and_back() {
-    if std::env::var_os("DISPLAY").is_none() || Command::new("xdotool").arg("version").output().is_err() {
+    if std::env::var_os("DISPLAY").is_none()
+        || Command::new("xdotool").arg("version").output().is_err()
+    {
         eprintln!("no X server or xdotool: skipping");
         return;
     }
@@ -73,7 +79,9 @@ fn pushing_a_linked_edge_hands_the_keyboard_and_mouse_over_and_back() {
         xdotool(&["mousemove", "5000", "300"]);
         std::thread::sleep(Duration::from_millis(30));
     }
-    wait("the hand-off to begin", || !rec.lock().unwrap().begun.is_empty());
+    wait("the hand-off to begin", || {
+        !rec.lock().unwrap().begun.is_empty()
+    });
     let (edge, pos) = rec.lock().unwrap().begun[0];
     assert_eq!(edge, 1);
     assert!(pos > 0 && pos < 65535, "pos {pos}");
@@ -102,7 +110,10 @@ fn pushing_a_linked_edge_hands_the_keyboard_and_mouse_over_and_back() {
     );
 
     // The other side hands it back: the pointer is placed at the edge again.
-    rec.lock().unwrap().status = Status { returned_pos: Some(32768), ended_reason: None };
+    rec.lock().unwrap().status = Status {
+        returned_pos: Some(32768),
+        ended_reason: None,
+    };
     std::thread::sleep(Duration::from_millis(600));
 
     // Pushing again after the cooldown starts a second hand-off, which
@@ -115,7 +126,12 @@ fn pushing_a_linked_edge_hands_the_keyboard_and_mouse_over_and_back() {
     xdotool(&["key", "ctrl+alt+Escape"]);
     wait("the escape to end it", || rec.lock().unwrap().ended >= 1);
     assert!(
-        control.last_note.lock().unwrap().as_deref().is_some_and(|n| n.contains("Ctrl+Alt+Esc")),
+        control
+            .last_note
+            .lock()
+            .unwrap()
+            .as_deref()
+            .is_some_and(|n| n.contains("Ctrl+Alt+Esc")),
         "the user is told why"
     );
 

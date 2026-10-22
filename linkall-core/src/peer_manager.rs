@@ -1447,9 +1447,11 @@ mod tests {
         std::fs::write(&path, b"\0\0\0garbage").unwrap();
         let manager = PeerManager::load(&path).expect("load must not fail");
         assert!(manager.list().is_empty());
-        assert!(std::fs::read_dir(dir.path())
+        assert!(std::fs::read_dir(dir.path()).unwrap().any(|e| e
             .unwrap()
-            .any(|e| e.unwrap().file_name().to_string_lossy().starts_with("peers.json.corrupt")));
+            .file_name()
+            .to_string_lossy()
+            .starts_with("peers.json.corrupt")));
     }
 
     #[test]

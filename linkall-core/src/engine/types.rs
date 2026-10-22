@@ -688,15 +688,15 @@ impl EngineEvent {
     }
 
     /// Send to a host channel: a droppable event is skipped if the channel is
-    /// full, any other waits its turn. `Err` means the receiver is gone.
-    pub async fn send_to_host(self, tx: &tokio::sync::mpsc::Sender<EngineEvent>) -> Result<(), ()> {
+    /// full, any other waits its turn. False means the receiver is gone.
+    pub async fn send_to_host(self, tx: &tokio::sync::mpsc::Sender<EngineEvent>) -> bool {
         if self.is_droppable() {
-            return match tx.try_send(self) {
-                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => Err(()),
-                _ => Ok(()),
-            };
+            return !matches!(
+                tx.try_send(self),
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_))
+            );
         }
-        tx.send(self).await.map_err(|_| ())
+        tx.send(self).await.is_ok()
     }
 }
 

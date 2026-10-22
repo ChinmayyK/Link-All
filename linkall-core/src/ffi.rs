@@ -77,7 +77,7 @@ pub unsafe extern "C" fn linkall_start(
                     crate::local_files::handle_event(&serving_engine, &ev);
                     #[cfg(target_os = "android")]
                     let _ = &serving_engine;
-                    if ev.send_to_host(&event_tx).await.is_err() {
+                    if !ev.send_to_host(&event_tx).await {
                         break;
                     }
                 }
@@ -210,7 +210,10 @@ unsafe fn edge_send(handle: *mut LinkAllHandle, message: crate::protocol::AppMes
 /// `handle` must be a valid handle or NULL.
 #[no_mangle]
 pub unsafe extern "C" fn linkall_edge_move(handle: *mut LinkAllHandle, dx: i16, dy: i16) -> c_int {
-    edge_send(handle, crate::protocol::AppMessage::RemotePointerMove { dx, dy })
+    edge_send(
+        handle,
+        crate::protocol::AppMessage::RemotePointerMove { dx, dy },
+    )
 }
 
 /// Press (`down` non-zero) or release a mouse button on the other computer:
@@ -238,8 +241,15 @@ pub unsafe extern "C" fn linkall_edge_button(
 /// # Safety
 /// `handle` must be a valid handle or NULL.
 #[no_mangle]
-pub unsafe extern "C" fn linkall_edge_scroll(handle: *mut LinkAllHandle, dx: i16, dy: i16) -> c_int {
-    edge_send(handle, crate::protocol::AppMessage::RemotePointerScroll { dx, dy })
+pub unsafe extern "C" fn linkall_edge_scroll(
+    handle: *mut LinkAllHandle,
+    dx: i16,
+    dy: i16,
+) -> c_int {
+    edge_send(
+        handle,
+        crate::protocol::AppMessage::RemotePointerScroll { dx, dy },
+    )
 }
 
 /// Press or release a key on the other computer by scan code (PS/2 set 1,
