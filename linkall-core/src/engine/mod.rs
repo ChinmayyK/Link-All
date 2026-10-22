@@ -144,6 +144,9 @@ impl Engine {
         // Engine events pass through the folder tap on their way to the host.
         let host_event_tx = event_tx;
         let (event_tx, tap_rx) = mpsc::channel(1024);
+        for notice in crate::settings::take_aside_notices() {
+            let _ = event_tx.try_send(EngineEvent::Warning(notice));
+        }
         let shared = EngineShared {
             config: config.clone(),
             trust,

@@ -40,6 +40,7 @@ LinkAllHandle *linkall_start(const char *device_name, uint16_t port);
 
 /// Stop and free the engine.
 void linkall_stop(LinkAllHandle *handle);
+void linkall_shutdown(LinkAllHandle *handle);
 
 // ── Clipboard push ────────────────────────────────────────────────────────────
 int32_t linkall_push_text(LinkAllHandle *handle, const char *text);

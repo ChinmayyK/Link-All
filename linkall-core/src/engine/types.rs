@@ -655,3 +655,31 @@ impl LatestClipboard {
             .unwrap_or(0)
     }
 }
+
+impl EngineEvent {
+    /// Events the next one makes obsolete: progress ticks and "something
+    /// changed" pings. When the host is not draining its channel these are
+    /// dropped rather than letting the engine stall behind them.
+    pub fn is_droppable(&self) -> bool {
+        matches!(
+            self,
+            EngineEvent::FileTransferProgress { .. }
+                | EngineEvent::SpeedTestProgress { .. }
+                | EngineEvent::NowPlayingChanged
+                | EngineEvent::ScratchpadChanged
+        )
+    }
+
+    /// Send to a host channel: a droppable event is skipped if the channel is
+    /// full, any other waits its turn. `Err` means the receiver is gone.
+    pub async fn send_to_host(self, tx: &tokio::sync::mpsc::Sender<EngineEvent>) -> Result<(), ()> {
+        if self.is_droppable() {
+            return match tx.try_send(self) {
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => Err(()),
+                _ => Ok(()),
+            };
+        }
+        tx.send(self).await.map_err(|_| ())
+    }
+}
+

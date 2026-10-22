@@ -77,7 +77,7 @@ pub unsafe extern "C" fn linkall_start(
                     crate::local_files::handle_event(&serving_engine, &ev);
                     #[cfg(target_os = "android")]
                     let _ = &serving_engine;
-                    if event_tx.send(ev).await.is_err() {
+                    if ev.send_to_host(&event_tx).await.is_err() {
                         break;
                     }
                 }
@@ -118,6 +118,21 @@ pub unsafe extern "C" fn linkall_stop(handle: *mut LinkAllHandle) {
         let handle = Box::from_raw(handle);
         handle.engine.shutdown();
         drop(handle);
+    }
+}
+
+/// Stop the engine but keep the handle valid.
+///
+/// A process that is about to exit uses this instead of `linkall_stop`: calls
+/// already in flight on other threads still hold the pointer, and freeing it
+/// under them is a use-after-free. The memory goes with the process.
+///
+/// # Safety
+/// `handle` must be a pointer returned by `linkall_start`.
+#[no_mangle]
+pub unsafe extern "C" fn linkall_shutdown(handle: *mut LinkAllHandle) {
+    if !handle.is_null() {
+        (*handle).engine.shutdown();
     }
 }
 
