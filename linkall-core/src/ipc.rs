@@ -1113,7 +1113,9 @@ pub async fn handle_ipc_request(
             eng.edge_end().await;
             IpcResponse::ok(serde_json::json!({}))
         }
-        IpcRequest::EdgeStatus { peek } => IpcResponse::ok(serde_json::json!(eng.edge_status(peek))),
+        IpcRequest::EdgeStatus { peek } => {
+            IpcResponse::ok(serde_json::json!(eng.edge_status(peek)))
+        }
         IpcRequest::GuestDropStart => match eng.guest_drop_start().await {
             Ok(session) => IpcResponse::ok(session),
             Err(e) => IpcResponse::err(e),

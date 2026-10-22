@@ -37,5 +37,8 @@ async fn a_computer_tells_its_peers_its_network_address() {
     };
     let seen = peer(&phone, desk.id).await.mac_address;
     assert_eq!(seen.as_deref(), Some(mac.as_str()));
-    assert!(linkall_core::wol::parse_mac(&mac).is_some(), "it is a usable address");
+    assert!(
+        linkall_core::wol::parse_mac(&mac).is_some(),
+        "it is a usable address"
+    );
 }

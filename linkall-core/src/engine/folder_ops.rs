@@ -330,7 +330,7 @@ pub(super) fn spawn_folder_event_tap(
                         dest_dir.as_ref().map(|d| d.to_string_lossy().into_owned()),
                     );
                 }
-                if event.send_to_host(&host).await.is_err() {
+                if !event.send_to_host(&host).await {
                     return;
                 }
             }

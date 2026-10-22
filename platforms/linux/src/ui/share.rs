@@ -137,8 +137,12 @@ pub fn page(hub: &Hub) -> gtk::ScrolledWindow {
     let rows: std::rc::Rc<std::cell::RefCell<Vec<adw::ActionRow>>> = Default::default();
     {
         let hub = hub.clone();
-        let (status, end_button, readiness, rows) =
-            (status.clone(), end_button.clone(), readiness.clone(), rows.clone());
+        let (status, end_button, readiness, rows) = (
+            status.clone(),
+            end_button.clone(),
+            readiness.clone(),
+            rows.clone(),
+        );
         glib::timeout_add_local(Duration::from_secs(1), move || {
             let (status, end_button, readiness, rows, hub) = (
                 status.clone(),
@@ -148,8 +152,17 @@ pub fn page(hub: &Hub) -> gtk::ScrolledWindow {
                 hub.clone(),
             );
             glib::spawn_future_local(async move {
-                let reply = ipc::call(json!({ "cmd": "edge_status", "peek": true })).await.ok();
-                refresh(&hub, reply.as_ref(), &status, &end_button, &readiness, &rows);
+                let reply = ipc::call(json!({ "cmd": "edge_status", "peek": true }))
+                    .await
+                    .ok();
+                refresh(
+                    &hub,
+                    reply.as_ref(),
+                    &status,
+                    &end_button,
+                    &readiness,
+                    &rows,
+                );
             });
             glib::ControlFlow::Continue
         });
@@ -163,12 +176,19 @@ fn shareable(hub: &Hub) -> Vec<(String, String)> {
         .into_iter()
         .filter(|p| {
             p["trusted"] == true
-                && !p["platform"].as_str().unwrap_or("").to_lowercase().contains("android")
+                && !p["platform"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains("android")
         })
         .filter_map(|p| {
             Some((
                 p["id"].as_str()?.to_string(),
-                p["friendly_name"].as_str().unwrap_or("Computer").to_string(),
+                p["friendly_name"]
+                    .as_str()
+                    .unwrap_or("Computer")
+                    .to_string(),
             ))
         })
         .collect()
@@ -205,10 +225,12 @@ fn refresh(
         status.set_subtitle("That computer's keyboard and mouse are driving this one.");
     } else if enabled {
         status.set_title("Ready");
-        status.set_subtitle("Push the pointer against a screen edge that has a computer next to it.");
+        status
+            .set_subtitle("Push the pointer against a screen edge that has a computer next to it.");
     } else {
         status.set_title("Off");
-        status.set_subtitle("Turn on sharing to move between computers with one keyboard and mouse.");
+        status
+            .set_subtitle("Turn on sharing to move between computers with one keyboard and mouse.");
     }
     if let Some(note) = crate::edge::take_note() {
         super::toast(&note);

@@ -751,9 +751,11 @@ mod tests {
         std::fs::write(&path, b"{\"devices\":{\"half-writ").unwrap();
         let store = TrustStore::load(&path).expect("load must not fail");
         assert!(store.data.devices.is_empty());
-        assert!(std::fs::read_dir(dir.path())
+        assert!(std::fs::read_dir(dir.path()).unwrap().any(|e| e
             .unwrap()
-            .any(|e| e.unwrap().file_name().to_string_lossy().starts_with("trust.json.corrupt")));
+            .file_name()
+            .to_string_lossy()
+            .starts_with("trust.json.corrupt")));
     }
 
     #[test]

@@ -12,9 +12,9 @@ mod now_playing;
 pub mod pairing;
 pub mod palette;
 mod scratchpad;
-mod share;
 pub mod send;
 mod settings;
+mod share;
 mod transfers;
 
 pub use extras::{call_from_phone, receive_from_guest};

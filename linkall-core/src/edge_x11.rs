@@ -104,7 +104,9 @@ impl Display {
         let xlib = Xlib::open().map_err(|_| "this computer has no X11 library".to_string())?;
         let display = unsafe { (xlib.XOpenDisplay)(std::ptr::null()) };
         if display.is_null() {
-            return Err("no X11 display: Wayland sessions can't share a keyboard and mouse yet".into());
+            return Err(
+                "no X11 display: Wayland sessions can't share a keyboard and mouse yet".into(),
+            );
         }
         unsafe {
             let screen = (xlib.XDefaultScreen)(display);
@@ -125,8 +127,15 @@ impl Display {
             let (mut rx, mut ry, mut wx, mut wy) = (0, 0, 0, 0);
             let mut mask = 0;
             let ok = (self.xlib.XQueryPointer)(
-                self.display, self.root, &mut root_ret, &mut child_ret, &mut rx, &mut ry, &mut wx,
-                &mut wy, &mut mask,
+                self.display,
+                self.root,
+                &mut root_ret,
+                &mut child_ret,
+                &mut rx,
+                &mut ry,
+                &mut wx,
+                &mut wy,
+                &mut mask,
             );
             (ok != 0).then_some((rx, ry, mask))
         }
@@ -144,11 +153,21 @@ impl Display {
         unsafe {
             let data = [0u8; 1];
             let pixmap = (self.xlib.XCreateBitmapFromData)(
-                self.display, self.root, data.as_ptr().cast(), 1, 1,
+                self.display,
+                self.root,
+                data.as_ptr().cast(),
+                1,
+                1,
             );
             let mut color: xlib::XColor = std::mem::zeroed();
             let cursor = (self.xlib.XCreatePixmapCursor)(
-                self.display, pixmap, pixmap, &mut color, &mut color, 0, 0,
+                self.display,
+                pixmap,
+                pixmap,
+                &mut color,
+                &mut color,
+                0,
+                0,
             );
             (self.xlib.XFreePixmap)(self.display, pixmap);
             cursor
@@ -158,14 +177,25 @@ impl Display {
     /// Takes the pointer and keyboard away from every other program.
     fn grab(&self, cursor: xlib::Cursor) -> bool {
         unsafe {
-            let mask = (xlib::ButtonPressMask | xlib::ButtonReleaseMask | xlib::PointerMotionMask)
-                as u32;
+            let mask =
+                (xlib::ButtonPressMask | xlib::ButtonReleaseMask | xlib::PointerMotionMask) as u32;
             let pointer = (self.xlib.XGrabPointer)(
-                self.display, self.root, 0, mask, xlib::GrabModeAsync, xlib::GrabModeAsync, 0,
-                cursor, xlib::CurrentTime,
+                self.display,
+                self.root,
+                0,
+                mask,
+                xlib::GrabModeAsync,
+                xlib::GrabModeAsync,
+                0,
+                cursor,
+                xlib::CurrentTime,
             );
             let keyboard = (self.xlib.XGrabKeyboard)(
-                self.display, self.root, 0, xlib::GrabModeAsync, xlib::GrabModeAsync,
+                self.display,
+                self.root,
+                0,
+                xlib::GrabModeAsync,
+                xlib::GrabModeAsync,
                 xlib::CurrentTime,
             );
             if pointer != xlib::GrabSuccess || keyboard != xlib::GrabSuccess {
@@ -205,7 +235,9 @@ fn run(mut host: Box<dyn Host>, control: &Control) -> Result<(), String> {
         if !control.enabled.load(Ordering::Relaxed) || Instant::now() < cooldown_until {
             continue;
         }
-        let Some((x, y, mask)) = d.pointer() else { continue };
+        let Some((x, y, mask)) = d.pointer() else {
+            continue;
+        };
         let linked = *control.linked.lock().unwrap();
         let mut start = None;
         for e in 0..4 {
@@ -393,7 +425,8 @@ fn is_repeat(d: &Display, keycode: u32, time: xlib::Time) -> bool {
         }
         let mut next: xlib::XEvent = std::mem::zeroed();
         (d.xlib.XPeekEvent)(d.display, &mut next);
-        if next.get_type() == xlib::KeyPress && next.key.keycode == keycode && next.key.time == time {
+        if next.get_type() == xlib::KeyPress && next.key.keycode == keycode && next.key.time == time
+        {
             (d.xlib.XNextEvent)(d.display, &mut next);
             return true;
         }

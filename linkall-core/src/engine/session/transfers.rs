@@ -18,20 +18,6 @@ fn decompress_chunk(payload: &[u8]) -> Result<Vec<u8>, String> {
     lz4_flex::block::decompress(&payload[4..], size).map_err(|e| e.to_string())
 }
 
-#[cfg(test)]
-mod decompress_tests {
-    use super::decompress_chunk;
-
-    #[test]
-    fn roundtrip_and_oversize_rejected() {
-        let data = vec![7u8; 10_000];
-        let packed = lz4_flex::compress_prepend_size(&data);
-        assert_eq!(decompress_chunk(&packed).unwrap(), data);
-        assert!(decompress_chunk(&[0xff, 0xff, 0xff, 0xff, 0]).is_err());
-        assert!(decompress_chunk(&[1]).is_err());
-    }
-}
-
 pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
     let shared = &ctx.shared;
     let peer_id = ctx.peer_id;
@@ -806,4 +792,18 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         _ => unreachable!("dispatch_inbound routed a non-transfers message here"),
     }
     Flow::Continue
+}
+
+#[cfg(test)]
+mod decompress_tests {
+    use super::decompress_chunk;
+
+    #[test]
+    fn roundtrip_and_oversize_rejected() {
+        let data = vec![7u8; 10_000];
+        let packed = lz4_flex::compress_prepend_size(&data);
+        assert_eq!(decompress_chunk(&packed).unwrap(), data);
+        assert!(decompress_chunk(&[0xff, 0xff, 0xff, 0xff, 0]).is_err());
+        assert!(decompress_chunk(&[1]).is_err());
+    }
 }

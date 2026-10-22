@@ -463,7 +463,11 @@ pub(super) async fn connect_once(
     // Dials without an expected id (the LAN probe) only learn who answered
     // here; honour a disconnect/forget the user just made, or the probe would
     // re-dial that device within its next cycle.
-    if !is_manual_reconnect && shared.peer_manager.is_explicitly_disconnected(hs.peer_device_id) {
+    if !is_manual_reconnect
+        && shared
+            .peer_manager
+            .is_explicitly_disconnected(hs.peer_device_id)
+    {
         tracing::debug!(
             peer_id = %hs.peer_device_id,
             "aborting outbound connect — peer is explicitly disconnected"

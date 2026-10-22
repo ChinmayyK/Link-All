@@ -66,7 +66,9 @@ pub fn magic_packet(mac: Mac) -> [u8; 102] {
 /// when it cannot be told (a phone, a virtual adapter, no network).
 pub fn local_mac() -> Option<String> {
     let active = crate::network_manager::get_active_interface().ok()?;
-    let IpAddr::V4(ip) = active.ip else { return None };
+    let IpAddr::V4(ip) = active.ip else {
+        return None;
+    };
     netdev::get_interfaces()
         .into_iter()
         .find(|iface| iface.ipv4.iter().any(|net| net.addr() == ip))
