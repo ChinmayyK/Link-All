@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ])
         store.start()
         startMacScreenshotObserver()
+        EdgeControlService.shared.reload()
         
         // Prevent App Nap to ensure background daemon and network sync stay responsive
         activityToken = ProcessInfo.processInfo.beginActivity(options: [.userInitiated], reason: "Link All Background Sync")

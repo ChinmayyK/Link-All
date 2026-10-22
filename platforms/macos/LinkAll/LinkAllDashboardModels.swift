@@ -8,7 +8,7 @@ import SwiftUI
 
 /// The main window's sections. Devices live on Home, each with its own page there.
 enum DashboardSection: String, CaseIterable, Identifiable {
-    case home, clipboard, files, activity, settings
+    case home, clipboard, files, share, activity, settings
 
     var id: String { rawValue }
 
@@ -17,6 +17,7 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         case .home:      return "Home"
         case .clipboard: return "Clipboard"
         case .files:     return "Files"
+        case .share:     return "Keyboard & Mouse"
         case .activity:  return "Activity"
         case .settings:  return "Settings"
         }
@@ -27,6 +28,7 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         case .home:      return "house"
         case .clipboard: return "doc.on.clipboard"
         case .files:     return "folder"
+        case .share:     return "keyboard"
         case .activity:  return "clock"
         case .settings:  return "gearshape"
         }
@@ -40,7 +42,8 @@ enum DashboardSection: String, CaseIterable, Identifiable {
         case .home:      return "1"
         case .clipboard: return "2"
         case .files:     return "3"
-        case .activity:  return "4"
+        case .share:     return "4"
+        case .activity:  return "5"
         case .settings:  return ","
         }
     }

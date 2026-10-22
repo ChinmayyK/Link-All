@@ -110,7 +110,7 @@ struct PreferencesView: View {
     @ViewBuilder private var pane: some View {
         switch tab {
         case .general:       GeneralPane(copy: $copy)
-        case .continuity:    ContinuityPane(copy: $copy)
+        case .continuity:    ContinuityPane(copy: $copy, store: store)
         case .sync:          SyncPane(copy: $copy, patternDraft: $patternDraft)
         case .notifications: NotificationsPane()
         case .network:       NetworkPane(store: store, copy: $copy, portString: $portString, portIsInvalid: $portIsInvalid)
@@ -319,6 +319,8 @@ private struct NotificationsPane: View {
 /// remote control, Drop, walk-away lock, screenshots and notifications.
 private struct ContinuityPane: View {
     @Binding var copy: LinkAllSettingsSnapshot
+    @ObservedObject var store: LinkAllStore
+    @AppStorage(EdgeControlService.enabledKey) private var edgeControlEnabled: Bool = false
     @AppStorage("mirrorAndroidNotifications") private var mirrorAndroidNotifications: Bool = true
     @AppStorage("autoForwardMacScreenshots") private var autoForwardMacScreenshots: Bool = false
     @AppStorage("magicClipboardEnabled") private var magicClipboardEnabled: Bool = false
@@ -351,6 +353,18 @@ private struct ContinuityPane: View {
                 Toggle("", isOn: $copy.allowRemoteControl).labelsHidden()
             }
         }
+
+        PrefsSection(title: "Keyboard & Mouse", icon: "keyboard.fill", tint: CRTheme.accentBlue) {
+            PrefsRow(icon: "cursorarrow.motionlines", label: "Share this keyboard and mouse",
+                     description: "Push the pointer past a screen edge to control the computer next to this Mac. The other computer needs Link All 2.1 and Remote control turned on. Press Ctrl+Option+Esc to bring the keyboard and mouse back at any time. Needs the Accessibility permission.") {
+                Toggle("", isOn: $edgeControlEnabled).labelsHidden()
+            }
+            PrefsRow(icon: "rectangle.on.rectangle", label: "Where each computer sits",
+                     description: "Choose which computer is on each side of this Mac, and check each is ready.") {
+                Button("Open") { store.selectedSection = .share }
+            }
+        }
+        .onChange(of: edgeControlEnabled) { _ in EdgeControlService.shared.reload() }
 
         PrefsSection(title: "Ambient Continuity", icon: "star.fill", tint: CRTheme.accentYellow) {
             PrefsRow(icon: "camera.viewfinder", label: "Screenshot Sync",
