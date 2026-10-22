@@ -17,8 +17,15 @@ namespace LinkAll.WinUI.Services
         [DllImport("user32.dll")]
         private static extern int GetSystemMetrics(int nIndex);
 
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassNameW(IntPtr hWnd, [Out] ushort[] buffer, int maxCount);
+
         private const int SM_CXSCREEN = 0;
         private const int SM_CYSCREEN = 1;
+        private const int SM_CXDRAG = 68;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
@@ -35,6 +42,13 @@ namespace LinkAll.WinUI.Services
         private UI.EdgeDropWindow? _dropZoneWindow;
         private readonly ClipboardManager _clipboardManager;
         private readonly int _edgeThreshold = 20;
+        // Edge ticks (100 ms each) the cursor must stay put before the zone shows, so
+        // sweeping past the edge doesn't open it.
+        private const int EdgeDwellTicks = 4;
+        private POINT _press;
+        private bool _pressedOnFile;
+        private bool _moved;
+        private int _edgeTicks;
 
         public GlobalDragMonitor(ClipboardManager clipboardManager)
         {
@@ -51,24 +65,34 @@ namespace LinkAll.WinUI.Services
                 // VK_LBUTTON is 0x01
                 bool isLeftButtonDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
 
-                if (isLeftButtonDown && _wasLeftButtonDown)
+                if (isLeftButtonDown && !_wasLeftButtonDown && GetCursorPos(out POINT down))
                 {
-                    // User is dragging. Are they at the edge?
-                    if (GetCursorPos(out POINT p))
+                    // A new press: remember where, and whether it landed on a file icon.
+                    _press = down;
+                    _pressedOnFile = IsFileItem(down);
+                    _moved = false;
+                    _edgeTicks = 0;
+                }
+                else if (isLeftButtonDown && _wasLeftButtonDown)
+                {
+                    // Only a drag that started on a file in Explorer or on the desktop
+                    // counts: window moves, text selections and in-app drags don't.
+                    if (_pressedOnFile && GetCursorPos(out POINT p))
                     {
+                        int slop = GetSystemMetrics(SM_CXDRAG);
+                        if (Math.Abs(p.X - _press.X) > slop || Math.Abs(p.Y - _press.Y) > slop) _moved = true;
+
                         double screenWidth = GetSystemMetrics(SM_CXSCREEN);
-                        
-                        // If they are on the right edge
-                        if (p.X >= screenWidth - _edgeThreshold)
+                        if (_moved && p.X >= screenWidth - _edgeThreshold)
                         {
-                            if (_dropZoneWindow == null) // WinUI 3 Window doesn't have IsLoaded
+                            if (++_edgeTicks >= EdgeDwellTicks && _dropZoneWindow == null)
                             {
                                 ShowDropZone();
                             }
                         }
-                        else if (p.X < screenWidth - 300 - _edgeThreshold) // Hardcoding width since WinUI 3 Window.Bounds is tricky
+                        else
                         {
-                            // Move away from edge
+                            _edgeTicks = 0;
                         }
                     }
                 }
@@ -84,6 +108,21 @@ namespace LinkAll.WinUI.Services
                 _wasLeftButtonDown = isLeftButtonDown;
             }
             catch (Exception ex) { App.HandleError(ex); }
+        }
+
+        // The list views that hold file icons in Explorer windows and on the desktop.
+        // The window under the press is the icon area itself, not a title bar or frame.
+        private static bool IsFileItem(POINT p)
+        {
+            var hwnd = WindowFromPoint(p);
+            if (hwnd == IntPtr.Zero) return false;
+            var buf = new ushort[64];
+            int n = GetClassNameW(hwnd, buf, buf.Length);
+            if (n <= 0) return false;
+            var chars = new char[n];
+            for (int i = 0; i < n; i++) chars[i] = (char)buf[i];
+            var cls = new string(chars);
+            return cls is "DirectUIHWND" or "SysListView32" or "SHELLDLL_DefView";
         }
 
         private void ShowDropZone()

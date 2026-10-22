@@ -69,6 +69,10 @@ namespace LinkAll.WinUI.Services
                                     ((App)App.Current).ShowMainWindowCommand?.Execute(null);
                                     DashboardWindow.Current?.NavigateTo("Settings");
                                 }
+                                else if (line == "QUIT")
+                                {
+                                    ((App)App.Current).ExitApplicationCommand.Execute(null);
+                                }
                                 else if (line == "RESCAN")
                                 {
                                     DaemonActions.RunFireAndForget("Rescan", () => DaemonClient.RescanPeers());
@@ -101,7 +105,7 @@ namespace LinkAll.WinUI.Services
                 if (procs.Length == 0)
                 {
                     _consecutiveIpcFailures = 0;
-                    EnsureTrayProcessRunning();
+                    EnsureTrayProcessRunning(respawn: true);
                     return;
                 }
 
@@ -121,7 +125,7 @@ namespace LinkAll.WinUI.Services
                     {
                         try { proc.Kill(); } catch { }
                     }
-                    EnsureTrayProcessRunning();
+                    EnsureTrayProcessRunning(respawn: true);
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }
@@ -138,7 +142,7 @@ namespace LinkAll.WinUI.Services
             catch { return false; }
         }
 
-        private void EnsureTrayProcessRunning()
+        private void EnsureTrayProcessRunning(bool respawn = false)
         {
             try
             {
@@ -159,6 +163,7 @@ namespace LinkAll.WinUI.Services
                         Process.Start(new ProcessStartInfo
                         {
                             FileName = trayExe,
+                            Arguments = respawn ? "--respawn" : "",
                             UseShellExecute = true
                         });
                     }
