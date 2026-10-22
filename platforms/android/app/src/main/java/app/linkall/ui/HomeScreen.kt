@@ -98,10 +98,10 @@ import kotlin.math.sin
 @Composable
 fun HomeTab(
     isDark: Boolean,
-    peers: List<PeerSnapshot>,
-    feed: List<ActivityEntry>,
-    activeTransfers: List<TransferProgress>,
-    activeSpeedTests: List<SpeedTestProgress>,
+    peers: kotlinx.collections.immutable.ImmutableList<PeerSnapshot>,
+    feed: kotlinx.collections.immutable.ImmutableList<ActivityEntry>,
+    activeTransfers: kotlinx.collections.immutable.ImmutableList<TransferProgress>,
+    activeSpeedTests: kotlinx.collections.immutable.ImmutableList<SpeedTestProgress>,
     onActionPushClipboard: () -> Unit,
     onActionSendQuickContext: () -> Unit,
     quickContextText: String?,
@@ -284,7 +284,7 @@ fun HomeTab(
 private fun HomeTopBar(
     c: DdColors,
     isDark: Boolean,
-    peers: List<PeerSnapshot>,
+    peers: kotlinx.collections.immutable.ImmutableList<PeerSnapshot>,
     onOpenNotes: () -> Unit,
     onScanQr: () -> Unit,
     onManualIp: () -> Unit,

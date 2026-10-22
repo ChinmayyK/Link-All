@@ -94,9 +94,21 @@ impl Hub {
             hub.refresh().await;
         });
         let hub = self.clone();
+        let idle = Cell::new(0u32);
         glib::timeout_add_seconds_local(1, move || {
-            let hub = hub.clone();
-            glib::spawn_future_local(async move { hub.refresh().await });
+            // Every second while the window is up or files are moving; with
+            // only the tray showing, every third second is soon enough for a
+            // pairing request and costs a third of the work.
+            let watched = crate::ui::window()
+                .is_some_and(|w| gtk::prelude::WidgetExt::is_visible(&w))
+                || hub.status.borrow()["active_transfers"]
+                    .as_array()
+                    .is_some_and(|a| !a.is_empty());
+            idle.set(if watched { 0 } else { idle.get() + 1 });
+            if idle.get().is_multiple_of(3) {
+                let hub = hub.clone();
+                glib::spawn_future_local(async move { hub.refresh().await });
+            }
             glib::ControlFlow::Continue
         });
     }

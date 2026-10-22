@@ -87,10 +87,10 @@ fn fixed_items(hub: &Hub) -> Vec<Item> {
         );
     }
     for (id, title, icon) in [
-        ("devices", "Devices", "computer-symbolic"),
+        ("home", "Home", "go-home-symbolic"),
         ("clipboard", "Clipboard History", "edit-paste-symbolic"),
-        ("transfers", "Transfers", "folder-download-symbolic"),
-        ("files", "Browse Files", "folder-remote-symbolic"),
+        ("files", "Files", "folder-symbolic"),
+        ("notes", "Notes", "accessories-text-editor-symbolic"),
         ("activity", "Activity", "document-open-recent-symbolic"),
         ("settings", "Settings", "emblem-system-symbolic"),
     ] {

@@ -544,6 +544,8 @@ private struct SyncPane: View {
                                         .foregroundStyle(CRTheme.accentRed.opacity(0.60))
                                 }
                                 .buttonStyle(.plain)
+                                .help("Remove pattern")
+                                .accessibilityLabel("Remove pattern")
                                 Text(pattern)
                                     .font(.system(size: 12, design: .monospaced)).foregroundStyle(CRTheme.ink)
                                 Spacer()

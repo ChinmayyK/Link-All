@@ -219,7 +219,10 @@ struct IpcNowPlaying: Codable, Identifiable, Equatable {
     let playing: Bool
     let position_ms: UInt64
     let duration_ms: UInt64
+    /// Only from services older than `art_key`; newer ones send the cover on request.
     let art_base64: String?
+    /// Changes with the cover; nil when there is none (or from an older service).
+    let art_key: String?
 }
 
 struct IpcGuestSession: Codable {
@@ -601,10 +604,21 @@ final class LinkAllIPCClient {
 
     /// What the paired devices are playing.
     func nowPlayingList() async throws -> [IpcNowPlaying] {
-        let raw = try await send(cmd: ["cmd": "now_playing_list"])
+        // Without covers: they're most of the reply and rarely change. `art_key`
+        // says when to fetch one with nowPlayingArt.
+        let raw = try await send(cmd: ["cmd": "now_playing_list", "art": false])
         let resp = try await decode(IpcResponse<[IpcNowPlaying]>.self, from: raw)
         if let err = resp.message { throw LinkAllIPCError.serverError(err) }
         return resp.data ?? []
+    }
+
+    /// The cover of what `deviceId` plays, if it has one.
+    func nowPlayingArt(deviceId: String) async -> Data? {
+        struct Art: Codable { let art_base64: String? }
+        guard let raw = try? await send(cmd: ["cmd": "now_playing_art", "device_id": deviceId]),
+              let resp = try? await decode(IpcResponse<Art>.self, from: raw),
+              let b64 = resp.data?.art_base64 else { return nil }
+        return Data(base64Encoded: b64)
     }
 
     /// Plays, pauses, skips or seeks a paired device's player (`seek` takes a position in ms).

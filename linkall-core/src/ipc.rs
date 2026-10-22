@@ -145,8 +145,16 @@ pub enum IpcRequest {
         target: String,
         number: String,
     },
-    /// What the paired devices are playing.
-    NowPlayingList,
+    /// What the paired devices are playing. With `art: false` the covers are
+    /// left out; `art_key` says when to fetch one with `NowPlayingArt`.
+    NowPlayingList {
+        #[serde(default = "yes")]
+        art: bool,
+    },
+    /// The cover of what `device_id` plays, as `{ "art_base64": ... }`.
+    NowPlayingArt {
+        device_id: String,
+    },
     /// An app tells the engine what this device plays (Windows reads its own
     /// system media session). An empty title clears it.
     SetNowPlaying {
@@ -691,6 +699,20 @@ impl IpcResponse {
 
 // ── Socket path ───────────────────────────────────────────────────────────────
 
+fn yes() -> bool {
+    true
+}
+
+/// The cover of what `device_id` plays, base64, or null when it has none.
+pub fn now_playing_art_json(eng: &crate::engine::Engine, device_id: &str) -> serde_json::Value {
+    use base64::Engine as _;
+    let art = uuid::Uuid::parse_str(device_id)
+        .ok()
+        .and_then(|id| eng.now_playing_art(id))
+        .map(|a| base64::engine::general_purpose::STANDARD.encode(a));
+    serde_json::json!({ "art_base64": art })
+}
+
 pub fn socket_path() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
@@ -983,7 +1005,10 @@ pub async fn handle_ipc_request(
             },
             Err(_) => IpcResponse::err("unknown device".to_string()),
         },
-        IpcRequest::NowPlayingList => IpcResponse::ok(eng.now_playing_list()),
+        IpcRequest::NowPlayingList { art } => IpcResponse::ok(eng.now_playing_list_with(art)),
+        IpcRequest::NowPlayingArt { device_id } => {
+            IpcResponse::ok(now_playing_art_json(&eng, &device_id))
+        }
         IpcRequest::SetNowPlaying {
             title,
             artist,

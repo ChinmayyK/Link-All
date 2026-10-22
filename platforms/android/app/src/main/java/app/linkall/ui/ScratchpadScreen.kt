@@ -93,6 +93,7 @@ import androidx.compose.ui.window.DialogProperties
 import app.linkall.LinkAllJni
 import app.linkall.LinkAllService
 import kotlinx.coroutines.Dispatchers
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -221,14 +222,25 @@ internal fun NotesScreen(isDark: Boolean, onBack: () -> Unit) {
         act { LinkAllJni.scratchpadSave(it, null, clean, false) }
     }
 
-    // Edits made on another device show up while this is open.
+    // Edits made on another device show up while this is open and on screen;
+    // unchanged notes don't redraw (the list compares equal).
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                reload()
+                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboardText = runCatching { cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() }.getOrNull()
+                delay(1500)
+            }
+        }
+    }
+    // "2 min ago" labels: once every half minute is plenty, and keeps the
+    // whole list from recomposing on every poll.
     LaunchedEffect(Unit) {
         while (true) {
-            reload()
             now = System.currentTimeMillis()
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboardText = runCatching { cm.primaryClip?.getItemAt(0)?.coerceToText(context)?.toString() }.getOrNull()
-            delay(1500)
+            delay(30_000)
         }
     }
     LaunchedEffect(undo) {

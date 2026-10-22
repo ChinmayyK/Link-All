@@ -41,6 +41,7 @@ namespace LinkAll.WinUI.Views
             HomeScroll.Visibility = Visibility.Collapsed;
             DevicePage.Visibility = Visibility.Visible;
             DevicePage.ChangeView(null, 0, null, true);
+            _ = RefreshNowPlayingAsync();
         }
 
         private void CloseDevice()
@@ -48,6 +49,7 @@ namespace LinkAll.WinUI.Views
             DevicePage.Visibility = Visibility.Collapsed;
             HomeScroll.Visibility = Visibility.Visible;
             DevicePage.DataContext = null;
+            _ = RefreshNowPlayingAsync();
         }
 
         private void OnCloseDeviceClicked(object sender, RoutedEventArgs e) => CloseDevice();

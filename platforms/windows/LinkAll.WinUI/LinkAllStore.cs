@@ -1867,11 +1867,14 @@ namespace LinkAll.WinUI
                             }
                         }
                         foreach(var rem in existing) ActiveTransfers.Remove(rem);
-                        NotifyTransferMetrics();
+                        // Idle polls change nothing; only a live or just-ended
+                        // transfer moves the counts and summaries.
+                        if (transfers.Count > 0 || existing.Count > 0) NotifyTransferMetrics();
                     }
                 }
-                else
+                else if (ActiveTransfers.Count > 0)
                 {
+                    // Clear() on an empty list still resets every bound list.
                     ActiveTransfers.Clear();
                     NotifyTransferMetrics();
                 }
@@ -1901,11 +1904,12 @@ namespace LinkAll.WinUI
                             }
                         }
                         foreach (var rem in existing) ActiveSpeedTests.Remove(rem);
-                        NotifyTransferMetrics();
+                        if (speedTests.Count > 0 || existing.Count > 0) NotifyTransferMetrics();
                     }
                 }
-                else
+                else if (ActiveSpeedTests.Count > 0)
                 {
+                    // Clear() on an empty list still resets every bound list.
                     ActiveSpeedTests.Clear();
                     NotifyTransferMetrics();
                 }

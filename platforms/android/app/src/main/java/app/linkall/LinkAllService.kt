@@ -875,6 +875,7 @@ class LinkAllService : Service() {
                         }
                     }
                     prefs.edit().putString(PREF_PEER_SNAPSHOTS_JSON, newArr.toString()).apply()
+                    lastPersistedStatus = null // written here, not by persistStatus
                     sendBroadcast(Intent(ACTION_STATUS_CHANGED).setPackage(packageName))
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to update peers JSON on forget", e)
@@ -4786,6 +4787,9 @@ class LinkAllService : Service() {
             ?: "Unknown device"
     }
 
+    /** What persistStatus last wrote, so an unchanged status isn't written again. */
+    private var lastPersistedStatus: String? = null
+
     private fun persistStatus() {
         val rawPeerJson = if (engineHandle != 0L) {
             withEngine { live -> LinkAllJni.peersJson(live) }
@@ -4800,14 +4804,28 @@ class LinkAllService : Service() {
             peer.lastSyncSecs?.let { peerLastSync[peer.name] = it * 1000L }
         }
 
+        val name = resolvedDeviceName()
+        val id = if (engineHandle != 0L) withEngine { live -> LinkAllJni.getDeviceId(live) } else null
+        val health = if (engineHandle != 0L) withEngine { live -> LinkAllJni.healthJson(live) } ?: "[]" else "[]"
+        // Most events (a clip synced, health re-checked) change nothing here;
+        // skip the write, the widget redraw and the app re-reading everything.
+        val signature = listOf(
+            name, id, rawPeerJson, health, peerLastSync.toString(),
+            // Written elsewhere without a broadcast of their own; the app
+            // still learns of them through this one.
+            prefs().getBoolean(PREF_SERVICE_RUNNING, false), prefs().getBoolean("sync_enabled", true),
+        ).joinToString("\u0000")
+        if (signature == lastPersistedStatus) return
+        lastPersistedStatus = signature
+
         val editor = prefs().edit()
-            .putString("local_device_name", resolvedDeviceName())
-            .putString("device_id", if (engineHandle != 0L) withEngine { live -> LinkAllJni.getDeviceId(live) } else null)
+            .putString("local_device_name", name)
+            .putString("device_id", id)
             .putBoolean("peer_connected", connectedPeerIds.isNotEmpty())
             .putInt("connected_count", connectedPeerIds.size)
             .putStringSet("connected_names", connectedPeerIds.values.toSet())
             .putString(PREF_PEER_SNAPSHOTS_JSON, rawPeerJson)
-            .putString(PREF_HEALTH_JSON, if (engineHandle != 0L) withEngine { live -> LinkAllJni.healthJson(live) } ?: "[]" else "[]")
+            .putString(PREF_HEALTH_JSON, health)
         // Store last-sync times so the dashboard can show "Last sync: 2m ago" per peer.
         peerLastSync.forEach { (name, ts) ->
             editor.putLong("last_sync_${name.take(32)}", ts)

@@ -301,7 +301,7 @@ async fn cmd_push(text: &str) -> Result<()> {
 
 /// What the paired devices are playing.
 async fn cmd_nowplaying() -> Result<()> {
-    match ipc(&IpcRequest::NowPlayingList).await? {
+    match ipc(&IpcRequest::NowPlayingList { art: false }).await? {
         IpcResponse::Ok { data: Some(data) } => {
             let list = data.as_array().cloned().unwrap_or_default();
             if list.is_empty() {

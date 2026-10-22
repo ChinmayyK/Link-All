@@ -210,6 +210,8 @@ private struct QASearchBar: View {
                         .foregroundStyle(CRTheme.inkSoft)
                 }
                 .buttonStyle(.plain)
+                .help("Clear search")
+                .accessibilityLabel("Clear search")
                 .transition(.scale(scale: 0.75).combined(with: .opacity))
             } else {
                 HStack(spacing: 4) {
@@ -370,6 +372,8 @@ private struct QuickRow: View {
                                     .background(Circle().fill(QuickAccessSurface.card))
                             }
                             .buttonStyle(.plain)
+                            .help(isExpanded ? "Show less" : "Show more")
+                            .accessibilityLabel(isExpanded ? "Show less" : "Show more")
                         }
                         KbdChip("↵", dark: false)
                     }

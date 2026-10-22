@@ -281,6 +281,8 @@ private struct PaletteInputBar: View {
                         .font(.system(size: 14.5)).foregroundStyle(CRTheme.inkSoft)
                 }
                 .buttonStyle(.plain).transition(.scale(scale: 0.75).combined(with: .opacity))
+                .help("Clear search")
+                .accessibilityLabel("Clear search")
             } else {
                 KbdChip("⌘K", dark: false)
             }

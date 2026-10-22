@@ -19,7 +19,22 @@ pub struct Node {
 }
 
 /// Starts two engines. `a_trusts_b` / `b_trusts_a` seed each trust store.
+/// The engine's log, captured per test and printed only when the test fails,
+/// so a failure on CI comes with what both engines did. RUST_LOG overrides.
+pub fn capture_logs() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("linkall_core=warn"));
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .with_test_writer()
+            .try_init();
+    });
+}
+
 pub async fn start_pair(tmp: &TempDir, a_trusts_b: bool, b_trusts_a: bool) -> (Node, Node) {
+    capture_logs();
     let ids = [Uuid::new_v4(), Uuid::new_v4()];
     let names = ["NodeA", "NodeB"];
     let identities: Vec<_> = (0..2)
@@ -130,6 +145,7 @@ pub fn twin_config(tmp: &TempDir, tag: &str, id: Uuid, name: &str) -> EngineConf
 }
 
 pub async fn start_node(cfg: EngineConfig) -> Node {
+    capture_logs();
     let id = cfg.device_id;
     let (tx, rx) = mpsc::channel(256);
     let engine = Engine::start(cfg, tx).await.expect("engine start");

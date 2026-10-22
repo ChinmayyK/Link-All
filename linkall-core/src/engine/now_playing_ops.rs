@@ -25,6 +25,9 @@ pub struct NowPlayingView {
     pub position_ms: u64,
     pub duration_ms: u64,
     pub art_base64: Option<String>,
+    /// Changes when the cover does, so an app can fetch the cover once per
+    /// change (`now_playing_art`) instead of with every poll.
+    pub art_key: Option<String>,
 }
 
 pub(crate) struct Sent {
@@ -118,6 +121,12 @@ impl Engine {
     /// What the other devices are playing now. A track that stopped sending, while
     /// it was playing, is dropped after a while; a paused one stays for ten minutes.
     pub fn now_playing_list(&self) -> Vec<NowPlayingView> {
+        self.now_playing_list_with(true)
+    }
+
+    /// As `now_playing_list`, leaving out the covers when `with_art` is false:
+    /// they are most of the payload and rarely change between polls.
+    pub fn now_playing_list_with(&self, with_art: bool) -> Vec<NowPlayingView> {
         let mut out = Vec::new();
         for entry in self.shared.now_playing_remote.iter() {
             let (info, at) = entry.value();
@@ -153,7 +162,9 @@ impl Engine {
                 art_base64: info
                     .art
                     .as_ref()
+                    .filter(|_| with_art)
                     .map(|a| base64::engine::general_purpose::STANDARD.encode(a)),
+                art_key: info.art.as_ref().map(|a| art_key(a)),
             });
         }
         out.sort_by(|a, b| {
@@ -224,6 +235,13 @@ impl Engine {
             }
         });
     }
+}
+
+fn art_key(art: &[u8]) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    art.hash(&mut h);
+    format!("{:016x}", h.finish())
 }
 
 /// Sends what this device is playing to a device that has just connected.

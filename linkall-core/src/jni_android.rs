@@ -3338,10 +3338,7 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_nowPlayingJson(
         return std::ptr::null_mut();
     }
     let h = unsafe { &*(handle as *const AndroidHandle) };
-    let mut list = h.engine.now_playing_list();
-    for item in &mut list {
-        item.art_base64 = None;
-    }
+    let list = h.engine.now_playing_list_with(false);
     match serde_json::to_string(&list) {
         Ok(json) => env
             .new_string(json)

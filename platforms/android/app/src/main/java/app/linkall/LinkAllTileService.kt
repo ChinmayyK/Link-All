@@ -199,13 +199,24 @@ class LinkAllShareTarget : ComponentActivity() {
         val sharedName = intent?.getStringExtra(Intent.EXTRA_TITLE)?.takeIf { it.isNotBlank() }
 
         if (!sharedText.isNullOrBlank()) {
-            runCatching {
-                ContextCompat.startForegroundService(this, Intent(this, LinkAllService::class.java).apply {
-                    action = LinkAllService.ACTION_PUSH_TEXT
-                    putExtra("text", sharedText)
-                })
+            // The service drops text when nothing is connected; say so rather
+            // than claim it was sent.
+            val anyConnected = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)
+                .peerSnapshots()
+                .any { it.trusted && it.isConnected }
+            if (anyConnected) {
+                runCatching {
+                    ContextCompat.startForegroundService(this, Intent(this, LinkAllService::class.java).apply {
+                        action = LinkAllService.ACTION_PUSH_TEXT
+                        putExtra("text", sharedText)
+                    })
+                }
             }
-            Toast.makeText(this, "Sent to your devices", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                if (anyConnected) "Sent to your devices" else "No device is connected. Open Link All on your computer, on the same Wi-Fi.",
+                if (anyConnected) Toast.LENGTH_SHORT else Toast.LENGTH_LONG,
+            ).show()
             finish()
         } else if (!sharedUris.isNullOrEmpty()) {
             val peers = getSharedPreferences(LinkAllService.PREFS_NAME, MODE_PRIVATE)

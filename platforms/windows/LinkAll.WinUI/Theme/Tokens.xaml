@@ -63,9 +63,9 @@
             <!-- Status. One muted-but-legible value per state; these are
                  also mirrored as literal hex in LinkAllStore's *Color
                  view-model properties, which are theme-independent. -->
-            <SolidColorBrush x:Key="AppSuccessBrush" Color="#14935A" />
+            <SolidColorBrush x:Key="AppSuccessBrush" Color="#0F7A4A" />
             <SolidColorBrush x:Key="AppSuccessSubtleBrush" Color="#1414935A" />
-            <SolidColorBrush x:Key="AppWarningBrush" Color="#B7791F" />
+            <SolidColorBrush x:Key="AppWarningBrush" Color="#95600F" />
             <SolidColorBrush x:Key="AppWarningSubtleBrush" Color="#16B7791F" />
             <SolidColorBrush x:Key="AppWarningBorderBrush" Color="#40B7791F" />
             <SolidColorBrush x:Key="AppDangerBrush" Color="#C62828" />

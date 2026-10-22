@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import app.linkall.LinkAllJni
 import app.linkall.LinkAllService
 import app.linkall.ui.theme.crPressScale
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -85,11 +86,18 @@ internal fun parseNowPlaying(json: String?): List<NowPlayingItem> {
 /** What each paired device is playing, by device id, refreshed while on screen. */
 @Composable
 internal fun rememberNowPlaying(): Map<String, NowPlayingItem> {
-    val items by produceState(emptyMap<String, NowPlayingItem>()) {
-        while (true) {
-            val json = withContext(Dispatchers.IO) { LinkAllService.withLiveEngine { LinkAllJni.nowPlayingJson(it) } }
-            value = parseNowPlaying(json).associateBy { it.deviceId }
-            delay(2000)
+    val lifecycle = androidx.compose.ui.platform.LocalLifecycleOwner.current.lifecycle
+    // Only while the app is on screen: in the background nobody sees it, and
+    // each poll is a JNI call and a JSON parse.
+    val items by produceState(emptyMap<String, NowPlayingItem>(), lifecycle) {
+        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                val parsed = withContext(Dispatchers.IO) {
+                    parseNowPlaying(LinkAllService.withLiveEngine { LinkAllJni.nowPlayingJson(it) }).associateBy { it.deviceId }
+                }
+                value = parsed
+                delay(2000)
+            }
         }
     }
     return items

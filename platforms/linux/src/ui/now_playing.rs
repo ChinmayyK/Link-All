@@ -20,6 +20,8 @@ thread_local! {
     /// Covers by track, so a refresh doesn't decode the same picture again.
     static COVERS: RefCell<HashMap<String, gdk::Texture>> = RefCell::new(HashMap::new());
     static POLLING: Cell<bool> = const { Cell::new(false) };
+    /// Tracks whose cover is being fetched now.
+    static FETCHING: RefCell<std::collections::HashSet<String>> = RefCell::new(std::collections::HashSet::new());
 }
 
 fn clock(ms: u64) -> String {
@@ -63,7 +65,8 @@ fn poll() {
         return;
     }
     glib::spawn_future_local(async {
-        let list: Vec<Value> = ipc::call(json!({ "cmd": "now_playing_list" }))
+        // Without covers: they're most of the reply; each is fetched once below.
+        let list: Vec<Value> = ipc::call(json!({ "cmd": "now_playing_list", "art": false }))
             .await
             .ok()
             .and_then(|v| v.as_array().cloned())
@@ -71,12 +74,14 @@ fn poll() {
             .into_iter()
             .filter(|i| i["title"].as_str().is_some_and(|t| !t.is_empty()))
             .collect();
+        fetch_missing_covers(&list);
         let key: String = list
             .iter()
             .map(|i| {
                 format!(
-                    "{}|{}|{}|{};",
+                    "{}|{}|{}|{}|{};",
                     track_key(i),
+                    has_cover(i),
                     i["playing"],
                     i["position_ms"].as_u64().unwrap_or(0) / 1000,
                     i["duration_ms"]
@@ -94,6 +99,40 @@ fn poll() {
             f();
         }
     });
+}
+
+fn has_cover(item: &Value) -> bool {
+    COVERS.with(|c| c.borrow().contains_key(&track_key(item)))
+}
+
+/// Asks for the covers of tracks that have one but aren't decoded yet; shows
+/// them as they arrive.
+fn fetch_missing_covers(list: &[Value]) {
+    for item in list {
+        if item["art_key"].is_null() || has_cover(item) {
+            continue;
+        }
+        let key = track_key(item);
+        if !FETCHING.with(|f| f.borrow_mut().insert(key.clone())) {
+            continue;
+        }
+        let device = item["device_id"].as_str().unwrap_or_default().to_string();
+        glib::spawn_future_local(async move {
+            let art = ipc::call(json!({ "cmd": "now_playing_art", "device_id": device }))
+                .await
+                .ok()
+                .and_then(|v| v["art_base64"].as_str().map(str::to_string));
+            FETCHING.with(|f| f.borrow_mut().remove(&key));
+            let texture = art
+                .and_then(|b| base64::engine::general_purpose::STANDARD.decode(b).ok())
+                .and_then(|bytes| gdk::Texture::from_bytes(&glib::Bytes::from_owned(bytes)).ok());
+            if let Some(texture) = texture {
+                COVERS.with(|c| c.borrow_mut().insert(key, texture));
+                SHOWN.with(|s| s.borrow_mut().clear());
+                poll();
+            }
+        });
+    }
 }
 
 /// Looks again shortly, so a press shows without waiting for the next poll.

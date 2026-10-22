@@ -48,7 +48,7 @@ internal enum class ActivityFilter(val label: String, val kinds: Set<ActivityKin
 @Composable
 internal fun ActivityTab(
     isDark: Boolean,
-    feed: List<ActivityEntry>,
+    feed: kotlinx.collections.immutable.ImmutableList<ActivityEntry>,
     // Held by the caller, so "See all" on Files opens this filtered to files.
     filter: ActivityFilter,
     onFilterChange: (ActivityFilter) -> Unit,
