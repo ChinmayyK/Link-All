@@ -208,3 +208,38 @@ async fn declining_one_file_of_a_folder_declines_the_folder() {
     let quiet = timeout(Duration::from_secs(3), folder_result(&mut b)).await;
     assert!(quiet.is_err(), "declined folder still reported");
 }
+
+/// Many small files: per-file overhead, not bytes, sets the time. Ignored by
+/// default; run with
+/// `cargo test --release --test folder_transfer_test -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn many_small_files_throughput() {
+    let tmp = TempDir::new().unwrap();
+    let (mut a, mut b) = start_pair(&tmp, true, true).await;
+    connect(&a, &b).await;
+    let count: usize = std::env::var("BENCH_FILES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2000);
+    let root = tmp.path().join("src").join("Small");
+    for i in 0..count {
+        let dir = root.join(format!("d{}", i % 20));
+        std::fs::create_dir_all(&dir).unwrap();
+        let body: Vec<u8> = (0..16 * 1024).map(|b| ((b + i) % 251) as u8).collect();
+        std::fs::write(dir.join(format!("f{i}.bin")), body).unwrap();
+    }
+    let t0 = std::time::Instant::now();
+    a.engine.send_folder(root, Some(b.id)).await.unwrap();
+    let (sent, received) = tokio::join!(folder_result(&mut a), folder_result(&mut b));
+    let el = t0.elapsed();
+    assert_eq!(
+        (received.file_count, received.failed_count),
+        (count as u32, 0)
+    );
+    assert_eq!(sent.failed_count, 0);
+    println!(
+        "{count} files of 16 KB in {el:?} = {:.0} files/s",
+        count as f64 / el.as_secs_f64()
+    );
+}
