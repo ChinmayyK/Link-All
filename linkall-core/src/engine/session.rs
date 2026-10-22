@@ -36,6 +36,8 @@ pub(super) struct InboundCtx {
     pub(super) shared: EngineShared,
     pub(super) peer_id: Uuid,
     pub(super) peer_name: String,
+    /// The peer's identity key fingerprint, as proven in this handshake.
+    pub(super) peer_fingerprint: [u8; 32],
     /// Queue for replies to this peer (the session writer drains it).
     pub(super) outbox_tx: mpsc::Sender<AppMessage>,
     pub(super) session_pin: Option<String>,
@@ -49,6 +51,18 @@ pub(super) struct InboundCtx {
 }
 
 impl InboundCtx {
+    /// Whether the key pinned for this peer is the one this session proved.
+    /// Pairing trusts the pinned key by device id, so a session must not
+    /// raise or complete pairing for a key it doesn't hold.
+    pub(super) async fn pinned_key_is_ours(&self) -> bool {
+        self.shared
+            .trust
+            .lock()
+            .await
+            .get(self.peer_id)
+            .is_some_and(|r| r.key_fingerprint == self.peer_fingerprint)
+    }
+
     /// Any traffic proves the peer is alive; the heartbeat reads this.
     pub(super) fn touch_last_seen(&self) {
         self.last_seen.store(
@@ -147,6 +161,7 @@ pub(super) fn register_session(
     endpoint: SocketAddr,
     peer_id: Uuid,
     peer_name: String,
+    peer_key: [u8; 32],
     session: crate::crypto::SessionKey,
     trusted: bool,
     peer_trusts_us: Option<bool>,
@@ -378,6 +393,7 @@ pub(super) fn register_session(
         let rx_peer_name = peer_name.clone();
 
         let rx_peer_id = peer_id;
+        let rx_peer_fingerprint = crate::crypto::fingerprint_of(&peer_key);
         let rx_session_pin = session_pin.clone();
 
         // Two 4 MB chunks waiting for the disk keep writes overlapped with the
@@ -658,6 +674,7 @@ pub(super) fn register_session(
             shared: rx_shared,
             peer_id: rx_peer_id,
             peer_name: rx_peer_name,
+            peer_fingerprint: rx_peer_fingerprint,
             outbox_tx: session_outbox_tx,
             endpoint,
             session_id,
@@ -689,6 +706,15 @@ pub(super) fn register_session(
         let mut last_ping_at: Option<std::time::Instant> = None;
 
         let disconnect_reason = loop {
+            // Writes happen inside the select below; one that can't finish (a
+            // link gone without a reset, the send buffer full) would stall the
+            // whole loop, heartbeat checks included. So a write gets as long as
+            // a missed heartbeat would, longer while the peer sleeps.
+            let write_limit = if peer_sleeping.load(std::sync::atomic::Ordering::Relaxed) {
+                std::time::Duration::from_secs(120)
+            } else {
+                shared.config.heartbeat_timeout
+            };
             let now_millis = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -701,13 +727,13 @@ pub(super) fn register_session(
                     match shutdown {
                         Ok(cmd) => {
                             if cmd.explicit_disconnect {
-                                let _ = sess_tx.send(&mut AppMessage::CallAction {
+                                let _ = write_within(write_limit, sess_tx.send(&mut AppMessage::CallAction {
                                     action: "system:explicit_disconnect".to_string(),
                                     origin_device: shared.config.device_id,
-                                }).await;
+                                })).await;
                             }
                             if cmd.send_bye {
-                                let _ = sess_tx.send(&mut AppMessage::Bye).await;
+                                let _ = write_within(write_limit, sess_tx.send(&mut AppMessage::Bye)).await;
                             }
                             break cmd.reason;
                         }
@@ -779,13 +805,13 @@ pub(super) fn register_session(
                         let mut ping = probe::make_ping();
                         last_ping_at = Some(std::time::Instant::now());
                         *ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
-                        if let Err(err) = sess_tx.send(&mut ping).await {
+                        if let Err(err) = write_within(write_limit, sess_tx.send(&mut ping)).await {
                             break format!("heartbeat send failed: {err}");
                         }
                     }
                 }
                 Some(mut msg) = outbox_rx.recv() => {
-                    if let Err(err) = sess_tx.send(&mut msg).await {
+                    if let Err(err) = write_within(write_limit, sess_tx.send(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
                     // Clipboard sent to a sleeping peer: ask for a reply too,
@@ -798,14 +824,14 @@ pub(super) fn register_session(
                         };
                         if start_ping {
                             let mut ping = probe::make_ping();
-                            if let Err(err) = sess_tx.send(&mut ping).await {
+                            if let Err(err) = write_within(write_limit, sess_tx.send(&mut ping)).await {
                                 break format!("heartbeat send failed: {err}");
                             }
                         }
                     }
                 }
                 Some(mut msg) = file_outbox_rx.recv() => {
-                    if let Err(err) = sess_tx.send_no_flush(&mut msg).await {
+                    if let Err(err) = write_within(write_limit, sess_tx.send_no_flush(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
                     // Write a few queued chunks per flush, then go back to the
@@ -815,7 +841,7 @@ pub(super) fn register_session(
                     for _ in 0..3 {
                         match file_outbox_rx.try_recv() {
                             Ok(mut next_msg) => {
-                                if let Err(err) = sess_tx.send_no_flush(&mut next_msg).await {
+                                if let Err(err) = write_within(write_limit, sess_tx.send_no_flush(&mut next_msg)).await {
                                     batch_err = Some(err);
                                     break;
                                 }
@@ -826,7 +852,7 @@ pub(super) fn register_session(
                     if let Some(err) = batch_err {
                         break format!("send failed: {err}");
                     }
-                    if let Err(err) = sess_tx.flush().await {
+                    if let Err(err) = write_within(write_limit, sess_tx.flush()).await {
                         break format!("flush failed: {err}");
                     }
                 }
@@ -847,6 +873,15 @@ pub(super) fn register_session(
             .mark_disconnected_if_current(peer_id, session_id, reason.clone())
         {
             Ok(Some(connected_at)) => {
+                // A hand-off can't outlive its session, even if the peer is
+                // back before the watch notices it was gone. Done before any
+                // other await, so it can't end one a newer session started.
+                super::edge_ops::end_with_peer(
+                    &shared,
+                    peer_id,
+                    "The other computer disconnected.",
+                )
+                .await;
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
                     .unwrap()
@@ -1034,3 +1069,15 @@ fn clipboard_to_catch_up(
 
 /// How often a session pings while either side is asleep.
 const SLEEP_PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Runs a session write, failing it once it has waited `limit`.
+async fn write_within<E: std::fmt::Display>(
+    limit: std::time::Duration,
+    write: impl std::future::Future<Output = Result<(), E>>,
+) -> Result<(), String> {
+    match tokio::time::timeout(limit, write).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err(format!("write stalled for {} s", limit.as_secs())),
+    }
+}

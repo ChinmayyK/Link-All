@@ -939,7 +939,7 @@ pub fn mac_modifier_flag(keycode: u16) -> u64 {
 #[cfg(target_os = "macos")]
 mod edge_imp {
     use std::ffi::c_void;
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::atomic::Ordering;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -978,8 +978,9 @@ mod edge_imp {
         fn CGEventPost(tap: u32, event: *mut c_void);
     }
 
-    /// Modifier flags held through the hand-off.
-    static FLAGS: AtomicU64 = AtomicU64::new(0);
+    /// Shared with `imp`, so a modifier held through the hand-off also
+    /// reaches the clicks and moves `imp` posts.
+    use super::imp::FLAGS;
 
     pub fn cursor_position() -> Option<(i32, i32)> {
         unsafe {
@@ -1189,7 +1190,7 @@ mod imp {
     const MOVED: u32 = 5;
 
     /// The modifier flags held down now, put on every event we post.
-    static FLAGS: AtomicU64 = AtomicU64::new(0);
+    pub(super) static FLAGS: AtomicU64 = AtomicU64::new(0);
 
     struct State {
         down: [bool; 5],

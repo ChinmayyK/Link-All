@@ -334,12 +334,24 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
         }
         AppMessage::RemotePointerMove { dx, dy } => {
-            let before = crate::remote_input::cursor_position();
+            // During a hand-off the edge check needs the pointer before and
+            // after the move. Reading it can block (X11), so it happens in the
+            // same blocking call as the move.
+            let edge = super::super::edge_ops::controlled_by(&ctx.shared, ctx.peer_id);
+            let (seen_tx, seen_rx) = tokio::sync::oneshot::channel();
             input(ctx, move || {
-                crate::remote_input::pointer_move(dx.into(), dy.into())
+                use crate::remote_input::{cursor_position, pointer_move, screen_size};
+                let before = if edge { cursor_position() } else { None };
+                let moved = pointer_move(dx.into(), dy.into());
+                if edge {
+                    let _ = seen_tx.send((before, cursor_position(), screen_size()));
+                }
+                moved
             })
             .await;
-            super::super::edge_ops::after_move(ctx, dx, dy, before).await;
+            if let Ok((before, after, size)) = seen_rx.await {
+                super::super::edge_ops::after_move(ctx, dx, dy, before, after, size).await;
+            }
         }
         AppMessage::RemotePointerButton { button, down } => {
             match crate::remote_input::Button::from_wire(button) {

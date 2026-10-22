@@ -19,6 +19,7 @@ const SIZE: usize = 80 * 1024 * 1024; // 20 chunks
 struct Relay {
     port: u16,
     cut: watch::Sender<u32>,
+    freeze: watch::Sender<u32>,
 }
 
 impl Relay {
@@ -26,6 +27,7 @@ impl Relay {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
         let (cut, cuts) = watch::channel(0u32);
+        let (freeze, freezes) = watch::channel(0u32);
         tokio::spawn(async move {
             while let Ok((inbound, _)) = listener.accept().await {
                 let Ok(outbound) = TcpStream::connect(("127.0.0.1", target)).await else {
@@ -33,20 +35,33 @@ impl Relay {
                 };
                 let mut cuts = cuts.clone();
                 cuts.mark_unchanged();
+                let mut freezes = freezes.clone();
+                freezes.mark_unchanged();
                 tokio::spawn(async move {
                     let (mut inbound, mut outbound) = (inbound, outbound);
-                    tokio::select! {
-                        _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound) => {}
-                        _ = cuts.changed() => {}
+                    let frozen = tokio::select! {
+                        _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound) => false,
+                        _ = cuts.changed() => false,
+                        _ = freezes.changed() => true,
+                    };
+                    if frozen {
+                        // Keep both sockets open and read nothing: a link that
+                        // went silent, with no reset to say so.
+                        std::future::pending::<()>().await;
+                        drop((inbound, outbound));
                     }
                 });
             }
         });
-        Relay { port, cut }
+        Relay { port, cut, freeze }
     }
 
     fn cut(&self) {
         self.cut.send_modify(|n| *n += 1);
+    }
+
+    fn freeze(&self) {
+        self.freeze.send_modify(|n| *n += 1);
     }
 }
 
@@ -168,4 +183,43 @@ async fn a_transfer_cut_off_by_a_drop_finishes_after_reconnecting() {
         leftovers.is_empty(),
         "half-written files left beside it: {leftovers:?}"
     );
+}
+
+/// A link that goes silent in the middle of a transfer (Wi-Fi gone, no reset)
+/// leaves the sender's writes waiting on a full buffer. The sender must still
+/// notice, within about a heartbeat, instead of hanging until TCP gives up.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_link_that_goes_silent_mid_transfer_is_noticed_by_the_sender() {
+    let tmp = TempDir::new().unwrap();
+    let (mut phone, computer) = start_pair(&tmp, true, true).await;
+    let relay = Relay::start(computer.engine.bound_port().await).await;
+    phone
+        .engine
+        .connect_to_peer("127.0.0.1".into(), relay.port)
+        .await
+        .expect("the phone dials the computer through the relay");
+    eventually("both sides connected", async || {
+        connected(&computer, phone.id).await && connected(&phone, computer.id).await
+    })
+    .await;
+
+    let path = tmp.path().join("big.bin");
+    std::fs::write(&path, vec![7u8; SIZE]).unwrap();
+    phone
+        .engine
+        .send_file_path(
+            path,
+            "big.bin".into(),
+            "application/octet-stream".into(),
+            Some(computer.id),
+            None,
+            false,
+            1,
+        )
+        .await
+        .expect("send");
+    wait_for_progress(&mut phone, 20).await;
+
+    relay.freeze();
+    wait_for_drop_or_redial(&mut phone, computer.id, Duration::from_secs(45)).await;
 }

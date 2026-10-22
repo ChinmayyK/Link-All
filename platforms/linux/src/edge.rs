@@ -8,6 +8,7 @@ use linkall_core::edge_x11::{self, Batch, Control, Host, Status};
 use serde_json::{json, Value};
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, OnceLock};
+use std::time::Duration;
 
 pub const ENABLED: &str = "edge_control_enabled";
 
@@ -47,6 +48,16 @@ pub fn take_note() -> Option<String> {
     control().last_note.lock().unwrap().take()
 }
 
+/// How long a call made while the keyboard and pointer are grabbed may take.
+/// Input is frozen meanwhile, so a stalled daemon must fail fast; the grab
+/// loop lets go on the first failed batch.
+const GRABBED_CALL_TIMEOUT: Duration = Duration::from_millis(400);
+
+/// Sending input may legitimately wait up to the engine's 2 s for a key to
+/// fit on a backed-up link. Giving up sooner would send the next batch while
+/// this one is still going out, which can reorder keys.
+const INPUT_CALL_TIMEOUT: Duration = Duration::from_secs(3);
+
 struct DaemonHost;
 
 fn data(reply: &Value) -> &Value {
@@ -67,26 +78,29 @@ impl Host for DaemonHost {
     }
 
     fn input(&mut self, b: &Batch) -> Result<(), String> {
-        ipc::call_blocking(json!({
-            "cmd": "edge_input",
-            "dx": b.dx,
-            "dy": b.dy,
-            "scroll_x": b.scroll_x,
-            "scroll_y": b.scroll_y,
-            "buttons": b.buttons,
-            "keys": b.keys,
-        }))
+        ipc::call_blocking_with(
+            json!({
+                "cmd": "edge_input",
+                "dx": b.dx,
+                "dy": b.dy,
+                "scroll_x": b.scroll_x,
+                "scroll_y": b.scroll_y,
+                "buttons": b.buttons,
+                "keys": b.keys,
+            }),
+            INPUT_CALL_TIMEOUT,
+        )
         .map(|_| ())
         .map_err(|e| e.to_string())
     }
 
     fn end(&mut self) {
-        let _ = ipc::call_blocking(json!({ "cmd": "edge_end" }));
+        let _ = ipc::call_blocking_with(json!({ "cmd": "edge_end" }), GRABBED_CALL_TIMEOUT);
     }
 
     fn status(&mut self) -> Result<Status, String> {
-        let reply =
-            ipc::call_blocking(json!({ "cmd": "edge_status" })).map_err(|e| e.to_string())?;
+        let reply = ipc::call_blocking_with(json!({ "cmd": "edge_status" }), GRABBED_CALL_TIMEOUT)
+            .map_err(|e| e.to_string())?;
         let reply = data(&reply);
         Ok(Status {
             returned_pos: reply["returned_pos"].as_u64().map(|p| p as u16),

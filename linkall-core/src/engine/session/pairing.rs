@@ -53,6 +53,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 return Flow::Continue;
             }
 
+            if !ctx.pinned_key_is_ours().await {
+                tracing::warn!(
+                    peer_id = %peer_id,
+                    "ignoring PairingRequest: the key pinned for this device isn't this session's"
+                );
+                return Flow::Continue;
+            }
+
             // Our user just declined this device: answer for them rather than
             // re-prompting, so a declined device can't nag.
             if shared
@@ -183,6 +191,12 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 // "not connected" and file transfers fail.
                 tracing::info!(peer_id = %peer_id, "peer accepted pairing — establishing mutual trust");
                 if !we_already_trust_them {
+                    if !ctx.pinned_key_is_ours().await {
+                        return Flow::Disconnect(
+                            "pairing answer from a session whose key isn't the pinned one"
+                                .to_string(),
+                        );
+                    }
                     let _ = shared.trust.lock().await.trust_peer(peer_id);
                     let _ = shared.peer_manager.update_trust(peer_id, true);
                     retire_old_installs(shared, peer_id).await;
@@ -225,7 +239,8 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .as_ref()
                 .is_some_and(|t| t.token == token && t.expires_at > std::time::Instant::now());
 
-            if valid {
+            // The code proves the screen was seen, not which key to trust.
+            if valid && ctx.pinned_key_is_ours().await {
                 tracing::info!(peer_id = %peer_id, "peer provided valid QR auth token — establishing mutual trust");
                 let _ = shared
                     .peer_manager
