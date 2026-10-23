@@ -154,7 +154,7 @@ namespace LinkAll.WinUI.Views
             };
             var dialog = new ContentDialog
             {
-                Title = "Edit note",
+                Title = Services.AppDialog.Header("", "Edit note", "Saved here and on your paired devices"),
                 Content = box,
                 PrimaryButtonText = "Save",
                 CloseButtonText = "Cancel",
@@ -171,7 +171,7 @@ namespace LinkAll.WinUI.Views
         {
             var dialog = new ContentDialog
             {
-                Title = "Clear all notes?",
+                Title = Services.AppDialog.Header("", "Clear all notes?", "Pinned notes stay", danger: true),
                 Content = "This deletes every note that isn't pinned, here and on your paired devices.",
                 PrimaryButtonText = "Clear all",
                 CloseButtonText = "Cancel",

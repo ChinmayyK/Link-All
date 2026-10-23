@@ -35,6 +35,8 @@ namespace LinkAll.WinUI.Services
         private const long EdgeDwellMs = 120;
         // After a hand-off ends the pointer can't start another straight away.
         private const long CooldownMs = 800;
+        // How long to wait for the event saying why the engine ended a hand-off.
+        private const long OverWaitMs = 1000;
 
         private int _mode;
         private readonly string?[] _links = new string?[4];
@@ -49,6 +51,7 @@ namespace LinkAll.WinUI.Services
         private readonly ConcurrentQueue<Op> _ops = new();
         private readonly AutoResetEvent _wake = new(false);
         private int _failures;
+        private long _overSince;
 
         private Thread? _hookThread;
         private Thread? _senderThread;
@@ -313,6 +316,7 @@ namespace LinkAll.WinUI.Services
                     Interlocked.Exchange(ref _wheelY, 0);
                     _wheelResidualX = _wheelResidualY = 0;
                     _failures = 0;
+                    _overSince = 0;
                     while (_ops.TryDequeue(out _)) { }
                     SetCursorPos(_centerX, _centerY);
                     if (Interlocked.CompareExchange(ref _mode, (int)Mode.Remote, (int)Mode.Starting) != (int)Mode.Starting)
@@ -419,22 +423,41 @@ namespace LinkAll.WinUI.Services
                         lastCenter = now;
                         SetCursorPos(_centerX, _centerY);
                     }
-                    if (_failures >= 5)
+                    if (_overSince != 0)
+                    {
+                        // The engine has already ended it; the pointer coming
+                        // back, or the other computer ending it, arrives as an
+                        // event that names the real reason. Only if that never
+                        // comes does this side end it, so input isn't held.
+                        if (now - _overSince > OverWaitMs)
+                        {
+                            _overSince = 0;
+                            EndRemote("The other computer is no longer taking the keyboard and mouse.", tellEngine: false);
+                        }
+                    }
+                    else if (_failures >= 5)
                     {
                         _failures = 0;
-                        // The engine says nothing is being shared any more, but
-                        // not yet why: the pointer coming back, or the other
-                        // computer ending it, arrives as an event a moment
-                        // later and names the real reason. Give it room.
-                        Thread.Sleep(500);
-                        EndRemote("The other computer is no longer taking the keyboard and mouse.", tellEngine: false);
+                        // Still sharing as far as the engine knows, but nothing
+                        // gets through: end it there too, or it stays held.
+                        EndRemote("The other computer stopped answering.", tellEngine: true);
                     }
                 }
                 catch (Exception ex) { App.HandleError(ex); }
             }
         }
 
-        private void Track(int rc) => _failures = rc == 0 ? 0 : _failures + 1;
+        // 0 sent, 1 the hand-off is already over in the engine (an event says
+        // why), -1 not sent.
+        private void Track(int rc)
+        {
+            if (rc == 1)
+            {
+                if (_overSince == 0) _overSince = Environment.TickCount64;
+                return;
+            }
+            _failures = rc == 0 ? 0 : _failures + 1;
+        }
 
         private void FlushMotion(IntPtr handle)
         {
