@@ -199,12 +199,19 @@ unsafe fn edge_send(handle: *mut LinkAllHandle, message: crate::protocol::AppMes
     let h = &*handle;
     match runtime().block_on(h.engine.edge_input(message)) {
         Ok(()) => 0,
+        // Most often the pointer just came back or the other side ended it:
+        // the hand-off is over here, and an EdgeReturned or EdgeEnded event
+        // on its way says which.
+        Err(_) if !h.engine.edge_status(true).hosting => 1,
         Err(_) => -1,
     }
 }
 
 /// Move the other computer's pointer by (`dx`, `dy`). Dropped when the link
-/// is backed up. -1 when no hand-off is running.
+/// is backed up. 0 when sent, 1 when the hand-off is already over (an
+/// EdgeReturned or EdgeEnded event says why), -1 when it couldn't be sent.
+/// `linkall_edge_button`, `linkall_edge_scroll` and `linkall_edge_key`
+/// answer the same way.
 ///
 /// # Safety
 /// `handle` must be a valid handle or NULL.
