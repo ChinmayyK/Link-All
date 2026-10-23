@@ -364,13 +364,14 @@ async fn recv_encrypted(
     .context("timeout waiting for encrypted frame body")?
     .context("reading encrypted frame body")?;
 
-    session
-        .decrypt_in_place(&mut cipher_buffer)
-        .context("decrypting")?;
-    let mut msg: AppMessage =
-        postcard::from_bytes(&cipher_buffer).context("deserializing AppMessage")?;
-
+    let decrypt_res = session.decrypt_in_place(&mut cipher_buffer);
+    if let Err(e) = decrypt_res {
+        return_buffer(cipher_buffer);
+        return Err(e).context("decrypting");
+    }
+    let msg_res: Result<AppMessage, _> = postcard::from_bytes(&cipher_buffer);
     return_buffer(cipher_buffer); // Return metadata buffer immediately
+    let mut msg = msg_res.context("deserializing AppMessage")?;
 
     if msg.expects_raw_payload() {
         let mut p_len_buf = [0u8; 4];
@@ -386,17 +387,27 @@ async fn recv_encrypted(
         );
 
         let mut p_cipher_buffer = get_buffer(p_len as usize);
-        tokio::time::timeout(
+        let read_res = tokio::time::timeout(
             Duration::from_secs(30),
             stream.read_exact(&mut p_cipher_buffer),
         )
-        .await
-        .context("timeout waiting for payload frame body")?
-        .context("reading payload frame body")?;
+        .await;
+        match read_res {
+            Ok(Ok(_)) => {}
+            Ok(Err(e)) => {
+                return_buffer(p_cipher_buffer);
+                return Err(e).context("reading payload frame body");
+            }
+            Err(elapsed) => {
+                return_buffer(p_cipher_buffer);
+                return Err(anyhow::anyhow!("timeout waiting for payload frame body: {elapsed}"));
+            }
+        }
 
-        session
-            .decrypt_in_place(&mut p_cipher_buffer)
-            .context("decrypting payload")?;
+        if let Err(e) = session.decrypt_in_place(&mut p_cipher_buffer) {
+            return_buffer(p_cipher_buffer);
+            return Err(e).context("decrypting payload");
+        }
         msg.set_raw_payload(p_cipher_buffer);
     }
 
