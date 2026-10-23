@@ -422,8 +422,12 @@ namespace LinkAll.WinUI.Services
                     if (_failures >= 5)
                     {
                         _failures = 0;
-                        // The engine says nothing is being shared any more.
-                        EndRemote("The other computer stopped answering.", tellEngine: false);
+                        // The engine says nothing is being shared any more, but
+                        // not yet why: the pointer coming back, or the other
+                        // computer ending it, arrives as an event a moment
+                        // later and names the real reason. Give it room.
+                        Thread.Sleep(500);
+                        EndRemote("The other computer is no longer taking the keyboard and mouse.", tellEngine: false);
                     }
                 }
                 catch (Exception ex) { App.HandleError(ex); }
