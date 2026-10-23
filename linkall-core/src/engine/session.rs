@@ -68,7 +68,7 @@ impl InboundCtx {
         self.last_seen.store(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis() as u64,
             std::sync::atomic::Ordering::Relaxed,
         );
@@ -380,7 +380,7 @@ pub(super) fn register_session(
         let last_seen = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .unwrap_or_default()
                 .as_millis() as u64,
         ));
         let ping_sent_at = std::sync::Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
@@ -428,7 +428,7 @@ pub(super) fn register_session(
 
                         if let Some((mut file, mut hasher, last_offset)) = io_ctx {
                             let data_len = data.len();
-                            let res = tokio::task::spawn_blocking(move || {
+                            let res = match tokio::task::spawn_blocking(move || {
                                 use sha2::Digest;
                                 use std::io::{Seek, SeekFrom, Write};
 
@@ -448,7 +448,10 @@ pub(super) fn register_session(
                                 Ok::<_, anyhow::Error>((file, hasher, new_offset))
                             })
                             .await
-                            .unwrap();
+                            {
+                                Ok(res) => res,
+                                Err(join_err) => Err(anyhow::anyhow!("disk write task failed: {join_err}")),
+                            };
 
                             match res {
                                 Ok((file, hasher, new_offset)) => {
@@ -471,16 +474,14 @@ pub(super) fn register_session(
                                         drop(mgr);
 
                                         let now = std::time::Instant::now();
-                                        let last = last_disk_prog_emit
-                                            .get(&transfer_id)
-                                            .copied()
-                                            .unwrap_or_else(|| {
-                                                now.checked_sub(std::time::Duration::from_secs(1))
-                                                    .unwrap()
-                                            });
-                                        if now.duration_since(last).as_millis() >= 100
-                                            || prog.percent == 100
-                                        {
+                                        let should_emit = match last_disk_prog_emit.get(&transfer_id) {
+                                            None => true,
+                                            Some(&last) => {
+                                                now.duration_since(last).as_millis() >= 100
+                                                    || prog.percent == 100
+                                            }
+                                        };
+                                        if should_emit {
                                             last_disk_prog_emit.insert(transfer_id, now);
                                             let _ = dw_event_tx.try_send(
                                                 EngineEvent::FileTransferProgress {
@@ -884,7 +885,7 @@ pub(super) fn register_session(
                 .await;
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .unwrap_or_default()
                     .as_secs();
                 let duration = now.saturating_sub(connected_at);
                 if duration < 15 {

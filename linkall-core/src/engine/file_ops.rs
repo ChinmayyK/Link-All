@@ -206,12 +206,11 @@ pub(crate) async fn read_outbound_chunks(
         }
         Ok((Some((f, hasher)), chunk_data, checkpoints))
     })
-    .await
-    .unwrap();
+    .await;
 
     let (io_ctx, chunk_data, checkpoints) = match res {
-        Ok(res) => res,
-        Err(e) => {
+        Ok(Ok(res)) => res,
+        Ok(Err(e)) => {
             tracing::warn!(error = %e, "failed to read outbound file chunks");
             let target = {
                 let mut mgr = shared.file_transfers.lock().await;
@@ -220,6 +219,37 @@ pub(crate) async fn read_outbound_chunks(
                 target
             };
             // Tell the receiver now instead of letting it wait for chunks that never come.
+            let reason = e.to_string();
+            if let Some(peer) = target {
+                if let Some(tx) = shared.peer_manager.sender(peer) {
+                    let _ = tx
+                        .send(AppMessage::FileTransferCancel {
+                            transfer_id,
+                            reason: reason.clone(),
+                        })
+                        .await;
+                }
+            }
+            let _ = shared
+                .event_tx
+                .send(EngineEvent::FileTransferFailed {
+                    in_folder: false,
+                    transfer_id,
+                    from_device: target.unwrap_or_default(),
+                    reason,
+                })
+                .await;
+            return None;
+        }
+        Err(join_err) => {
+            let e = anyhow::anyhow!("spawn_blocking failed: {join_err}");
+            tracing::warn!(error = %e, "failed to read outbound file chunks");
+            let target = {
+                let mut mgr = shared.file_transfers.lock().await;
+                let target = mgr.get_outbound(&transfer_id).and_then(|t| t.target_device);
+                mgr.cancel_outbound(&transfer_id);
+                target
+            };
             let reason = e.to_string();
             if let Some(peer) = target {
                 if let Some(tx) = shared.peer_manager.sender(peer) {
