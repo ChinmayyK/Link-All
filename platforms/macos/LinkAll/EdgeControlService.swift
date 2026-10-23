@@ -63,6 +63,11 @@ struct EdgeBatch {
 
 // ── The service ───────────────────────────────────────────────────────────────
 
+@_silgen_name("CGSMainConnectionID") private func CGSMainConnectionID() -> Int32
+@_silgen_name("CGSSetConnectionProperty")
+@discardableResult
+private func CGSSetConnectionProperty(_ cid: Int32, _ target: Int32, _ key: CFString, _ value: CFTypeRef) -> Int32
+
 final class EdgeControlService {
     static let shared = EdgeControlService()
 
@@ -81,6 +86,8 @@ final class EdgeControlService {
     private var since = [Date](repeating: .distantPast, count: 4)
     private var cooldownUntil = Date.distantPast
     private var lastEdge = 1
+    /// Where this Mac's pointer is held while the other computer is driven.
+    private var pinned = CGPoint.zero
 
     private var batch = EdgeBatch()
     private var sending = false
@@ -228,6 +235,11 @@ final class EdgeControlService {
         sending = false
         lastStatus = Date()
         // The pointer stays where it is while the mouse's deltas keep coming.
+        // Disassociating alone does not hold it, and a background app can
+        // neither hide it nor keep it from drifting, so it is also put back
+        // after every move (see `capture`) and allowed to hide the cursor.
+        pinned = Self.cursorLocation()
+        Self.allowCursorHidingInBackground()
         CGAssociateMouseAndMouseCursorPosition(0)
         CGDisplayHideCursor(CGMainDisplayID())
         mode = .remote
@@ -240,6 +252,7 @@ final class EdgeControlService {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             batch.dx += Int(event.getIntegerValueField(.mouseEventDeltaX))
             batch.dy += Int(event.getIntegerValueField(.mouseEventDeltaY))
+            CGWarpMouseCursorPosition(pinned)
         case .leftMouseDown: batch.buttons.append((0, true))
         case .leftMouseUp: batch.buttons.append((0, false))
         case .rightMouseDown: batch.buttons.append((1, true))
@@ -352,6 +365,16 @@ final class EdgeControlService {
         default: p = CGPoint(x: b.minX + f * (b.width - 1), y: b.maxY - 1 - inset)
         }
         CGWarpMouseCursorPosition(p)
+    }
+
+    private static func cursorLocation() -> CGPoint {
+        CGEvent(source: nil)?.location ?? .zero
+    }
+
+    /// Without this, hiding the cursor does nothing while another app is in front.
+    private static func allowCursorHidingInBackground() {
+        let connection = CGSMainConnectionID()
+        CGSSetConnectionProperty(connection, connection, "SetsCursorInBackground" as CFString, kCFBooleanTrue)
     }
 
     /// All displays together, in the top-left-origin coordinates events use.
