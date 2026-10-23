@@ -146,11 +146,22 @@ codesign \
 codesign \
     --force \
     --sign "${IDENTITY}" \
+    --identifier app.linkall.daemon \
     "${APP_BUNDLE}/Contents/MacOS/linkall-daemon"
+
+# An ad-hoc signature's requirement is the build's own hash, so every rebuild or
+# update looked like a different app to macOS and lost the Accessibility and
+# Input Monitoring grants. Pinning the requirement to the bundle identifier
+# keeps one grant valid across builds, with no paid certificate.
+APP_REQUIREMENTS=()
+if [[ "${IDENTITY}" == "-" ]]; then
+    APP_REQUIREMENTS=(-r='designated => identifier "app.linkall.mac"')
+fi
 
 codesign \
     --force \
     --sign "${IDENTITY}" \
+    ${APP_REQUIREMENTS[@]+"${APP_REQUIREMENTS[@]}"} \
     --entitlements "${MACOS_DIR}/${SOURCE_DIR_NAME}/LinkAll.entitlements" \
     --options runtime \
     "${APP_BUNDLE}"
