@@ -79,11 +79,9 @@ impl Scratchpad {
         let all: Vec<&Note> = self.notes.values().collect();
         if let Ok(text) = serde_json::to_string(&all) {
             let tmp = path.with_extension("json.tmp");
-            if std::fs::write(&tmp, text).is_ok() {
-                if std::fs::rename(&tmp, path).is_err() {
-                    let _ = std::fs::copy(&tmp, path);
-                    let _ = std::fs::remove_file(&tmp);
-                }
+            if std::fs::write(&tmp, text).is_ok() && std::fs::rename(&tmp, path).is_err() {
+                let _ = std::fs::copy(&tmp, path);
+                let _ = std::fs::remove_file(&tmp);
             }
         }
     }
