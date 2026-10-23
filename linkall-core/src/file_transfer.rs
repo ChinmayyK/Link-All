@@ -515,17 +515,18 @@ impl OutboundTransfer {
         self.hash_checkpoints
             .retain(|(chunk, _)| *chunk < chunk_index);
         let mut hasher = Sha256::new();
-        match &self.source {
-            _ if saved.is_some() => {
-                hasher = saved.unwrap();
-                self.rehash_chunks = 0;
+        if let Some(saved_hasher) = saved {
+            hasher = saved_hasher;
+            self.rehash_chunks = 0;
+        } else {
+            match &self.source {
+                OutboundSource::Memory(data) => {
+                    let end = (chunk_index as usize * FILE_CHUNK_SIZE).min(data.len());
+                    hasher.update(&data[..end]);
+                    self.rehash_chunks = 0;
+                }
+                OutboundSource::FilePath(..) => self.rehash_chunks = chunk_index,
             }
-            OutboundSource::Memory(data) => {
-                let end = (chunk_index as usize * FILE_CHUNK_SIZE).min(data.len());
-                hasher.update(&data[..end]);
-                self.rehash_chunks = 0;
-            }
-            OutboundSource::FilePath(..) => self.rehash_chunks = chunk_index,
         }
         self.hasher = Some(hasher);
         self.last_acked_chunk = if chunk_index > 0 {

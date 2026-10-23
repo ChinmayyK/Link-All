@@ -211,6 +211,7 @@ pub(crate) async fn forget_device_status(shared: &EngineShared, device: Uuid) {
     shared.device_status.peer_batteries.remove(&device);
     shared.device_status.peer_networks.remove(&device);
     shared.device_status.peer_storage.remove(&device);
+    shared.now_playing_remote.remove(&device);
 }
 
 pub(crate) async fn clear_call_from(shared: &EngineShared, device: Uuid) {

@@ -60,7 +60,11 @@ impl Scratchpad {
     }
 
     pub fn load(path: &Path) -> Self {
-        let notes: Vec<Note> = std::fs::read_to_string(path)
+        let text = std::fs::read_to_string(path).or_else(|_| {
+            let tmp = path.with_extension("json.tmp");
+            std::fs::read_to_string(tmp)
+        });
+        let notes: Vec<Note> = text
             .ok()
             .and_then(|text| serde_json::from_str(&text).ok())
             .unwrap_or_default();
@@ -75,8 +79,9 @@ impl Scratchpad {
         let all: Vec<&Note> = self.notes.values().collect();
         if let Ok(text) = serde_json::to_string(&all) {
             let tmp = path.with_extension("json.tmp");
-            if std::fs::write(&tmp, text).is_ok() {
-                let _ = std::fs::rename(&tmp, path);
+            if std::fs::write(&tmp, text).is_ok() && std::fs::rename(&tmp, path).is_err() {
+                let _ = std::fs::copy(&tmp, path);
+                let _ = std::fs::remove_file(&tmp);
             }
         }
     }
@@ -172,22 +177,34 @@ impl Scratchpad {
 
     /// Takes a note from another device. True when it changed what is shown or kept.
     pub fn merge(&mut self, incoming: Note, now_ms: u64) -> bool {
-        if incoming.text.len() > MAX_TEXT_BYTES {
-            return false;
-        }
-        // A clock far in the future would win over every later edit.
-        if incoming.updated_at_ms > now_ms + 24 * 60 * 60 * 1000 {
-            return false;
-        }
-        match self.notes.get(&incoming.id) {
-            Some(existing) if !incoming.wins_over(existing) => false,
-            None if !incoming.deleted && self.visible_count() >= MAX_NOTES => false,
-            _ => {
-                self.notes.insert(incoming.id, incoming);
-                self.save();
-                true
+        self.merge_batch(vec![incoming], now_ms)
+    }
+
+    /// Takes several notes from another device. True when it changed what is shown or kept.
+    /// Saves to disk once for the batch instead of per-note.
+    pub fn merge_batch(&mut self, incoming: Vec<Note>, now_ms: u64) -> bool {
+        let mut any_changed = false;
+        for note in incoming {
+            if note.text.len() > MAX_TEXT_BYTES {
+                continue;
+            }
+            if note.updated_at_ms > now_ms + 24 * 60 * 60 * 1000 {
+                continue;
+            }
+            let insert = match self.notes.get(&note.id) {
+                Some(existing) if !note.wins_over(existing) => false,
+                None if !note.deleted && self.visible_count() >= MAX_NOTES => false,
+                _ => true,
+            };
+            if insert {
+                self.notes.insert(note.id, note);
+                any_changed = true;
             }
         }
+        if any_changed {
+            self.save();
+        }
+        any_changed
     }
 
     /// Drops deleted markers older than a month.
@@ -316,5 +333,44 @@ mod tests {
         }
         let pad = Scratchpad::load(&path);
         assert_eq!(pad.visible()[0].text, "remember me");
+    }
+
+    #[test]
+    fn notes_recover_from_tmp_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scratchpad.json");
+        let tmp = dir.path().join("scratchpad.json.tmp");
+        let note = Note {
+            id: Uuid::new_v4(),
+            text: "recovered".into(),
+            pinned: false,
+            updated_at_ms: 50,
+            deleted: false,
+        };
+        std::fs::write(&tmp, serde_json::to_string(&vec![&note]).unwrap()).unwrap();
+        let pad = Scratchpad::load(&path);
+        assert_eq!(pad.visible().len(), 1);
+        assert_eq!(pad.visible()[0].text, "recovered");
+    }
+
+    #[test]
+    fn merge_batch_updates_all_notes() {
+        let mut pad = Scratchpad::new(None);
+        let n1 = Note {
+            id: Uuid::new_v4(),
+            text: "n1".into(),
+            pinned: false,
+            updated_at_ms: 100,
+            deleted: false,
+        };
+        let n2 = Note {
+            id: Uuid::new_v4(),
+            text: "n2".into(),
+            pinned: true,
+            updated_at_ms: 200,
+            deleted: false,
+        };
+        assert!(pad.merge_batch(vec![n1, n2], 300));
+        assert_eq!(pad.visible().len(), 2);
     }
 }

@@ -265,13 +265,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
 
                         if let Some((prog, fname)) = progs.last() {
                             let now = std::time::Instant::now();
-                            let last = bg_last_prog_emit
-                                .get(&bg_transfer_id)
-                                .copied()
-                                .unwrap_or_else(|| {
-                                    now.checked_sub(std::time::Duration::from_secs(1)).unwrap()
-                                });
-                            if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                            let should_emit = match bg_last_prog_emit.get(&bg_transfer_id) {
+                                None => true,
+                                Some(&last) => {
+                                    now.duration_since(last).as_millis() >= 100
+                                        || prog.percent == 100
+                                }
+                            };
+                            if should_emit {
                                 bg_last_prog_emit.insert(bg_transfer_id, now);
                                 let _ = bg_event_tx.try_send(EngineEvent::FileTransferProgress {
                                     transfer_id: bg_transfer_id,
@@ -734,13 +735,14 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
 
                         if let Some((prog, fname)) = progs.last() {
                             let now = std::time::Instant::now();
-                            let last = bg_last_prog_emit
-                                .get(&bg_transfer_id)
-                                .copied()
-                                .unwrap_or_else(|| {
-                                    now.checked_sub(std::time::Duration::from_secs(1)).unwrap()
-                                });
-                            if now.duration_since(last).as_millis() >= 100 || prog.percent == 100 {
+                            let should_emit = match bg_last_prog_emit.get(&bg_transfer_id) {
+                                None => true,
+                                Some(&last) => {
+                                    now.duration_since(last).as_millis() >= 100
+                                        || prog.percent == 100
+                                }
+                            };
+                            if should_emit {
                                 bg_last_prog_emit.insert(bg_transfer_id, now);
                                 let _ = bg_event_tx.try_send(EngineEvent::FileTransferProgress {
                                     transfer_id: bg_transfer_id,
