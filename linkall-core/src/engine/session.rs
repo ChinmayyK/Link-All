@@ -450,7 +450,9 @@ pub(super) fn register_session(
                             .await
                             {
                                 Ok(res) => res,
-                                Err(join_err) => Err(anyhow::anyhow!("disk write task failed: {join_err}")),
+                                Err(join_err) => {
+                                    Err(anyhow::anyhow!("disk write task failed: {join_err}"))
+                                }
                             };
 
                             match res {
@@ -474,13 +476,14 @@ pub(super) fn register_session(
                                         drop(mgr);
 
                                         let now = std::time::Instant::now();
-                                        let should_emit = match last_disk_prog_emit.get(&transfer_id) {
-                                            None => true,
-                                            Some(&last) => {
-                                                now.duration_since(last).as_millis() >= 100
-                                                    || prog.percent == 100
-                                            }
-                                        };
+                                        let should_emit =
+                                            match last_disk_prog_emit.get(&transfer_id) {
+                                                None => true,
+                                                Some(&last) => {
+                                                    now.duration_since(last).as_millis() >= 100
+                                                        || prog.percent == 100
+                                                }
+                                            };
                                         if should_emit {
                                             last_disk_prog_emit.insert(transfer_id, now);
                                             let _ = dw_event_tx.try_send(

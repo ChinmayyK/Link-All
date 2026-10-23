@@ -400,7 +400,9 @@ async fn recv_encrypted(
             }
             Err(elapsed) => {
                 return_buffer(p_cipher_buffer);
-                return Err(anyhow::anyhow!("timeout waiting for payload frame body: {elapsed}"));
+                return Err(anyhow::anyhow!(
+                    "timeout waiting for payload frame body: {elapsed}"
+                ));
             }
         }
 

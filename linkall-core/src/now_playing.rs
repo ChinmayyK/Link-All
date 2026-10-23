@@ -175,8 +175,7 @@ pub fn parse_playerctl_line(line: &str) -> Option<(NowPlaying, Option<String>)> 
 
 /// Cover art for the last fetched location, so it is fetched and resized once per track.
 #[cfg(not(target_os = "android"))]
-static ART_CACHE: std::sync::Mutex<Option<(String, Option<Vec<u8>>)>> =
-    std::sync::Mutex::new(None);
+static ART_CACHE: std::sync::Mutex<Option<(String, Option<Vec<u8>>)>> = std::sync::Mutex::new(None);
 
 /// Cover art from a `file://` path or an http(s) address, small enough to send.
 #[cfg(not(target_os = "android"))]
