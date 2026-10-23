@@ -995,6 +995,9 @@ pub struct FileTransferManager {
     save_dir: PathBuf,
     /// Top folder chosen for each incoming folder, by batch id.
     folder_roots: HashMap<String, String>,
+    /// Signalled whenever an outbound transfer leaves, so a folder send
+    /// waiting for room goes on at once instead of on its next poll.
+    outbound_left: std::sync::Arc<tokio::sync::Notify>,
 }
 
 impl FileTransferManager {
@@ -1004,6 +1007,7 @@ impl FileTransferManager {
             outbound: HashMap::new(),
             save_dir,
             folder_roots: HashMap::new(),
+            outbound_left: Default::default(),
         }
     }
 
@@ -1081,7 +1085,16 @@ impl FileTransferManager {
     }
 
     pub fn remove_outbound(&mut self, tid: &TransferId) -> Option<OutboundTransfer> {
-        self.outbound.remove(tid)
+        let removed = self.outbound.remove(tid);
+        if removed.is_some() {
+            self.outbound_left.notify_waiters();
+        }
+        removed
+    }
+
+    /// Notified each time an outbound transfer leaves (see `outbound_left`).
+    pub fn outbound_left(&self) -> std::sync::Arc<tokio::sync::Notify> {
+        self.outbound_left.clone()
     }
 
     // ── Inbound ───────────────────────────────────────────────────────────────
@@ -1264,6 +1277,7 @@ impl FileTransferManager {
     pub fn cancel_outbound(&mut self, tid: &TransferId) {
         if let Some(mut t) = self.outbound.remove(tid) {
             t.status = TransferStatus::Cancelled;
+            self.outbound_left.notify_waiters();
         }
     }
 

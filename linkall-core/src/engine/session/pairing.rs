@@ -84,6 +84,10 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             // clock; only a new one arms it.
             let shown = shared.peer_manager.get(peer_id);
             let already_shown = shown.as_ref().is_some_and(|p| p.pairing_requested);
+            if !already_shown && !super::super::trust_ops::room_for_pairing_request(shared, peer_id)
+            {
+                return Flow::Continue;
+            }
             let _ = shared.peer_manager.set_pairing_requested(peer_id, true);
             if !already_shown {
                 arm_pairing_expiry(shared, peer_id);
