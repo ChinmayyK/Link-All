@@ -4,7 +4,6 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Markup;
 
 namespace LinkAll.WinUI.Services
@@ -139,21 +138,25 @@ namespace LinkAll.WinUI.Services
             var root = new StackPanel { Spacing = 10, MinWidth = 380 };
             if (peers.Count > 1)
             {
-                var chips = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-                var buttons = new List<(ToggleButton Button, string? Id)>();
+                // The same chips as the Clipboard page's filters: the
+                // selected one filled, the rest outlined.
+                var selectedStyle = (Style)Application.Current.Resources["AppPrimaryButton"];
+                var unselectedStyle = (Style)Application.Current.Resources["AppSecondaryButton"];
+                var chips = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+                var buttons = new List<(Button Button, string? Id)>();
                 void Select(string? id)
                 {
                     target = id;
-                    foreach (var (b, bid) in buttons) b.IsChecked = bid == id;
+                    foreach (var (b, bid) in buttons) b.Style = bid == id ? selectedStyle : unselectedStyle;
                 }
                 void AddChip(string label, string? id)
                 {
-                    var chip = new ToggleButton
+                    var chip = new Button
                     {
                         Content = label,
-                        CornerRadius = new CornerRadius(999),
-                        Padding = new Thickness(14, 6, 14, 6),
-                        IsChecked = id == null,
+                        Style = id == null ? selectedStyle : unselectedStyle,
+                        Padding = new Thickness(14, 5, 14, 5),
+                        MinHeight = 30,
                     };
                     chip.Click += (_, _) => Select(id);
                     buttons.Add((chip, id));
