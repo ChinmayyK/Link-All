@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
 
 namespace LinkAll.WinUI.Services
 {
@@ -77,6 +78,46 @@ namespace LinkAll.WinUI.Services
                 }
             }
             catch (Exception ex) { App.HandleError(ex); }
+        }
+
+        // A ContentDialog opens in the window's popup layer, outside the root
+        // element that carries RequestedTheme, so left alone it follows the
+        // Windows theme: a dark dialog over a light app, or the reverse. The
+        // app's dialog style sets this so each dialog takes its window's
+        // theme when it opens, and keeps following it while open.
+        public static readonly DependencyProperty FollowWindowThemeProperty =
+            DependencyProperty.RegisterAttached(
+                "FollowWindowTheme",
+                typeof(bool),
+                typeof(ThemeService),
+                new PropertyMetadata(false, OnFollowWindowThemeChanged));
+
+        public static void SetFollowWindowTheme(DependencyObject element, bool value) => element.SetValue(FollowWindowThemeProperty, value);
+        public static bool GetFollowWindowTheme(DependencyObject element) => (bool)element.GetValue(FollowWindowThemeProperty);
+
+        private static void OnFollowWindowThemeChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is not ContentDialog dialog || e.NewValue is not true) return;
+
+            FrameworkElement? followed = null;
+            void Follow(FrameworkElement root, object args) => dialog.RequestedTheme = root.ActualTheme;
+            void Stop()
+            {
+                if (followed != null) followed.ActualThemeChanged -= Follow;
+                followed = null;
+            }
+
+            // Loading comes before the first frame, so the dialog never
+            // shows in the wrong theme.
+            dialog.Loading += (_, _) =>
+            {
+                Stop();
+                if (dialog.XamlRoot?.Content is not FrameworkElement root) return;
+                dialog.RequestedTheme = root.ActualTheme;
+                root.ActualThemeChanged += Follow;
+                followed = root;
+            };
+            dialog.Closed += (_, _) => Stop();
         }
 
         private static void RootOnActualThemeChanged(FrameworkElement sender, object args)

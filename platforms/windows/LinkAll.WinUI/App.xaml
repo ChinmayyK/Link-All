@@ -3,7 +3,8 @@
     x:Class="LinkAll.WinUI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:LinkAll.WinUI">
+    xmlns:local="using:LinkAll.WinUI"
+    xmlns:services="using:LinkAll.WinUI.Services">
     <Application.Resources>
         <ResourceDictionary>
             <!--
@@ -17,8 +18,10 @@
                 <ResourceDictionary Source="ms-appx:///Theme/Controls.xaml" />
             </ResourceDictionary.MergedDictionaries>
 
-            <!-- One look for every ContentDialog, XAML or code: rounder, roomier. -->
+            <!-- One look for every ContentDialog, XAML or code: rounder, roomier,
+                 and in the app's theme rather than the system's. -->
             <Style x:Key="AppDialogStyle" TargetType="ContentDialog" BasedOn="{StaticResource DefaultContentDialogStyle}">
+                <Setter Property="services:ThemeService.FollowWindowTheme" Value="True" />
                 <Setter Property="CornerRadius" Value="20" />
                 <Setter Property="Padding" Value="24,22,24,20" />
             </Style>
