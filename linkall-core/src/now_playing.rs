@@ -173,9 +173,22 @@ pub fn parse_playerctl_line(line: &str) -> Option<(NowPlaying, Option<String>)> 
     ))
 }
 
+/// Cover art for the last fetched location, so it is fetched and resized once per track.
+#[cfg(not(target_os = "android"))]
+static ART_CACHE: std::sync::Mutex<Option<(String, Option<Vec<u8>>)>> =
+    std::sync::Mutex::new(None);
+
 /// Cover art from a `file://` path or an http(s) address, small enough to send.
 #[cfg(not(target_os = "android"))]
 fn fetch_art(location: &str) -> Option<Vec<u8>> {
+    {
+        let cache = ART_CACHE.lock().unwrap();
+        if let Some((cached_loc, cached_art)) = cache.as_ref() {
+            if cached_loc == location {
+                return cached_art.clone();
+            }
+        }
+    }
     let bytes = if let Some(path) = location.strip_prefix("file://") {
         let path = percent_decode(path);
         std::fs::read(path).ok()?
@@ -188,7 +201,10 @@ fn fetch_art(location: &str) -> Option<Vec<u8>> {
     } else {
         return None;
     };
-    shrink_art(bytes)
+    let art = shrink_art(bytes);
+    let mut cache = ART_CACHE.lock().unwrap();
+    *cache = Some((location.to_string(), art.clone()));
+    art
 }
 
 /// Scales cover art down to at most 300 pixels and re-encodes it as a JPEG, so it
@@ -236,7 +252,6 @@ fn percent_decode(s: &str) -> String {
 mod imp {
     use super::*;
     use std::process::Command;
-    use std::sync::Mutex;
 
     const READER: &str = r#"
 on reading(appName)
@@ -259,9 +274,6 @@ if a is "" then set a to reading("Music")
 return a
 "#;
 
-    /// The cover for the last Spotify track, so it is fetched once per track.
-    static ART: Mutex<Option<(String, Option<Vec<u8>>)>> = Mutex::new(None);
-
     pub fn current() -> Option<NowPlaying> {
         let out = Command::new("/usr/bin/osascript")
             .args(["-e", READER])
@@ -273,11 +285,7 @@ return a
         let line = String::from_utf8_lossy(&out.stdout).to_string();
         let (mut info, art_url) = parse_mac_line(&line)?;
         if let Some(url) = art_url {
-            let mut cache = ART.lock().unwrap();
-            if cache.as_ref().map(|(u, _)| u != &url).unwrap_or(true) {
-                *cache = Some((url.clone(), fetch_art(&url)));
-            }
-            info.art = cache.as_ref().and_then(|(_, a)| a.clone());
+            info.art = fetch_art(&url);
         }
         Some(info.sanitized())
     }
