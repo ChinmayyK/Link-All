@@ -6,7 +6,7 @@ This document outlines the architectural plan for integrating a "Remote File Bro
 
 Link All currently operates on a "Push" model (e.g., pushing clipboard data or files to a peer). To enable remote browsing, we will introduce a **Request/Response (Pull) model** into the existing `linkall-core` protocol. 
 
-The desktop app will act as the Client, sending requests over the established, encrypted (ChaCha20-Poly1305) mDNS tunnel. The Android app will act as the Server, querying the local file system and returning metadata or file chunks upon request.
+The desktop app will act as the Client, sending requests over the established, encrypted (AES-256-GCM) mDNS tunnel. The Android app will act as the Server, querying the local file system and returning metadata or file chunks upon request.
 
 ## 2. Rust Core Protocol Extensions
 

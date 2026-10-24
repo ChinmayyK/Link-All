@@ -25,7 +25,7 @@ Link All uses state-of-the-art cryptographic primitives to ensure data in transi
 - **Symmetric Encryption**: AES-256-GCM Authenticated Encryption with Associated Data (AEAD) is used to encrypt and authenticate all payloads.
 
 ### Replay Protection
-Link All prevents captured packets from being replayed back to a client by using a **strictly monotonic, 64-bit big-endian counter**. This counter acts as the ChaCha20 nonce. If a packet arrives with a counter less than or equal to the highest counter seen, the packet is instantly dropped, terminating the connection.
+Link All prevents captured packets from being replayed back to a client by using a **strictly monotonic, 64-bit big-endian counter**. This counter forms the AES-GCM nonce. If a packet arrives with a counter less than or equal to the highest counter seen, the packet is instantly dropped, terminating the connection.
 
 ## 3. Trust Models & Pairing (`pairing.rs` & `trust.rs`)
 

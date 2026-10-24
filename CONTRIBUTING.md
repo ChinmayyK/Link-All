@@ -56,7 +56,7 @@ linkall/
 ├── linkall-core/        # Rust engine — all platform-independent logic
 │   └── src/
 │       ├── protocol.rs     # Wire types
-│       ├── crypto.rs       # X25519 + HKDF + ChaCha20-Poly1305
+│       ├── crypto.rs       # X25519 + HKDF + AES-256-GCM
 │       ├── trust.rs        # TOFU trust store
 │       ├── pairing.rs      # PIN-based pairing
 │       ├── discovery.rs    # mDNS-SD

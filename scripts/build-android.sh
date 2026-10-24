@@ -164,7 +164,7 @@ log "Building native libraries for all ABIs..."
 cd "${CORE_DIR}"
 
 # Always build Rust in release mode — debug Rust is 5-10x slower for crypto
-# (ChaCha20-Poly1305 encryption dominates transfer throughput).
+# (AES-256-GCM encryption dominates transfer throughput).
 # The --debug/--release flag only affects the APK signing and Gradle build type.
 CARGO_NDK_ARGS=()
 for abi in "${ABIS[@]}"; do
