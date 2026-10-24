@@ -346,7 +346,6 @@
                                 MaxWidth="400"
                                 PlaceholderText="Search devices, clipboard, transfers"
                                 QueryIcon="Find"
-                                TextMemberPath="Title"
                                 UpdateTextOnSelect="False"
                                 AutomationProperties.Name="Search"
                                 ToolTipService.ToolTip="Search (Ctrl+F)"

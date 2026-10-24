@@ -32,6 +32,7 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **All:** A new layout built around your devices, the same on Android, Mac, Windows and Linux. Home leads with each connected device: its status, what it is playing, and the two or three things you do most with it. Click or tap one for its own page with everything for that device: send, browse its files, control it, play its music, make it ring, its details, and connecting or forgetting it. Transfers is now **Files**, with sending, a Browse list of your devices, what is moving and what arrived. Settings is a short list of categories.
 - **Android:** The floating dock is Home, Files, Activity and Settings. Activity has a search box, and a received file opens from Activity or Files with a tap.
 - **All:** Smoother and lighter: the apps ask the background service for less and less often when nothing on screen needs it (Now Playing covers are fetched once per track instead of with every update), and the phone no longer rewrites its status after every synced clip.
+- **Windows:** Smaller install: 74 MB instead of 83 MB, and a 23 MB installer. `LinkAll.exe` is compiled for size (15.1 to 12.3 MB), and the Windows App SDK pieces Link All never loads (the Widgets API, WebView2 and the rest of the Windows AI runtime) are left out of both the installer and the Store package.
 
 ### Fixed
 - **Android:** Sharing text with no device connected says so, instead of "Sent to your devices".

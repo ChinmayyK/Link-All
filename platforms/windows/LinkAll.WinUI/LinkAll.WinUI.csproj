@@ -211,34 +211,40 @@
     turns up nothing), so it is ~42 MB of dead weight in every install.
     Deleting the files post-build/publish is safe: nothing in this codebase
     ever loads them, so there is no lazy-load path left to break.
+
+    The same goes for the rest of the AI runtime's helpers (NPU detection,
+    workload descriptions, PerceptiveStreaming, AI imaging), the Widgets
+    provider API and WebView2: Link All has no widget, web view or AI code,
+    and a running, used install loads none of them (~6 MB).
+    Microsoft.UI.Xaml.Phone.dll stays: WinUI loads it.
+
+    One pattern, matched on the whole file name, serves the publish folder
+    and the MSIX payload (TrimMsixPayload) alike.
   -->
+  <PropertyGroup>
+    <UnusedRuntimeFilePattern>(?i)^(Microsoft\.Windows\.AI\..*|Microsoft\.Windows\.Internal\.AI\..*|onnxruntime\.dll|DirectML\.dll|Microsoft\.ML\.OnnxRuntime\.dll|NPUDetect\.dll|PerceptiveStreaming\.dll|Microsoft\.Windows\.(Private\.)?Workloads\..*|workloads(\..*)?\.json|Microsoft\.Graphics\.Imaging.*|Microsoft\.Windows\.Widgets\..*|Microsoft\.Web\.WebView2\..*|WebView2Loader\.dll)$</UnusedRuntimeFilePattern>
+  </PropertyGroup>
   <Target Name="TrimUnusedWindowsAiRuntime" AfterTargets="Build;Publish">
     <ItemGroup>
-      <UnusedAiFiles Include="$(OutDir)Microsoft.Windows.AI.*" />
-      <UnusedAiFiles Include="$(OutDir)onnxruntime.dll" />
-      <UnusedAiFiles Include="$(OutDir)DirectML.dll" />
-      <UnusedAiFiles Include="$(OutDir)Microsoft.ML.OnnxRuntime.dll" />
-      <UnusedAiFiles Include="$(PublishDir)Microsoft.Windows.AI.*" Condition="'$(PublishDir)' != ''" />
-      <UnusedAiFiles Include="$(PublishDir)onnxruntime.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedAiFiles Include="$(PublishDir)DirectML.dll" Condition="'$(PublishDir)' != ''" />
-      <UnusedAiFiles Include="$(PublishDir)Microsoft.ML.OnnxRuntime.dll" Condition="'$(PublishDir)' != ''" />
+      <_UnusedRuntimeCandidate Include="$(OutDir)*" />
+      <_UnusedRuntimeCandidate Include="$(PublishDir)*" Condition="'$(PublishDir)' != ''" />
+      <UnusedAiFiles Include="@(_UnusedRuntimeCandidate)"
+                     Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)%(Extension)', '$(UnusedRuntimeFilePattern)'))" />
     </ItemGroup>
     <Delete Files="@(UnusedAiFiles)" TreatErrorsAsWarnings="true" />
   </Target>
 
   <!--
     The Store (MSIX) package lists its files itself, so the deletions above
-    don't reach it: drop the same unused Windows AI runtime from its payload,
+    don't reach it: drop the same unused runtime files from its payload,
     and WinUI's string tables for every language but English, as the
     publish folder already does (PruneWinUiLocales).
   -->
   <Target Name="TrimMsixPayload" AfterTargets="GetPackagingOutputs" Condition="'$(WindowsPackageType)' == 'MSIX'">
     <ItemGroup>
-      <!-- Qualified metadata: some payload items (the platform entry) have no TargetPath.
-           Matched on the whole file name, like the Microsoft.Windows.AI.* glob above:
-           the Filename of Microsoft.Windows.AI.winmd has no trailing dot. -->
+      <!-- Qualified metadata: some payload items (the platform entry) have no TargetPath. -->
       <_MsixUnused Include="@(PackagingOutputs)"
-                   Condition="'%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'onnxruntime.dll' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'DirectML.dll' or '%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)' == 'Microsoft.ML.OnnxRuntime.dll' or $([System.String]::Copy('%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)').StartsWith('Microsoft.Windows.AI.'))" />
+                   Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(PackagingOutputs.Filename)%(PackagingOutputs.Extension)', '$(UnusedRuntimeFilePattern)'))" />
       <_MsixUnused Include="@(PackagingOutputs)"
                    Condition="'%(PackagingOutputs.Extension)' == '.mui' and !$([System.String]::Copy('%(PackagingOutputs.TargetPath)').ToLowerInvariant().StartsWith('en-us'))" />
       <PackagingOutputs Remove="@(_MsixUnused)" />
@@ -264,6 +270,10 @@
   -->
   <PropertyGroup>
     <PublishAot>true</PublishAot>
+    <!-- Size over speed: LinkAll.exe 15.1 -> 12.3 MB; a UI app doesn't feel the difference.
+         StackTraceSupport and UseSystemResourceKeys would save ~1.2 MB more, but TraceLog
+         records exception messages and stack traces, so they stay readable. -->
+    <OptimizationPreference>Size</OptimizationPreference>
     <!-- The native LinkAll.pdb is ~52 MB. Keep it in bin\ for crash debugging,
          out of the publish folder that the MSI and zip ship. -->
     <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
