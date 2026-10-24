@@ -32,6 +32,15 @@ const KEEPALIVE: Duration = Duration::from_millis(50);
 /// The stamp on a keepalive ping, so its pong isn't taken for a round trip.
 pub(super) const KEEPALIVE_STAMP: u64 = 0;
 
+/// How long the computer being driven may leave keepalives unanswered before
+/// the host takes its keyboard and mouse back. A link can stay "connected"
+/// long after the other side stopped answering (the heartbeat allows 12 s,
+/// more while asleep), and all that time the host's own input reaches nothing.
+const SILENCE_LIMIT: Duration = Duration::from_millis(1500);
+
+/// When the computer being driven last answered a keepalive.
+static DRIVEN_HEARD: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
 /// The keyboard of the computer driving this one, rewritten for this one.
 static KEYS: std::sync::Mutex<Option<edge_keys::Translator>> = std::sync::Mutex::new(None);
 
@@ -232,6 +241,10 @@ fn watch(shared: EngineShared, peer: Uuid, hosting: bool) {
         let _awake = Awake::hold();
         let mut tick = tokio::time::interval(KEEPALIVE);
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        if hosting {
+            *DRIVEN_HEARD.lock().unwrap_or_else(|e| e.into_inner()) =
+                Some(std::time::Instant::now());
+        }
         loop {
             tick.tick().await;
             let mine = {
@@ -251,19 +264,45 @@ fn watch(shared: EngineShared, peer: Uuid, hosting: bool) {
                 .into_iter()
                 .find(|(id, _)| *id == peer)
                 .map(|(_, tx)| tx);
+            let silent = hosting
+                && DRIVEN_HEARD
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_none_or(|at| at.elapsed() > SILENCE_LIMIT);
             if let Some(tx) = &sender {
-                if hosting {
+                if hosting && !silent {
                     let _ = tx.try_send(AppMessage::Ping {
                         timestamp_ms: KEEPALIVE_STAMP,
                     });
                 }
-                if !shared.shutdown.is_cancelled() {
+                if !silent && !shared.shutdown.is_cancelled() {
                     continue;
                 }
+                if silent {
+                    // Best effort: it may still be listening, and it lets go
+                    // of what it holds on EdgeEnd.
+                    let _ = tx.try_send(AppMessage::EdgeEnd);
+                }
             }
-            *shared.edge.lock().unwrap() = EdgeState::Idle;
+            {
+                let mut state = shared.edge.lock().unwrap();
+                let still_mine = match (&*state, hosting) {
+                    (EdgeState::Hosting { peer: p }, true) => *p == peer,
+                    (EdgeState::Controlled { peer: p, .. }, false) => *p == peer,
+                    _ => false,
+                };
+                if !still_mine {
+                    return;
+                }
+                *state = EdgeState::Idle;
+            }
             if hosting {
-                announce_ended(&shared, "The other computer disconnected.").await;
+                let why = if silent {
+                    "The other computer stopped answering, so the keyboard and mouse came back."
+                } else {
+                    "The other computer disconnected."
+                };
+                announce_ended(&shared, why).await;
             } else {
                 let _ = tokio::task::spawn_blocking(let_go).await;
             }
@@ -430,6 +469,15 @@ pub(super) async fn after_move(
 /// True while `peer`'s keyboard and mouse drive this computer.
 pub(super) fn controlled_by(shared: &EngineShared, peer: Uuid) -> bool {
     matches!(*shared.edge.lock().unwrap(), EdgeState::Controlled { peer: p, .. } if p == peer)
+}
+
+/// A keepalive came back from `ctx`'s computer: if this one's keyboard drives
+/// it, it is still there.
+pub(super) fn answered(ctx: &InboundCtx) {
+    if matches!(*ctx.shared.edge.lock().unwrap(), EdgeState::Hosting { peer } if peer == ctx.peer_id)
+    {
+        *DRIVEN_HEARD.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+    }
 }
 
 /// Word from `ctx`'s computer: if its keyboard drives this one, a key it holds

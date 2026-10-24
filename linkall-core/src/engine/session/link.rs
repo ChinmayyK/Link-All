@@ -68,6 +68,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             ctx.touch_last_seen();
             // A hand-off's keepalive isn't a round trip to time.
             if timestamp_ms == super::super::edge_ops::KEEPALIVE_STAMP {
+                super::super::edge_ops::answered(ctx);
                 return Flow::Continue;
             }
             // Feed the RTT sample into the peer's quality probe
