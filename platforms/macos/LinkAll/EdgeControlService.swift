@@ -124,6 +124,11 @@ final class EdgeControlService {
     private var sending = false
     private var lastSend = Date.distantPast
     private var lastStatus = Date.distantPast
+    /// Last time the daemon answered during a hand-off. Taking this Mac's own
+    /// keyboard and mouse back must never wait on the daemon or the network:
+    /// a request stuck behind another one never fails, it just never returns.
+    private var lastHeard = Date.distantPast
+    private static let silenceLimit: TimeInterval = 1.5
     private var failures = 0
 
     /// Why the last hand-off ended, for the app to show once.
@@ -189,6 +194,10 @@ final class EdgeControlService {
     /// True to swallow the event.
     private func handle(type: CGEventType, event: CGEvent) -> Bool {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+            // macOS turned the tap off because this app was too slow to answer
+            // it. Mid hand-off the pointer is detached and hidden, so give the
+            // Mac its keyboard and mouse back before watching again.
+            endRemote(tellDaemon: true, note: "Link All was too slow to keep up, so the keyboard and mouse came back.")
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return false
         }
@@ -303,6 +312,7 @@ final class EdgeControlService {
         failures = 0
         sending = false
         lastStatus = Date()
+        lastHeard = Date()
         // The pointer stays where it is while the mouse's deltas keep coming.
         // Disassociating alone does not hold it, and a background app can
         // neither hide it nor keep it from drifting, so it is also put back
@@ -341,8 +351,9 @@ final class EdgeControlService {
             // or this Mac would think it still held.
             if !down, localDown.remove(code) != nil { return false }
             // Ctrl+Option+Esc: the way back that needs nothing from the network.
+            // Handled here, not queued: the tap runs on the main run loop already.
             if down, code == 53, event.flags.contains(.maskControl), event.flags.contains(.maskAlternate) {
-                DispatchQueue.main.async { self.endRemote(tellDaemon: true, note: "You pressed Ctrl+Option+Esc.") }
+                endRemote(tellDaemon: true, note: "You pressed Ctrl+Option+Esc.")
                 return true
             }
             // The other computer repeats a held key itself, at its own rate.
@@ -379,13 +390,17 @@ final class EdgeControlService {
     /// time, so they can't overtake each other), and asks how it is going.
     private func tick() {
         guard mode == .remote else { return }
+        if Date().timeIntervalSince(lastHeard) > Self.silenceLimit {
+            endRemote(tellDaemon: true, note: "Link All lost touch with the other computer, so the keyboard and mouse came back.")
+            return
+        }
         if !sending, !batch.isEmpty {
             let out = batch
             batch = EdgeBatch()
             sending = true
             lastSend = Date()
             Task { @MainActor in
-                do { try await LinkAllIPCClient.shared.edgeInput(out); self.failures = 0 }
+                do { try await LinkAllIPCClient.shared.edgeInput(out); self.failures = 0; self.lastHeard = Date() }
                 catch { self.failures += 1 }
                 self.sending = false
                 if self.failures >= 5, self.mode == .remote {
@@ -406,6 +421,7 @@ final class EdgeControlService {
             lastStatus = Date()
             Task { @MainActor in
                 guard let s = try? await LinkAllIPCClient.shared.edgeStatus(), self.mode == .remote else { return }
+                self.lastHeard = Date()
                 if let pos = s.returnedPos {
                     self.endRemote(tellDaemon: false, note: nil, returnedPos: pos)
                 } else if let why = s.endedReason {
