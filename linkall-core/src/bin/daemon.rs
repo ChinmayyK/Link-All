@@ -759,10 +759,11 @@ async fn handle_request_inner(state: DaemonState, req: IpcRequest) -> Result<Ipc
             scroll_y,
             buttons,
             keys,
+            events,
         } => Ok(
             match state
                 .engine
-                .edge_input_batch(dx, dy, scroll_x, scroll_y, &buttons, &keys)
+                .edge_input_batch(dx, dy, scroll_x, scroll_y, &buttons, &keys, &events)
                 .await
             {
                 Ok(()) => IpcResponse::ok(json!({})),

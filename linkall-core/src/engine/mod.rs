@@ -66,6 +66,7 @@ mod walk_away;
 
 use connection::*;
 pub use drop_folder::drop_folder_path;
+pub use edge_ops::EdgeEvent;
 pub(crate) use file_ops::*;
 pub use folder_ops::{FolderItem, FolderProgress, FolderSend};
 pub use health::HealthIssue;

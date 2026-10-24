@@ -208,6 +208,9 @@ pub enum IpcRequest {
         buttons: Vec<(u8, bool)>,
         #[serde(default)]
         keys: Vec<(u16, bool)>,
+        /// Input in the order it happened, sent after the fields above.
+        #[serde(default)]
+        events: Vec<crate::engine::EdgeEvent>,
     },
     /// End the hand-off and take the keyboard and mouse back.
     EdgeEnd,
@@ -1102,8 +1105,9 @@ pub async fn handle_ipc_request(
             scroll_y,
             buttons,
             keys,
+            events,
         } => match eng
-            .edge_input_batch(dx, dy, scroll_x, scroll_y, &buttons, &keys)
+            .edge_input_batch(dx, dy, scroll_x, scroll_y, &buttons, &keys, &events)
             .await
         {
             Ok(()) => IpcResponse::ok(serde_json::json!({})),

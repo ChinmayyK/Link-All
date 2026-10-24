@@ -61,10 +61,15 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         }
         AppMessage::Ping { timestamp_ms } => {
             ctx.touch_last_seen();
+            super::super::edge_ops::heard(ctx);
             let _ = ctx.outbox_tx.send(AppMessage::Pong { timestamp_ms }).await;
         }
-        AppMessage::Pong { timestamp_ms: _ } => {
+        AppMessage::Pong { timestamp_ms } => {
             ctx.touch_last_seen();
+            // A hand-off's keepalive isn't a round trip to time.
+            if timestamp_ms == super::super::edge_ops::KEEPALIVE_STAMP {
+                return Flow::Continue;
+            }
             // Feed the RTT sample into the peer's quality probe
             // using the Instant captured at send time, which is
             // far more accurate than round-tripping wall-clock ms

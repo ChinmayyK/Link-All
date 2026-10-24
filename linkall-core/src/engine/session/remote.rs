@@ -341,6 +341,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             let (seen_tx, seen_rx) = tokio::sync::oneshot::channel();
             input(ctx, move || {
                 use crate::remote_input::{cursor_position, pointer_move, screen_size};
+                if edge {
+                    crate::remote_input::heard_from_driver();
+                }
                 let before = if edge { cursor_position() } else { None };
                 let moved = pointer_move(dx.into(), dy.into());
                 if edge {
@@ -356,7 +359,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         AppMessage::RemotePointerButton { button, down } => {
             match crate::remote_input::Button::from_wire(button) {
                 Some(button) => {
+                    let first = edge_first(ctx);
                     input(ctx, move || {
+                        super::super::edge_ops::play(&first)?;
                         crate::remote_input::pointer_button(button, down)
                     })
                     .await
@@ -365,7 +370,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
         }
         AppMessage::RemotePointerScroll { dx, dy } => {
+            let first = edge_first(ctx);
             input(ctx, move || {
+                super::super::edge_ops::play(&first)?;
                 crate::remote_input::scroll(dx.into(), dy.into())
             })
             .await;
@@ -381,7 +388,8 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         AppMessage::RemoteKeyEvent { scancode, down } => {
             // Only the computer whose hand-off is running may press keys.
             if super::super::edge_ops::controlled_by(&ctx.shared, ctx.peer_id) {
-                input(ctx, move || crate::remote_input::raw_key(scancode, down)).await;
+                let acts = super::super::edge_ops::key_acts(scancode, down);
+                input(ctx, move || super::super::edge_ops::play(&acts)).await;
             }
         }
         AppMessage::RemoteTypeText { text } => {
@@ -482,6 +490,17 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         _ => unreachable!("dispatch_inbound routed a non-remote message here"),
     }
     Flow::Continue
+}
+
+/// During a hand-off, what has to happen before a click or scroll from the
+/// computer driving this one: its modifiers, put back after a rewritten
+/// shortcut lifted them. Nothing for a phone.
+fn edge_first(ctx: &InboundCtx) -> Vec<crate::edge_keys::Act> {
+    if super::super::edge_ops::controlled_by(&ctx.shared, ctx.peer_id) {
+        super::super::edge_ops::pointer_acts()
+    } else {
+        Vec::new()
+    }
 }
 
 /// Carries out one mouse or keyboard message from a paired phone, if this

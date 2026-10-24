@@ -362,7 +362,10 @@ impl History {
         } else if let Some(parent) = path.parent() {
             // Check for orphaned tmp file from a previous atomic save crash
             if let Ok(dir_entries) = std::fs::read_dir(parent) {
-                let file_stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("history");
+                let file_stem = path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("history");
                 let mut best_tmp = None;
                 for entry in dir_entries.flatten() {
                     let p = entry.path();
@@ -1677,7 +1680,10 @@ mod tests {
 
         assert_eq!(history.entries().len(), 20);
         for entry in history.entries() {
-            if let HistoryPayload::Text { preview, full_text, .. } = &entry.payload {
+            if let HistoryPayload::Text {
+                preview, full_text, ..
+            } = &entry.payload
+            {
                 assert!(!preview.is_empty());
                 if let Some(full) = full_text {
                     assert!(std::str::from_utf8(full.as_bytes()).is_ok());

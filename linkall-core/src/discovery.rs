@@ -114,132 +114,134 @@ mod platform {
             tokio::spawn(async move {
                 loop {
                     match receiver.recv_async().await {
-                        Ok(event) => match event {
-                            ServiceEvent::ServiceResolved(info) => {
-                                // Fix 6: Validate protocol version before connecting.
-                                // Incompatible peers are skipped at mDNS time instead of
-                                // failing expensively at the TCP handshake layer.
-                                let peer_version: Option<u16> =
-                                    info.get_property_val_str("v").and_then(|s| s.parse().ok());
+                        Ok(event) => {
+                            match event {
+                                ServiceEvent::ServiceResolved(info) => {
+                                    // Fix 6: Validate protocol version before connecting.
+                                    // Incompatible peers are skipped at mDNS time instead of
+                                    // failing expensively at the TCP handshake layer.
+                                    let peer_version: Option<u16> =
+                                        info.get_property_val_str("v").and_then(|s| s.parse().ok());
 
-                                match peer_version {
-                                    Some(v) if v == PROTOCOL_VERSION => {} // OK, proceed
-                                    Some(v) => {
-                                        warn!(
-                                            "mDNS: skipping peer with incompatible protocol \
+                                    match peer_version {
+                                        Some(v) if v == PROTOCOL_VERSION => {} // OK, proceed
+                                        Some(v) => {
+                                            warn!(
+                                                "mDNS: skipping peer with incompatible protocol \
                                              v{} (we speak v{})",
-                                            v, PROTOCOL_VERSION
-                                        );
-                                        continue;
-                                    }
-                                    None => {
-                                        warn!(
-                                            "mDNS: resolved service missing 'v' TXT record, \
+                                                v, PROTOCOL_VERSION
+                                            );
+                                            continue;
+                                        }
+                                        None => {
+                                            warn!(
+                                                "mDNS: resolved service missing 'v' TXT record, \
                                              skipping (not a Link All v3+ peer)"
-                                        );
-                                        continue;
-                                    }
-                                }
-
-                                // Parse device_id from TXT record.
-                                let peer_id = info
-                                    .get_property_val_str("id")
-                                    .and_then(|s| Uuid::parse_str(s).ok());
-
-                                let Some(peer_id) = peer_id else {
-                                    warn!(
-                                        "mDNS: resolved service missing 'id' TXT record, skipping"
-                                    );
-                                    continue;
-                                };
-
-                                // Skip our own advertisement.
-                                if peer_id == my_id {
-                                    continue;
-                                }
-
-                                // Use the service instance name as a provisional display name
-                                // when it contains a sanitized device label. The encrypted
-                                // handshake still upgrades this to the canonical friendly name.
-                                let device_name =
-                                    provisional_device_name(info.get_fullname(), peer_id);
-
-                                // Extract all available IPs (IPv4 and IPv6).
-                                let mut addrs: Vec<IpAddr> =
-                                    info.get_addresses().iter().copied().collect();
-
-                                // Best-effort: sort so IPv4 comes first, since it is less likely
-                                // to fail due to missing link-local scope IDs.
-                                addrs.sort_by_key(|a| if a.is_ipv4() { 0 } else { 1 });
-
-                                if addrs.is_empty() {
-                                    warn!("mDNS: service {} has no usable addresses", peer_id);
-                                    continue;
-                                }
-
-                                let port = info.get_port();
-                                if port == 0 {
-                                    warn!("mDNS: resolved service {} has invalid port 0, skipping", peer_id);
-                                    continue;
-                                }
-                                info!(
-                                    "mDNS: found peer {} at {:?}:{} (name resolved after handshake)",
-                                    peer_id, addrs, port
-                                );
-                                // Dedup guard: skip re-emitting Found for a device UUID
-                                // that is already resolved at the same address+port.
-                                // This prevents redundant connect attempts when mDNS
-                                // re-announces the same peer after a network change.
-                                {
-                                    let mut map =
-                                        resolved.lock().unwrap_or_else(|e| e.into_inner());
-                                    let fullname = info.get_fullname().to_string();
-                                    if let Some(&existing_id) = map.get(&fullname) {
-                                        if existing_id == peer_id {
-                                            debug!(
-                                                "mDNS: skipping duplicate Found for peer {} \
-                                                 (already resolved at same service name)",
-                                                peer_id
                                             );
                                             continue;
                                         }
                                     }
-                                    map.insert(fullname, peer_id);
-                                }
 
-                                let peer = PeerInfo {
-                                    device_id: peer_id,
-                                    device_name,
-                                    addrs,
-                                    port,
-                                };
+                                    // Parse device_id from TXT record.
+                                    let peer_id = info
+                                        .get_property_val_str("id")
+                                        .and_then(|s| Uuid::parse_str(s).ok());
 
-                                if tx.send(PeerEvent::Found(peer)).await.is_err() {
-                                    break; // channel closed
-                                }
-                            }
+                                    let Some(peer_id) = peer_id else {
+                                        warn!(
+                                        "mDNS: resolved service missing 'id' TXT record, skipping"
+                                    );
+                                        continue;
+                                    };
 
-                            ServiceEvent::ServiceRemoved(_, fullname) => {
-                                debug!("mDNS: service removed: {}", fullname);
-                                let removed = {
-                                    resolved
-                                        .lock()
-                                        .unwrap_or_else(|e| e.into_inner())
-                                        .remove(&fullname)
-                                };
-                                if let Some(peer_id) = removed {
-                                    if tx.send(PeerEvent::Lost(peer_id)).await.is_err() {
-                                        break;
+                                    // Skip our own advertisement.
+                                    if peer_id == my_id {
+                                        continue;
+                                    }
+
+                                    // Use the service instance name as a provisional display name
+                                    // when it contains a sanitized device label. The encrypted
+                                    // handshake still upgrades this to the canonical friendly name.
+                                    let device_name =
+                                        provisional_device_name(info.get_fullname(), peer_id);
+
+                                    // Extract all available IPs (IPv4 and IPv6).
+                                    let mut addrs: Vec<IpAddr> =
+                                        info.get_addresses().iter().copied().collect();
+
+                                    // Best-effort: sort so IPv4 comes first, since it is less likely
+                                    // to fail due to missing link-local scope IDs.
+                                    addrs.sort_by_key(|a| if a.is_ipv4() { 0 } else { 1 });
+
+                                    if addrs.is_empty() {
+                                        warn!("mDNS: service {} has no usable addresses", peer_id);
+                                        continue;
+                                    }
+
+                                    let port = info.get_port();
+                                    if port == 0 {
+                                        warn!("mDNS: resolved service {} has invalid port 0, skipping", peer_id);
+                                        continue;
+                                    }
+                                    info!(
+                                    "mDNS: found peer {} at {:?}:{} (name resolved after handshake)",
+                                    peer_id, addrs, port
+                                );
+                                    // Dedup guard: skip re-emitting Found for a device UUID
+                                    // that is already resolved at the same address+port.
+                                    // This prevents redundant connect attempts when mDNS
+                                    // re-announces the same peer after a network change.
+                                    {
+                                        let mut map =
+                                            resolved.lock().unwrap_or_else(|e| e.into_inner());
+                                        let fullname = info.get_fullname().to_string();
+                                        if let Some(&existing_id) = map.get(&fullname) {
+                                            if existing_id == peer_id {
+                                                debug!(
+                                                    "mDNS: skipping duplicate Found for peer {} \
+                                                 (already resolved at same service name)",
+                                                    peer_id
+                                                );
+                                                continue;
+                                            }
+                                        }
+                                        map.insert(fullname, peer_id);
+                                    }
+
+                                    let peer = PeerInfo {
+                                        device_id: peer_id,
+                                        device_name,
+                                        addrs,
+                                        port,
+                                    };
+
+                                    if tx.send(PeerEvent::Found(peer)).await.is_err() {
+                                        break; // channel closed
                                     }
                                 }
-                            }
 
-                            ServiceEvent::SearchStarted(_) => {
-                                debug!("mDNS: search started");
-                            }
+                                ServiceEvent::ServiceRemoved(_, fullname) => {
+                                    debug!("mDNS: service removed: {}", fullname);
+                                    let removed = {
+                                        resolved
+                                            .lock()
+                                            .unwrap_or_else(|e| e.into_inner())
+                                            .remove(&fullname)
+                                    };
+                                    if let Some(peer_id) = removed {
+                                        if tx.send(PeerEvent::Lost(peer_id)).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
 
-                            _ => {}
-                        },
+                                ServiceEvent::SearchStarted(_) => {
+                                    debug!("mDNS: search started");
+                                }
+
+                                _ => {}
+                            }
+                        }
                         Err(_) => {
                             warn!("mDNS browse channel closed");
                             break;
