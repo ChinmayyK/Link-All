@@ -661,19 +661,203 @@ pub fn set_cursor_position(x: i32, y: i32) -> Result<(), String> {
 }
 
 /// Presses or releases the key with this scan code (PS/2 set 1, with 0xE000
-/// added for an extended key), as the sender's keyboard reported it.
+/// added for an extended key), as the sender's keyboard reported it. Where a
+/// held key repeats here, a press of a key already held is the sender
+/// repeating it, and only says the sender is still there.
 pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
-    {
+    // Held across the key itself, so a repeat can't land after its release.
+    let mut repeat = repeat_state();
+    let again = {
         let mut held = HELD_RAW.lock().unwrap();
+        let again = held.keys.contains(&scancode);
         held.keys.retain(|k| *k != scancode);
         if down {
             held.keys.push(scancode);
         }
+        again
+    };
+    if REPEATS_HERE {
+        let now = Instant::now();
+        repeat.heard = now;
+        if down && again {
+            REPEAT_WAKE.notify_one();
+            return Ok(());
+        }
+        if down && repeats(scancode) {
+            repeat.press(scancode, now, repeat_timing());
+            start_repeating();
+        } else if !down {
+            repeat.release(scancode);
+        }
+        REPEAT_WAKE.notify_one();
     }
+    key_now(scancode, down, false)
+}
+
+fn key_now(scancode: u16, down: bool, repeated: bool) -> Result<(), String> {
     if let Some(b) = testing::backend() {
         return b.key(scancode, down);
     }
-    edge_imp::raw_key(scancode, down)
+    if repeated {
+        edge_imp::repeat_key(scancode)
+    } else {
+        edge_imp::raw_key(scancode, down)
+    }
+}
+
+/// The computer whose keyboard drives this one is still there (it sends
+/// something at least every 50 ms through a hand-off).
+pub fn heard_from_driver() {
+    if REPEATS_HERE {
+        repeat_state().heard = Instant::now();
+        REPEAT_WAKE.notify_one();
+    }
+}
+
+// ── A held key repeats here ─────────────────────────────────────────────────
+
+/// Windows and macOS don't repeat a key that injected input holds down, so a
+/// held key repeats here, at this computer's own delay and rate, as its own
+/// keyboard would. On Linux the display server repeats it.
+const REPEATS_HERE: bool = cfg!(any(windows, target_os = "macos"));
+
+/// How long a held key goes on repeating with no word from the computer that
+/// holds it. A silence this long is a stalled link, and the key's release may
+/// be stuck in it: repeating on would keep typing after the key came up.
+const REPEAT_SILENCE: Duration = Duration::from_millis(250);
+
+#[derive(Debug)]
+struct Repeat {
+    key: Option<u16>,
+    next: Instant,
+    interval: Duration,
+    /// The last word from the computer holding the keys.
+    heard: Instant,
+}
+
+impl Repeat {
+    fn new(now: Instant) -> Repeat {
+        Repeat {
+            key: None,
+            next: now,
+            interval: Duration::ZERO,
+            heard: now,
+        }
+    }
+
+    /// `key` went down at `now`: it repeats after `delay`, every `interval`,
+    /// in place of any key repeating before (as a keyboard does).
+    fn press(&mut self, key: u16, now: Instant, (delay, interval): (Duration, Duration)) {
+        self.key = Some(key);
+        self.next = now + delay;
+        self.interval = interval;
+    }
+
+    fn release(&mut self, key: u16) {
+        if self.key == Some(key) {
+            self.key = None;
+        }
+    }
+
+    /// The key to repeat now, or else how long until one may be (None: not
+    /// until something changes).
+    fn due(&mut self, now: Instant) -> Result<u16, Option<Duration>> {
+        let key = self.key.ok_or(None)?;
+        if now < self.next {
+            return Err(Some(self.next - now));
+        }
+        if now.duration_since(self.heard) > REPEAT_SILENCE {
+            return Err(None);
+        }
+        // After a pause, carry on from now rather than catch up in a burst.
+        self.next = (self.next + self.interval).max(now + self.interval / 2);
+        Ok(key)
+    }
+}
+
+static REPEAT: std::sync::OnceLock<Mutex<Repeat>> = std::sync::OnceLock::new();
+static REPEAT_WAKE: std::sync::Condvar = std::sync::Condvar::new();
+
+fn repeat_state() -> std::sync::MutexGuard<'static, Repeat> {
+    REPEAT
+        .get_or_init(|| Mutex::new(Repeat::new(Instant::now())))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+}
+
+/// Modifiers and lock keys don't repeat.
+fn repeats(scancode: u16) -> bool {
+    !matches!(
+        scancode,
+        0x1D | 0xE01D | 0x2A | 0x36 | 0x38 | 0xE038 | 0xE05B | 0xE05C | 0x3A | 0x45 | 0x46
+    )
+}
+
+fn start_repeating() {
+    static STARTED: std::sync::Once = std::sync::Once::new();
+    STARTED.call_once(|| {
+        let _ = std::thread::Builder::new()
+            .name("linkall-key-repeat".into())
+            .spawn(|| {
+                let mut state = repeat_state();
+                loop {
+                    state = match state.due(Instant::now()) {
+                        // Pressed while holding the state, like raw_key does.
+                        Ok(key) => {
+                            let _ = key_now(key, true, true);
+                            state
+                        }
+                        Err(Some(wait)) => {
+                            REPEAT_WAKE
+                                .wait_timeout(state, wait)
+                                .unwrap_or_else(|e| e.into_inner())
+                                .0
+                        }
+                        Err(None) => REPEAT_WAKE.wait(state).unwrap_or_else(|e| e.into_inner()),
+                    };
+                }
+            });
+    });
+}
+
+/// This computer's own delay before a held key repeats, and between repeats.
+#[cfg(windows)]
+fn repeat_timing() -> (Duration, Duration) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETKEYBOARDDELAY, SPI_GETKEYBOARDSPEED,
+    };
+    let (mut delay, mut speed) = (1u32, 31u32);
+    unsafe {
+        SystemParametersInfoW(SPI_GETKEYBOARDDELAY, 0, (&mut delay as *mut u32).cast(), 0);
+        SystemParametersInfoW(SPI_GETKEYBOARDSPEED, 0, (&mut speed as *mut u32).cast(), 0);
+    }
+    // 0..=3 is 250 ms to 1 s; 0..=31 is about 2.5 to 30 repeats a second.
+    let per_second = 2.5 + f64::from(speed.min(31)) * 27.5 / 31.0;
+    (
+        Duration::from_millis(250 * (u64::from(delay.min(3)) + 1)),
+        Duration::from_secs_f64(1.0 / per_second),
+    )
+}
+
+/// This computer's own delay before a held key repeats, and between repeats.
+#[cfg(target_os = "macos")]
+fn repeat_timing() -> (Duration, Duration) {
+    // System Settings keeps both in units of 15 ms; unset, the system uses
+    // half a second and a twelfth of one.
+    let ticks = |name: &str| edge_imp::global_number(name).filter(|v| *v > 0.0);
+    (
+        ticks("InitialKeyRepeat").map_or(Duration::from_millis(500), |v| {
+            Duration::from_secs_f64(v * 0.015)
+        }),
+        ticks("KeyRepeat").map_or(Duration::from_millis(83), |v| {
+            Duration::from_secs_f64(v * 0.015)
+        }),
+    )
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+fn repeat_timing() -> (Duration, Duration) {
+    (Duration::from_millis(500), Duration::from_millis(33))
 }
 
 /// Remembers which buttons a hand-off holds. Called for every button change.
@@ -687,6 +871,11 @@ fn note_button(button: Button, down: bool) {
 
 /// Lets go of every key, modifier and button still held.
 pub fn release_all() {
+    let _repeat = {
+        let mut repeat = repeat_state();
+        repeat.key = None;
+        repeat
+    };
     let (keys, buttons) = {
         let mut held = HELD_RAW.lock().unwrap();
         (
@@ -774,6 +963,12 @@ mod edge_imp {
         } else {
             Err("Windows didn't accept the key".to_string())
         }
+    }
+
+    /// A held key repeating: another press, which Windows marks as a repeat
+    /// because the key is already down.
+    pub fn repeat_key(scancode: u16) -> Result<(), String> {
+        raw_key(scancode, true)
     }
 }
 
@@ -979,6 +1174,16 @@ mod edge_imp {
     #[link(name = "CoreFoundation", kind = "framework")]
     extern "C" {
         fn CFRelease(obj: *const c_void);
+        fn CFStringCreateWithCString(
+            alloc: *const c_void,
+            text: *const std::ffi::c_char,
+            encoding: u32,
+        ) -> *const c_void;
+        fn CFPreferencesCopyAppValue(key: *const c_void, app: *const c_void) -> *const c_void;
+        fn CFGetTypeID(obj: *const c_void) -> usize;
+        fn CFNumberGetTypeID() -> usize;
+        fn CFNumberGetValue(number: *const c_void, kind: isize, out: *mut c_void) -> bool;
+        static kCFPreferencesAnyApplication: *const c_void;
     }
 
     #[link(name = "CoreGraphics", kind = "framework")]
@@ -990,8 +1195,34 @@ mod edge_imp {
         fn CGWarpMouseCursorPosition(to: CGPoint) -> i32;
         fn CGAssociateMouseAndMouseCursorPosition(connected: bool) -> i32;
         fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> *mut c_void;
+        fn CGEventSetIntegerValueField(event: *mut c_void, field: u32, value: i64);
         fn CGEventSetFlags(event: *mut c_void, flags: u64);
         fn CGEventPost(tap: u32, event: *mut c_void);
+    }
+
+    const KEYBOARD_EVENT_AUTOREPEAT: u32 = 8;
+
+    /// A number from the user's global preferences (`defaults read -g name`).
+    pub fn global_number(name: &str) -> Option<f64> {
+        const UTF8: u32 = 0x0800_0100;
+        const DOUBLE: isize = 13;
+        let name = std::ffi::CString::new(name).ok()?;
+        unsafe {
+            let key = CFStringCreateWithCString(std::ptr::null(), name.as_ptr(), UTF8);
+            if key.is_null() {
+                return None;
+            }
+            let value = CFPreferencesCopyAppValue(key, kCFPreferencesAnyApplication);
+            CFRelease(key);
+            if value.is_null() {
+                return None;
+            }
+            let mut out = 0f64;
+            let ok = CFGetTypeID(value) == CFNumberGetTypeID()
+                && CFNumberGetValue(value, DOUBLE, (&mut out as *mut f64).cast());
+            CFRelease(value);
+            ok.then_some(out)
+        }
     }
 
     /// Shared with `imp`, so a modifier held through the hand-off also
@@ -1045,10 +1276,24 @@ mod edge_imp {
                 FLAGS.fetch_and(!flag, Ordering::Relaxed);
             }
         }
+        post_key(keycode, down, false)
+    }
+
+    /// A held key repeating, marked as a repeat for the apps that tell.
+    pub fn repeat_key(scancode: u16) -> Result<(), String> {
+        let keycode = super::scancode_to_mac(scancode)
+            .ok_or_else(|| "that key has no Mac equivalent".to_string())?;
+        post_key(keycode, true, true)
+    }
+
+    fn post_key(keycode: u16, down: bool, repeated: bool) -> Result<(), String> {
         unsafe {
             let event = CGEventCreateKeyboardEvent(std::ptr::null(), keycode, down);
             if event.is_null() {
                 return Err("macOS didn't create the key event".to_string());
+            }
+            if repeated {
+                CGEventSetIntegerValueField(event, KEYBOARD_EVENT_AUTOREPEAT, 1);
             }
             CGEventSetFlags(event, FLAGS.load(Ordering::Relaxed));
             CGEventPost(0, event);
@@ -1138,6 +1383,10 @@ mod edge_imp {
             .ok_or_else(|| "that key has no Linux equivalent".to_string())?;
         super::imp::evdev_key(code, down)
     }
+
+    pub fn repeat_key(scancode: u16) -> Result<(), String> {
+        raw_key(scancode, true)
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -1154,6 +1403,9 @@ mod edge_imp {
         Err(NO.into())
     }
     pub fn raw_key(_: u16, _: bool) -> Result<(), String> {
+        Err(NO.into())
+    }
+    pub fn repeat_key(_: u16) -> Result<(), String> {
         Err(NO.into())
     }
 }
@@ -1188,10 +1440,14 @@ mod imp {
             at: CGPoint,
             button: u32,
         ) -> *mut c_void;
+        // The first wheel is a named argument and only the rest are variadic.
+        // On Apple silicon the two are passed in different places, so
+        // declaring it variadic lost the vertical amount.
         fn CGEventCreateScrollWheelEvent(
             source: *const c_void,
             units: u32,
             wheel_count: u32,
+            wheel1: i32,
             ...
         ) -> *mut c_void;
         fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> *mut c_void;
@@ -2031,6 +2287,46 @@ mod tests {
 #[cfg(test)]
 mod edge_tests {
     use super::*;
+
+    #[test]
+    fn a_held_key_repeats_after_the_delay_at_the_rate() {
+        let t0 = Instant::now();
+        let ms = Duration::from_millis;
+        let mut r = Repeat::new(t0);
+        r.press(0x0E, t0, (ms(500), ms(30)));
+        assert_eq!(r.due(t0 + ms(100)), Err(Some(ms(400))));
+        r.heard = t0 + ms(450);
+        assert_eq!(r.due(t0 + ms(500)), Ok(0x0E));
+        assert_eq!(r.due(t0 + ms(510)), Err(Some(ms(20))));
+        assert_eq!(r.due(t0 + ms(530)), Ok(0x0E));
+        r.release(0x0E);
+        assert_eq!(r.due(t0 + ms(560)), Err(None));
+    }
+
+    #[test]
+    fn a_held_key_stops_repeating_when_the_sender_goes_quiet() {
+        let t0 = Instant::now();
+        let ms = Duration::from_millis;
+        let mut r = Repeat::new(t0);
+        r.press(0x1E, t0, (ms(300), ms(30)));
+        // Nothing heard since the press: the release may be stuck on the way.
+        assert_eq!(r.due(t0 + ms(400)), Err(None));
+        // Word arrives: it carries on from now, without a burst to catch up.
+        r.heard = t0 + ms(800);
+        assert_eq!(r.due(t0 + ms(800)), Ok(0x1E));
+        assert_eq!(r.due(t0 + ms(801)), Err(Some(ms(14))));
+    }
+
+    #[test]
+    fn modifiers_and_locks_do_not_repeat() {
+        for key in [
+            0x1D, 0xE01D, 0x2A, 0x36, 0x38, 0xE038, 0xE05B, 0xE05C, 0x3A, 0x45,
+        ] {
+            assert!(!repeats(key), "{key:#x}");
+        }
+        assert!(repeats(0x0E));
+        assert!(repeats(0xE04B));
+    }
 
     #[test]
     fn edge_wire_round_trips_and_opposites() {

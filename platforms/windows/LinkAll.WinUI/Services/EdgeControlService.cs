@@ -37,6 +37,10 @@ namespace LinkAll.WinUI.Services
         private const long CooldownMs = 800;
         // How long to wait for the event saying why the engine ended a hand-off.
         private const long OverWaitMs = 1000;
+        // While the other computer is asked to take over, clicks and keys are
+        // held for it until then, for at most this long; after that they are
+        // this PC's again.
+        private const long HoldWhileStartingMs = 500;
 
         private int _mode;
         private readonly string?[] _links = new string?[4];
@@ -58,6 +62,10 @@ namespace LinkAll.WinUI.Services
         private uint _hookThreadId;
         private volatile bool _stop;
         private bool _ctrl, _alt;
+        private long _holdUntil;
+        // Keys that went down on this PC before a hand-off, by virtual key:
+        // their releases stay here too, or Windows would think them held.
+        private readonly bool[] _localDown = new bool[256];
 
         private readonly record struct Op(OpKind Kind, int A, bool Down);
         private enum OpKind { Button, Key }
@@ -99,10 +107,12 @@ namespace LinkAll.WinUI.Services
             if (_hookThread != null) return;
             _stop = false;
             var ready = new ManualResetEventSlim(false);
-            _hookThread = new Thread(() => HookMain(ready)) { IsBackground = true, Name = "LinkAll edge hooks" };
+            // Every key and mouse move on the PC waits for the hook thread, and
+            // a hand-off's input for the sender: neither may queue behind the UI.
+            _hookThread = new Thread(() => HookMain(ready)) { IsBackground = true, Name = "LinkAll edge hooks", Priority = ThreadPriority.Highest };
             _hookThread.Start();
             ready.Wait(2000);
-            _senderThread = new Thread(SenderMain) { IsBackground = true, Name = "LinkAll edge sender" };
+            _senderThread = new Thread(SenderMain) { IsBackground = true, Name = "LinkAll edge sender", Priority = ThreadPriority.Highest };
             _senderThread.Start();
         }
 
@@ -185,7 +195,12 @@ namespace LinkAll.WinUI.Services
                 if (message == WM_MOUSEMOVE) CheckEdges(ms.x, ms.y);
                 return false;
             }
-            if (mode == Mode.Starting) return false;
+            if (mode == Mode.Starting)
+            {
+                if (Environment.TickCount64 >= Volatile.Read(ref _holdUntil)) return false;
+                // The pointer waits at the edge; clicks and the wheel are kept.
+                if (message == WM_MOUSEMOVE) return true;
+            }
 
             switch (message)
             {
@@ -228,7 +243,17 @@ namespace LinkAll.WinUI.Services
                 case 0x11: case 0xA2: case 0xA3: _ctrl = down; break;
                 case 0x12: case 0xA4: case 0xA5: _alt = down; break;
             }
-            if ((Mode)Volatile.Read(ref _mode) != Mode.Remote) return false;
+            var mode = (Mode)Volatile.Read(ref _mode);
+            if (mode == Mode.Idle || (mode == Mode.Starting && Environment.TickCount64 >= Volatile.Read(ref _holdUntil)))
+            {
+                _localDown[kb.vkCode & 0xFF] = down;
+                return false;
+            }
+            if (!down && _localDown[kb.vkCode & 0xFF])
+            {
+                _localDown[kb.vkCode & 0xFF] = false;
+                return false;
+            }
 
             // The way back that never depends on the other computer or the network.
             if (kb.vkCode == 0x1B && down && _ctrl && _alt)
@@ -280,6 +305,10 @@ namespace LinkAll.WinUI.Services
 
         private void Begin(int edge, int pos)
         {
+            while (_ops.TryDequeue(out _)) { }
+            Interlocked.Exchange(ref _wheelX, 0);
+            Interlocked.Exchange(ref _wheelY, 0);
+            Volatile.Write(ref _holdUntil, Environment.TickCount64 + HoldWhileStartingMs);
             if (Interlocked.CompareExchange(ref _mode, (int)Mode.Starting, (int)Mode.Idle) != (int)Mode.Idle) return;
             var id = _links[edge];
             var handle = App.EngineHandle;
@@ -312,12 +341,17 @@ namespace LinkAll.WinUI.Services
                     _centerY = GetSystemMetrics(SM_CYSCREEN) / 2;
                     Interlocked.Exchange(ref _dx, 0);
                     Interlocked.Exchange(ref _dy, 0);
-                    Interlocked.Exchange(ref _wheelX, 0);
-                    Interlocked.Exchange(ref _wheelY, 0);
                     _wheelResidualX = _wheelResidualY = 0;
                     _failures = 0;
                     _overSince = 0;
-                    while (_ops.TryDequeue(out _)) { }
+                    // What was held while starting goes first, unless the
+                    // answer took so long that this PC had its input back.
+                    if (Environment.TickCount64 >= Volatile.Read(ref _holdUntil))
+                    {
+                        while (_ops.TryDequeue(out _)) { }
+                        Interlocked.Exchange(ref _wheelX, 0);
+                        Interlocked.Exchange(ref _wheelY, 0);
+                    }
                     SetCursorPos(_centerX, _centerY);
                     if (Interlocked.CompareExchange(ref _mode, (int)Mode.Remote, (int)Mode.Starting) != (int)Mode.Starting)
                     {

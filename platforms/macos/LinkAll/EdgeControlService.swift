@@ -23,13 +23,7 @@ extension LinkAllIPCClient {
     }
 
     func edgeInput(_ batch: EdgeBatch) async throws {
-        let raw = try await send(cmd: [
-            "cmd": "edge_input",
-            "dx": batch.dx, "dy": batch.dy,
-            "scroll_x": batch.scrollX, "scroll_y": batch.scrollY,
-            "buttons": batch.buttons.map { [$0.0, $0.1] as [Any] },
-            "keys": batch.keys.map { [$0.0, $0.1] as [Any] },
-        ])
+        let raw = try await send(cmd: ["cmd": "edge_input", "events": batch.wire])
         try Self.throwIfError(raw)
     }
 
@@ -53,12 +47,40 @@ extension LinkAllIPCClient {
     }
 }
 
-/// Input gathered since the last send, in the order it happened.
+/// Input gathered since the last send, in the order it happened. Moves and
+/// scrolls in a row add up; a click or key keeps its place between them, so
+/// Cmd+click is still Cmd+click and a click lands where the pointer was.
 struct EdgeBatch {
-    var dx = 0, dy = 0, scrollX = 0, scrollY = 0
-    var buttons: [(Int, Bool)] = []
-    var keys: [(Int, Bool)] = []
-    var isEmpty: Bool { dx == 0 && dy == 0 && scrollX == 0 && scrollY == 0 && buttons.isEmpty && keys.isEmpty }
+    enum Event {
+        case move(Int, Int), scroll(Int, Int), button(Int, Bool), key(Int, Bool)
+    }
+    private(set) var events: [Event] = []
+    var isEmpty: Bool { events.isEmpty }
+
+    mutating func move(_ dx: Int, _ dy: Int) {
+        if case .move(let x, let y)? = events.last { events[events.count - 1] = .move(x + dx, y + dy) }
+        else { events.append(.move(dx, dy)) }
+    }
+
+    mutating func scroll(_ dx: Int, _ dy: Int) {
+        if case .scroll(let x, let y)? = events.last { events[events.count - 1] = .scroll(x + dx, y + dy) }
+        else { events.append(.scroll(dx, dy)) }
+    }
+
+    mutating func button(_ n: Int, _ down: Bool) { events.append(.button(n, down)) }
+    mutating func key(_ sc: Int, _ down: Bool) { events.append(.key(sc, down)) }
+
+    /// As the daemon reads it: `{"move": [dx, dy]}`, `{"key": [code, down]}`, ...
+    var wire: [[String: Any]] {
+        events.map {
+            switch $0 {
+            case .move(let x, let y): return ["move": [x, y]]
+            case .scroll(let x, let y): return ["scroll": [x, y]]
+            case .button(let n, let d): return ["button": [n, d] as [Any]]
+            case .key(let k, let d): return ["key": [k, d] as [Any]]
+            }
+        }
+    }
 }
 
 // ── The service ───────────────────────────────────────────────────────────────
@@ -88,6 +110,15 @@ final class EdgeControlService {
     private var lastEdge = 1
     /// Where this Mac's pointer is held while the other computer is driven.
     private var pinned = CGPoint.zero
+
+    /// While the other computer is asked to take over, input is held for it
+    /// until then, for at most this long; after that it is this Mac's again.
+    private static let holdWhileStarting: TimeInterval = 0.5
+    private var holdUntil = Date.distantPast
+    /// Keys pressed on this Mac before a hand-off: their releases stay here.
+    private var localDown = Set<Int>()
+    /// Keeps App Nap and timer coalescing off this app while a hand-off runs.
+    private var activity: NSObjectProtocol?
 
     private var batch = EdgeBatch()
     private var sending = false
@@ -145,11 +176,10 @@ final class EdgeControlService {
         runLoopSource = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
         CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         CGEvent.tapEnable(tap: tap, enable: true)
-        timer = Timer.scheduledTimer(withTimeInterval: 0.008, repeats: true) { [weak self] _ in self?.tick() }
     }
 
     private func removeTap() {
-        timer?.invalidate(); timer = nil
+        stayAwake(false)
         if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
         if let runLoopSource { CFRunLoopRemoveSource(CFRunLoopGetMain(), runLoopSource, .commonModes) }
         runLoopSource = nil
@@ -164,13 +194,44 @@ final class EdgeControlService {
         }
         switch mode {
         case .idle:
+            noteLocal(type: type, event: event)
             if type == .mouseMoved { checkEdges(event.location) }
             return false
         case .starting:
-            return false
+            // Held for the other computer, so the first moves and keys
+            // after the push aren't lost while it answers.
+            guard Date() < holdUntil else { noteLocal(type: type, event: event); return false }
+            return capture(type: type, event: event)
         case .remote:
-            capture(type: type, event: event)
-            return true
+            return capture(type: type, event: event)
+        }
+    }
+
+    private func noteLocal(type: CGEventType, event: CGEvent) {
+        guard type == .keyDown || type == .keyUp else { return }
+        let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
+        if type == .keyDown { localDown.insert(code) } else { localDown.remove(code) }
+    }
+
+    /// While a hand-off starts or runs: a timer to send what gathers, and no
+    /// App Nap or timer coalescing to slow it.
+    private func stayAwake(_ on: Bool) {
+        if on {
+            if activity == nil {
+                activity = ProcessInfo.processInfo.beginActivity(
+                    options: [.userInitiated, .latencyCritical],
+                    reason: "Sharing the keyboard and mouse")
+            }
+            if timer == nil {
+                let t = Timer(timeInterval: 0.004, repeats: true) { [weak self] _ in self?.tick() }
+                t.tolerance = 0
+                RunLoop.main.add(t, forMode: .common)
+                timer = t
+            }
+        } else {
+            timer?.invalidate(); timer = nil
+            if let activity { ProcessInfo.processInfo.endActivity(activity) }
+            activity = nil
         }
     }
 
@@ -206,6 +267,10 @@ final class EdgeControlService {
     private func begin(edge: Int, pos: Int) {
         guard let target = link(edge), mode == .idle else { return }
         mode = .starting
+        batch = EdgeBatch()
+        pinned = Self.cursorLocation()
+        holdUntil = Date().addingTimeInterval(Self.holdWhileStarting)
+        stayAwake(true)
         Task { @MainActor in
             do {
                 try await LinkAllIPCClient.shared.edgeBegin(target: target, edge: edge, pos: pos)
@@ -213,7 +278,7 @@ final class EdgeControlService {
                 // while the other computer answered: with no tap there would
                 // be no way to bring the hidden pointer back.
                 guard self.mode == .starting, self.tap != nil, self.link(edge) == target else {
-                    if self.mode == .starting { self.mode = .idle }
+                    if self.mode == .starting { self.mode = .idle; self.stayAwake(false) }
                     try? await LinkAllIPCClient.shared.edgeEnd()
                     return
                 }
@@ -221,6 +286,8 @@ final class EdgeControlService {
             } catch {
                 self.cooldownUntil = Date().addingTimeInterval(3)
                 self.mode = .idle
+                self.batch = EdgeBatch()
+                self.stayAwake(false)
                 // A retried request can fail while the first one went through;
                 // ending is a no-op when nothing was started.
                 try? await LinkAllIPCClient.shared.edgeEnd()
@@ -230,7 +297,9 @@ final class EdgeControlService {
 
     private func startRemote(edge: Int) {
         lastEdge = edge
-        batch = EdgeBatch()
+        // What was held while starting goes first, unless the answer took so
+        // long that this Mac had its input back in the meantime.
+        if Date() >= holdUntil { batch = EdgeBatch() }
         failures = 0
         sending = false
         lastStatus = Date()
@@ -247,64 +316,70 @@ final class EdgeControlService {
 
     // ── While the other computer is driven ───────────────────────────────────
 
-    private func capture(type: CGEventType, event: CGEvent) {
+    /// Gathers one event for the other computer. True to swallow it.
+    private func capture(type: CGEventType, event: CGEvent) -> Bool {
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
-            batch.dx += Int(event.getIntegerValueField(.mouseEventDeltaX))
-            batch.dy += Int(event.getIntegerValueField(.mouseEventDeltaY))
+            batch.move(Int(event.getIntegerValueField(.mouseEventDeltaX)),
+                       Int(event.getIntegerValueField(.mouseEventDeltaY)))
             CGWarpMouseCursorPosition(pinned)
-        case .leftMouseDown: batch.buttons.append((0, true))
-        case .leftMouseUp: batch.buttons.append((0, false))
-        case .rightMouseDown: batch.buttons.append((1, true))
-        case .rightMouseUp: batch.buttons.append((1, false))
+        case .leftMouseDown: batch.button(0, true)
+        case .leftMouseUp: batch.button(0, false)
+        case .rightMouseDown: batch.button(1, true)
+        case .rightMouseUp: batch.button(1, false)
         case .otherMouseDown, .otherMouseUp:
             // 2 is the middle button, 3 and 4 the side ones, as on the wire.
             let n = Int(event.getIntegerValueField(.mouseEventButtonNumber))
-            batch.buttons.append((min(max(n, 2), 4), type == .otherMouseDown))
+            batch.button(min(max(n, 2), 4), type == .otherMouseDown)
         case .scrollWheel:
-            batch.scrollY += Int(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1))
-            batch.scrollX -= Int(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2))
+            batch.scroll(-Int(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis2)),
+                         Int(event.getIntegerValueField(.scrollWheelEventPointDeltaAxis1)))
         case .keyDown, .keyUp:
             let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
             let down = type == .keyDown
+            // A key that went down here before the hand-off comes up here too,
+            // or this Mac would think it still held.
+            if !down, localDown.remove(code) != nil { return false }
             // Ctrl+Option+Esc: the way back that needs nothing from the network.
             if down, code == 53, event.flags.contains(.maskControl), event.flags.contains(.maskAlternate) {
                 DispatchQueue.main.async { self.endRemote(tellDaemon: true, note: "You pressed Ctrl+Option+Esc.") }
-                return
+                return true
             }
-            // The other computer repeats a held key on its own.
-            if down, event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return }
-            if let sc = Self.scancode(forMacKey: code) { batch.keys.append((sc, down)) }
+            // The other computer repeats a held key itself, at its own rate.
+            if down, event.getIntegerValueField(.keyboardEventAutorepeat) != 0 { return true }
+            if let sc = Self.scancode(forMacKey: code) { batch.key(sc, down) }
         case .flagsChanged:
             let code = Int(event.getIntegerValueField(.keyboardEventKeycode))
-            guard let sc = Self.scancode(forMacKey: code) else { return }
+            guard let sc = Self.scancode(forMacKey: code) else { return true }
             // Caps Lock reports each press once, as a lock change: send a tap.
             if code == 57 {
-                batch.keys.append((sc, true))
-                batch.keys.append((sc, false))
-                return
+                batch.key(sc, true)
+                batch.key(sc, false)
+                return true
             }
             // Left and right share a flag, so read the key's own device bit:
             // it says whether this key is down now, even if it was already
             // held when the hand-off began.
             guard let bit = Self.deviceFlag(forMacKey: code),
-                  let flag = Self.modifierFlag(forMacKey: code) else { return }
+                  let flag = Self.modifierFlag(forMacKey: code) else { return true }
             // Synthetic events (remappers, virtual keyboards) may carry only
             // the shared flag: when neither side of this modifier has its
             // device bit, the shared flag decides.
             let raw = event.flags.rawValue
             let sides = Self.deviceFlags(sharing: flag)
             let down = raw & sides != 0 ? raw & bit != 0 : event.flags.contains(flag)
-            batch.keys.append((sc, down))
+            batch.key(sc, down)
         default:
             break
         }
+        return true
     }
 
-    /// Runs every 8 ms: sends what has gathered, and asks how it is going.
+    /// Runs every 4 ms: sends what has gathered (one batch on its way at a
+    /// time, so they can't overtake each other), and asks how it is going.
     private func tick() {
         guard mode == .remote else { return }
-        if !sending, !batch.isEmpty, Date().timeIntervalSince(lastSend) >= 0.008 {
+        if !sending, !batch.isEmpty {
             let out = batch
             batch = EdgeBatch()
             sending = true
@@ -343,6 +418,7 @@ final class EdgeControlService {
     private func endRemote(tellDaemon: Bool, note: String?, returnedPos: Int = 32768) {
         guard mode == .remote else { return }
         mode = .idle
+        stayAwake(false)
         CGAssociateMouseAndMouseCursorPosition(1)
         CGDisplayShowCursor(CGMainDisplayID())
         placeAtEdge(pos: returnedPos)

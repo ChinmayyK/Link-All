@@ -7,6 +7,7 @@
 //! while "Remote control" is on, the same gate the phone's trackpad passes.
 
 use super::*;
+use crate::edge_keys::{self, Act};
 use crate::remote_input::{self, Edge};
 
 /// How long the host waits for the other computer to take control.
@@ -21,8 +22,34 @@ const RETURN_PUSH: i32 = 24;
 /// event that may be a release.
 const MUST_ARRIVE_WAIT: Duration = Duration::from_secs(2);
 
-/// How often a hand-off checks that the other computer is still connected.
-const WATCH_INTERVAL: Duration = Duration::from_secs(1);
+/// How often a hand-off checks that the other computer is still connected,
+/// and how often the computer whose keyboard is in use speaks up when it has
+/// nothing to send. That keeps both Wi-Fi radios awake (an idle one dozes, and
+/// the next key waits for it to wake) and tells the other computer a held key
+/// is still held (see `remote_input::heard_from_driver`).
+const KEEPALIVE: Duration = Duration::from_millis(50);
+
+/// The stamp on a keepalive ping, so its pong isn't taken for a round trip.
+pub(super) const KEEPALIVE_STAMP: u64 = 0;
+
+/// The keyboard of the computer driving this one, rewritten for this one.
+static KEYS: std::sync::Mutex<Option<edge_keys::Translator>> = std::sync::Mutex::new(None);
+
+/// Lets go of every key and button a hand-off holds down here.
+fn let_go() {
+    *KEYS.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    remote_input::release_all();
+}
+
+/// One input event from this computer, as it happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EdgeEvent {
+    Move(i32, i32),
+    Scroll(i32, i32),
+    Button(u8, bool),
+    Key(u16, bool),
+}
 
 fn understands_edge_control(app_version: Option<&str>) -> bool {
     crate::device_choice::at_least(app_version, crate::device_choice::EDGE_CONTROL_MIN)
@@ -202,8 +229,11 @@ impl Engine {
 /// holding a keyboard that no longer reaches anything.
 fn watch(shared: EngineShared, peer: Uuid, hosting: bool) {
     tokio::spawn(async move {
+        let _awake = Awake::hold();
+        let mut tick = tokio::time::interval(KEEPALIVE);
+        tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
-            tokio::time::sleep(WATCH_INTERVAL).await;
+            tick.tick().await;
             let mine = {
                 let state = shared.edge.lock().unwrap();
                 match (&*state, hosting) {
@@ -215,19 +245,27 @@ fn watch(shared: EngineShared, peer: Uuid, hosting: bool) {
             if !mine {
                 return;
             }
-            let connected = shared
+            let sender = shared
                 .peer_manager
                 .all_connected_senders()
-                .iter()
-                .any(|(id, _)| *id == peer);
-            if connected && !shared.shutdown.is_cancelled() {
-                continue;
+                .into_iter()
+                .find(|(id, _)| *id == peer)
+                .map(|(_, tx)| tx);
+            if let Some(tx) = &sender {
+                if hosting {
+                    let _ = tx.try_send(AppMessage::Ping {
+                        timestamp_ms: KEEPALIVE_STAMP,
+                    });
+                }
+                if !shared.shutdown.is_cancelled() {
+                    continue;
+                }
             }
             *shared.edge.lock().unwrap() = EdgeState::Idle;
             if hosting {
                 announce_ended(&shared, "The other computer disconnected.").await;
             } else {
-                let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
+                let _ = tokio::task::spawn_blocking(let_go).await;
             }
             return;
         }
@@ -297,16 +335,23 @@ pub(super) async fn on_enter(ctx: &InboundCtx, edge: u8, pos: u16) {
             };
             Ok(again)
         });
+        let host = shared
+            .peer_manager
+            .get(peer)
+            .and_then(|p| p.platform)
+            .and_then(|p| edge_keys::System::from_platform(&p));
         match taken {
-            // A second start from the same computer means it lost track of
-            // the first, whose end may never have arrived: let go of
-            // anything still held from it.
-            Ok(true) => {
-                let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
-                Ok(())
-            }
-            Ok(false) => {
-                watch(shared.clone(), peer, false);
+            Ok(again) => {
+                if again {
+                    // A second start from the same computer means it lost
+                    // track of the first, whose end may never have arrived:
+                    // let go of anything still held from it.
+                    let _ = tokio::task::spawn_blocking(let_go).await;
+                } else {
+                    watch(shared.clone(), peer, false);
+                }
+                *KEYS.lock().unwrap_or_else(|e| e.into_inner()) =
+                    Some(edge_keys::Translator::new(host, edge_keys::System::this()));
                 Ok(())
             }
             Err(e) => Err(e),
@@ -377,7 +422,7 @@ pub(super) async fn after_move(
         }
     };
     if let Some(pos) = leave {
-        let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
+        let _ = tokio::task::spawn_blocking(let_go).await;
         let _ = ctx.outbox_tx.send(AppMessage::EdgeLeave { pos }).await;
     }
 }
@@ -385,6 +430,48 @@ pub(super) async fn after_move(
 /// True while `peer`'s keyboard and mouse drive this computer.
 pub(super) fn controlled_by(shared: &EngineShared, peer: Uuid) -> bool {
     matches!(*shared.edge.lock().unwrap(), EdgeState::Controlled { peer: p, .. } if p == peer)
+}
+
+/// Word from `ctx`'s computer: if its keyboard drives this one, a key it holds
+/// is still held.
+pub(super) fn heard(ctx: &InboundCtx) {
+    if controlled_by(&ctx.shared, ctx.peer_id) {
+        remote_input::heard_from_driver();
+    }
+}
+
+/// What a key from the computer driving this one does here, with its
+/// shortcuts rewritten for this system.
+pub(super) fn key_acts(scancode: u16, down: bool) -> Vec<Act> {
+    match KEYS.lock().unwrap_or_else(|e| e.into_inner()).as_mut() {
+        Some(keys) => keys.key(scancode, down),
+        None => vec![Act::Key(scancode, down)],
+    }
+}
+
+/// What has to happen before a click or scroll from the computer driving this
+/// one, so it lands with the modifiers that computer holds.
+pub(super) fn pointer_acts() -> Vec<Act> {
+    KEYS.lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_mut()
+        .map(edge_keys::Translator::pointer)
+        .unwrap_or_default()
+}
+
+/// Carries out `acts`, all of them even if one fails.
+pub(super) fn play(acts: &[Act]) -> Result<(), String> {
+    let mut result = Ok(());
+    for act in acts {
+        let done = match *act {
+            Act::Key(scancode, down) => remote_input::raw_key(scancode, down),
+            Act::Lock => crate::remote_control::perform(crate::remote_control::Action::LockScreen),
+        };
+        if result.is_ok() {
+            result = done;
+        }
+    }
+    result
 }
 
 /// `EdgeReply` arrived: wake the `edge_begin` waiting for it.
@@ -450,7 +537,7 @@ pub(super) async fn end_with_peer(shared: &EngineShared, peer: Uuid, reason: &st
     };
     match was {
         EdgeState::Controlled { .. } => {
-            let _ = tokio::task::spawn_blocking(remote_input::release_all).await;
+            let _ = tokio::task::spawn_blocking(let_go).await;
         }
         EdgeState::Hosting { .. } => {
             announce_ended(shared, reason).await;
@@ -527,7 +614,9 @@ impl Engine {
 
 impl Engine {
     /// Sends one batch of the host's input to the computer being driven: the
-    /// summed pointer move and scroll, then each button and key in order.
+    /// summed pointer move and scroll, then each button and key, then
+    /// `events` in the order they happened.
+    #[allow(clippy::too_many_arguments)]
     pub async fn edge_input_batch(
         &self,
         dx: i32,
@@ -536,37 +625,98 @@ impl Engine {
         scroll_y: i32,
         buttons: &[(u8, bool)],
         keys: &[(u16, bool)],
+        events: &[EdgeEvent],
     ) -> Result<(), String> {
+        let summed = [
+            EdgeEvent::Move(dx, dy),
+            EdgeEvent::Scroll(scroll_x, scroll_y),
+        ];
+        let all = summed
+            .into_iter()
+            .chain(buttons.iter().map(|&(b, down)| EdgeEvent::Button(b, down)))
+            .chain(keys.iter().map(|&(k, down)| EdgeEvent::Key(k, down)))
+            .chain(events.iter().copied());
         let deadline = tokio::time::Instant::now() + MUST_ARRIVE_WAIT;
         let clamp = |v: i32| v.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
-        if dx != 0 || dy != 0 {
-            self.edge_input_until(
-                AppMessage::RemotePointerMove {
+        for event in all {
+            let message = match event {
+                EdgeEvent::Move(0, 0) | EdgeEvent::Scroll(0, 0) => continue,
+                EdgeEvent::Move(dx, dy) => AppMessage::RemotePointerMove {
                     dx: clamp(dx),
                     dy: clamp(dy),
                 },
-                deadline,
-            )
-            .await?;
-        }
-        if scroll_x != 0 || scroll_y != 0 {
-            self.edge_input_until(
-                AppMessage::RemotePointerScroll {
-                    dx: clamp(scroll_x),
-                    dy: clamp(scroll_y),
+                EdgeEvent::Scroll(dx, dy) => AppMessage::RemotePointerScroll {
+                    dx: clamp(dx),
+                    dy: clamp(dy),
                 },
-                deadline,
-            )
-            .await?;
-        }
-        for &(button, down) in buttons {
-            self.edge_input_until(AppMessage::RemotePointerButton { button, down }, deadline)
-                .await?;
-        }
-        for &(scancode, down) in keys {
-            self.edge_input_until(AppMessage::RemoteKeyEvent { scancode, down }, deadline)
-                .await?;
+                EdgeEvent::Button(button, down) => AppMessage::RemotePointerButton { button, down },
+                EdgeEvent::Key(scancode, down) => AppMessage::RemoteKeyEvent { scancode, down },
+            };
+            self.edge_input_until(message, deadline).await?;
         }
         Ok(())
     }
 }
+
+/// Keeps this computer quick to answer while a hand-off runs. Windows slows
+/// down an app it takes to be in the background (lower clock speed, stretched
+/// timers), and Link All is nearly always in the background while the
+/// keyboard and mouse are shared.
+struct Awake;
+
+static AWAKE_HOLDS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+impl Awake {
+    fn hold() -> Awake {
+        if AWAKE_HOLDS.fetch_add(1, std::sync::atomic::Ordering::SeqCst) == 0 {
+            set_awake(true);
+        }
+        Awake
+    }
+}
+
+impl Drop for Awake {
+    fn drop(&mut self) {
+        if AWAKE_HOLDS.fetch_sub(1, std::sync::atomic::Ordering::SeqCst) == 1 {
+            set_awake(false);
+        }
+    }
+}
+
+#[cfg(windows)]
+fn set_awake(on: bool) {
+    use windows_sys::Win32::Media::{timeBeginPeriod, timeEndPeriod};
+    use windows_sys::Win32::System::Threading::{
+        GetCurrentProcess, ProcessPowerThrottling, SetProcessInformation,
+        PROCESS_POWER_THROTTLING_CURRENT_VERSION, PROCESS_POWER_THROTTLING_EXECUTION_SPEED,
+        PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION, PROCESS_POWER_THROTTLING_STATE,
+    };
+    // On: never throttled, and timers to the millisecond. Off hands both back
+    // to Windows to decide.
+    let state = PROCESS_POWER_THROTTLING_STATE {
+        Version: PROCESS_POWER_THROTTLING_CURRENT_VERSION,
+        ControlMask: if on {
+            PROCESS_POWER_THROTTLING_EXECUTION_SPEED
+                | PROCESS_POWER_THROTTLING_IGNORE_TIMER_RESOLUTION
+        } else {
+            0
+        },
+        StateMask: 0,
+    };
+    unsafe {
+        SetProcessInformation(
+            GetCurrentProcess(),
+            ProcessPowerThrottling,
+            (&state as *const PROCESS_POWER_THROTTLING_STATE).cast(),
+            std::mem::size_of::<PROCESS_POWER_THROTTLING_STATE>() as u32,
+        );
+        if on {
+            timeBeginPeriod(1);
+        } else {
+            timeEndPeriod(1);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn set_awake(_: bool) {}

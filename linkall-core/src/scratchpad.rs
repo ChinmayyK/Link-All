@@ -416,9 +416,17 @@ mod tests {
     #[test]
     fn search_filters_and_ranks_notes() {
         let mut pad = Scratchpad::new(None);
-        pad.upsert_local(None, "Meeting Notes\nDiscuss project deadlines", false, 100).unwrap();
-        pad.upsert_local(None, "Grocery List\nMilk, eggs, coffee", false, 200).unwrap();
-        pad.upsert_local(None, "Important Tasks\nReview pull requests and meeting summary", true, 300).unwrap();
+        pad.upsert_local(None, "Meeting Notes\nDiscuss project deadlines", false, 100)
+            .unwrap();
+        pad.upsert_local(None, "Grocery List\nMilk, eggs, coffee", false, 200)
+            .unwrap();
+        pad.upsert_local(
+            None,
+            "Important Tasks\nReview pull requests and meeting summary",
+            true,
+            300,
+        )
+        .unwrap();
 
         // Empty search returns all visible
         assert_eq!(pad.search("").len(), 3);
@@ -428,7 +436,10 @@ mod tests {
         let meeting_results = pad.search("meeting");
         assert_eq!(meeting_results.len(), 2);
         assert!(meeting_results[0].pinned);
-        assert_eq!(meeting_results[0].text.lines().next().unwrap(), "Important Tasks");
+        assert_eq!(
+            meeting_results[0].text.lines().next().unwrap(),
+            "Important Tasks"
+        );
 
         // Multi-term search
         let multi = pad.search("coffee milk");

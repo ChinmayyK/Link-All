@@ -769,9 +769,7 @@ mod tests {
     async fn peer_table_capped_at_max_discovered_peers() {
         let my_id = Uuid::new_v4();
         let (mut manager, _handle, mut output) = DiscoveryManager::new(my_id);
-        let drain_handle = tokio::spawn(async move {
-            while output.recv().await.is_some() {}
-        });
+        let drain_handle = tokio::spawn(async move { while output.recv().await.is_some() {} });
 
         for _ in 0..MAX_DISCOVERED_PEERS {
             let id = Uuid::new_v4();

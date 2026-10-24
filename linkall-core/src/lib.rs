@@ -43,6 +43,7 @@ pub mod device_choice;
 pub mod diag_log;
 pub mod discovery;
 pub mod discovery_manager;
+pub mod edge_keys;
 pub mod engine;
 pub mod engine_support;
 pub mod ffi;
