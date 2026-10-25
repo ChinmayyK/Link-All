@@ -293,7 +293,7 @@ fn install_actions(app: &adw::Application, hub: &hub::Hub) {
             .developer_name("Chinmay Kudalkar")
             .website("https://linkall.chinmaykudalkar.com")
             .issue_url("https://github.com/ChinmayyK/Link-All/issues")
-            .license_type(gtk::License::Agpl30Only)
+            .license_type(gtk::License::Gpl30Only)
             .comments("Continuity for every device you own: one clipboard, files and notifications, straight over your own network.")
             .build();
         dialog.present(ui::window().as_ref());
