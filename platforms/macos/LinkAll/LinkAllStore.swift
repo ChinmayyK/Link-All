@@ -238,7 +238,10 @@ final class LinkAllStore: ObservableObject {
             try? await Task.sleep(nanoseconds: 500_000_000)
             await refresh()
             await loadSettings()
-            scanForDevices()
+            // No rescan here: the daemon starts discovery itself (and retries
+            // until the network is up). Rescanning restarted mDNS half a
+            // second after it began browsing and toasted "Scan complete" on
+            // every launch.
         }
     }
 
