@@ -458,6 +458,14 @@ pub(super) async fn connect_once(
     .await?;
 
     if hs.peer_device_id == shared.config.device_id {
+        // This address is ours, so it can't be the expected peer's. Keeping
+        // it made every reconnect cycle dial this device and handshake with
+        // itself.
+        if let Some(expected) = expected_device_id {
+            shared
+                .peer_manager
+                .forget_address(expected, endpoint.ip())?;
+        }
         anyhow::bail!("aborting outbound connect — cannot connect to self");
     }
 
