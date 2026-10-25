@@ -3,7 +3,7 @@ name = "linkall-cli"
 version.workspace = true
 edition = "2021"
 description = "Link All command-line management tool"
-license = "AGPL-3.0-only"
+license = "GPL-3.0-only"
 
 [[bin]]
 name = "linkall-cli"

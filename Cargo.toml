@@ -11,7 +11,7 @@ resolver = "2"
 version = "2.1.0"
 edition = "2021"
 authors = ["Link All Contributors"]
-license = "AGPL-3.0-only"
+license = "GPL-3.0-only"
 
 [profile.release]
 opt-level = 3

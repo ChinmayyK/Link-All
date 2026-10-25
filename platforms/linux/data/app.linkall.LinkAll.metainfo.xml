@@ -2,7 +2,7 @@
 <component type="desktop-application">
   <id>app.linkall.LinkAll</id>
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>AGPL-3.0-only</project_license>
+  <project_license>GPL-3.0-only</project_license>
   <name>Link All</name>
   <summary>One clipboard, files and notifications across your devices</summary>
   <developer id="com.chinmaykudalkar">

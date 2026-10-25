@@ -297,6 +297,6 @@ Link All maintains clean configuration boundaries conforming to OS standard conv
 - **Changelog**: Release history and API modifications are documented in [CHANGELOG.md](CHANGELOG.md).
 
 ### License & Commercial Notice
-Link All is distributed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. 
+Link All is distributed under the **GNU General Public License v3.0 (GPL-3.0-only)**. Anyone may use, study, change and share it; anything built on it and distributed must be released under the same terms, with its source code. See [LICENSE](LICENSE) for the full legal text.
 
-*Note on AGPL-3.0*: This license explicitly enforces network copyleft. Any modifications, derived network daemons, or cloud-relayed SaaS implementations built upon this engine must make their complete source code available under the same terms. See [LICENSE](LICENSE) for full legal text.
+The Android app uses Google Play services (the QR code scanner and ML Kit's document scanner), which are not free software. [LICENSE-EXCEPTION.txt](LICENSE-EXCEPTION.txt) grants the additional permission, under section 7 of the GPL, to distribute Link All combined with them.
