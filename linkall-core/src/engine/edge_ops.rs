@@ -389,8 +389,12 @@ pub(super) async fn on_enter(ctx: &InboundCtx, edge: u8, pos: u16) {
                 } else {
                     watch(shared.clone(), peer, false);
                 }
-                *KEYS.lock().unwrap_or_else(|e| e.into_inner()) =
-                    Some(edge_keys::Translator::new(host, edge_keys::System::this()));
+                let pc_keyboard = shared.settings.lock().unwrap().pc_keyboard_on_mac;
+                *KEYS.lock().unwrap_or_else(|e| e.into_inner()) = Some(if pc_keyboard {
+                    edge_keys::Translator::pc_keyboard(host, edge_keys::System::this())
+                } else {
+                    edge_keys::Translator::new(host, edge_keys::System::this())
+                });
                 Ok(())
             }
             Err(e) => Err(e),

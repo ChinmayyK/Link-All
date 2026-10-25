@@ -253,6 +253,9 @@ pub struct Translator {
     lone: Option<u16>,
     /// Modifiers held here with no key pressed since they went down.
     clean: u8,
+    /// Undo the Mac's Command/Control swap: the keys come from a PC keyboard
+    /// on a Mac, whose Ctrl macOS reports as Control and Windows key as Command.
+    as_labelled: bool,
 }
 
 impl Translator {
@@ -273,6 +276,34 @@ impl Translator {
             sticky: None,
             lone: None,
             clean: 0,
+            as_labelled: false,
+        }
+    }
+
+    /// Keys from a PC keyboard (Ctrl, Windows, Alt) plugged into a `host` Mac,
+    /// for a PC: each key does what its cap says, as if the keyboard were
+    /// plugged in here, so Ctrl+W closes a tab and Ctrl+Left jumps a word.
+    /// Nothing is rewritten. Any other pair is as `new`.
+    pub fn pc_keyboard(host: Option<System>, target: System) -> Translator {
+        let mut t = Translator::new(host, target);
+        if host == Some(System::Mac) && !target.is_mac() {
+            t.rules = &[];
+            t.as_labelled = true;
+        }
+        t
+    }
+
+    /// The key as labelled on a PC keyboard plugged into a Mac.
+    fn labelled(&self, scancode: u16) -> u16 {
+        if !self.as_labelled {
+            return scancode;
+        }
+        match scancode {
+            L_CTRL => L_WIN,
+            L_WIN => L_CTRL,
+            R_CTRL => R_WIN,
+            R_WIN => R_CTRL,
+            other => other,
         }
     }
 
@@ -368,6 +399,7 @@ impl Translator {
 
     /// One key from the other computer, pressed (`down`) or released.
     pub fn key(&mut self, scancode: u16, down: bool) -> Vec<Act> {
+        let scancode = self.labelled(scancode);
         if self.rules.is_empty() {
             return vec![Act::Key(scancode, down)];
         }
@@ -845,5 +877,51 @@ mod tests {
                 k(ESC, true),
             ]
         );
+    }
+
+    // A PC keyboard on a Mac: macOS reports its Ctrl as Control (sent as the
+    // Windows key) and its Windows key as Command (sent as Ctrl).
+    const W: u16 = 0x11;
+
+    #[test]
+    fn a_pc_keyboard_on_a_mac_types_ctrl_w_as_ctrl_w() {
+        let mut t = Translator::pc_keyboard(Some(System::Mac), System::Windows);
+        let out = press(
+            &mut t,
+            &[(L_WIN, true), (W, true), (W, false), (L_WIN, false)],
+        );
+        assert_eq!(
+            out,
+            vec![k(L_CTRL, true), k(W, true), k(W, false), k(L_CTRL, false)]
+        );
+    }
+
+    #[test]
+    fn a_pc_keyboard_on_a_mac_keeps_pc_shortcuts_as_they_are() {
+        let mut t = Translator::pc_keyboard(Some(System::Mac), System::Windows);
+        // Ctrl+Left jumps a word, Alt+Left goes back, Ctrl+Tab changes tab.
+        for (m, key) in [(L_WIN, LEFT), (L_ALT, LEFT), (L_WIN, TAB)] {
+            let out = press(&mut t, &[(m, true), (key, true), (key, false), (m, false)]);
+            let want = t.labelled(m);
+            assert_eq!(
+                out,
+                vec![k(want, true), k(key, true), k(key, false), k(want, false)]
+            );
+        }
+        // Its Windows key alone opens Start; the right-hand keys swap too.
+        assert_eq!(t.key(L_CTRL, true), vec![k(L_WIN, true)]);
+        assert_eq!(t.key(L_CTRL, false), vec![k(L_WIN, false)]);
+        assert_eq!(t.key(R_WIN, true), vec![k(R_CTRL, true)]);
+        assert_eq!(t.key(R_CTRL, true), vec![k(R_WIN, true)]);
+    }
+
+    #[test]
+    fn a_pc_keyboard_setting_changes_nothing_but_a_mac_driving_a_pc() {
+        let mut t = Translator::pc_keyboard(Some(System::Windows), System::Mac);
+        // A PC driving a Mac still gets the Mac's shortcuts (Alt+Tab is Cmd+Tab).
+        assert_eq!(t.key(L_ALT, true), vec![k(L_ALT, true)]);
+        assert_eq!(t.key(TAB, true)[0], k(L_CTRL, true));
+        let mut t = Translator::pc_keyboard(Some(System::Mac), System::Mac);
+        assert_eq!(t.key(L_WIN, true), vec![k(L_WIN, true)]);
     }
 }

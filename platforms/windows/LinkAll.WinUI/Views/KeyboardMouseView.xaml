@@ -96,6 +96,29 @@
                     </Border>
                 </StackPanel>
 
+                <!-- How a Mac's keys read here when it drives this PC. -->
+                <Border Style="{StaticResource AppGroupCard}">
+                    <Grid Padding="16,12" MinHeight="60" ColumnSpacing="14">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" Style="{StaticResource AppIconTile}" Background="{ThemeResource AppSurfaceSubtleBrush}" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE92E;" FontSize="16" Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                      HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Text="The Mac uses a PC keyboard" Style="{StaticResource AppBodyStrong}" />
+                            <TextBlock Text="When a Mac drives this PC with a keyboard labelled Ctrl, Windows and Alt, every key does what it says here: Ctrl+W closes a tab, Ctrl+Left jumps a word. Off: a Mac keyboard, where Command works as Ctrl."
+                                       Style="{StaticResource AppSecondary}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <ToggleSwitch x:Name="PcKeyboardToggle" Grid.Column="2" MinWidth="0"
+                                      VerticalAlignment="Center" Toggled="OnPcKeyboardToggled"
+                                      AutomationProperties.Name="The Mac uses a PC keyboard" />
+                    </Grid>
+                </Border>
+
                 <!-- Is each linked computer ready? -->
                 <StackPanel x:Name="ReadinessSection" Spacing="8" Visibility="Collapsed">
                     <TextBlock Text="Ready to share?" Style="{StaticResource AppSectionTitle}" />

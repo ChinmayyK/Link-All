@@ -163,7 +163,7 @@ final class EdgeControlService {
             .leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp,
             .scrollWheel, .keyDown, .keyUp, .flagsChanged,
         ]
-        let mask = types.reduce(CGEventMask(0)) { $0 | (1 << $1.rawValue) }
+        let mask = types.reduce(CGEventMask(1) << Self.systemDefined) { $0 | (1 << $1.rawValue) }
         let callback: CGEventTapCallBack = { _, type, event, refcon in
             guard let refcon else { return Unmanaged.passUnretained(event) }
             let me = Unmanaged<EdgeControlService>.fromOpaque(refcon).takeUnretainedValue()
@@ -328,6 +328,7 @@ final class EdgeControlService {
 
     /// Gathers one event for the other computer. True to swallow it.
     private func capture(type: CGEventType, event: CGEvent) -> Bool {
+        if type.rawValue == Self.systemDefined { return captureMediaKey(event) }
         switch type {
         case .mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
             batch.move(Int(event.getIntegerValueField(.mouseEventDeltaX)),
@@ -383,6 +384,21 @@ final class EdgeControlService {
         default:
             break
         }
+        return true
+    }
+
+    /// Volume, mute and the media keys reach macOS as system-defined events,
+    /// not key presses. They go to the other computer as its media keys; the
+    /// rest (brightness, Mission Control) stay with this Mac. True to swallow.
+    private func captureMediaKey(_ event: CGEvent) -> Bool {
+        // Subtype 8 is the keyboard's special keys (NX_SUBTYPE_AUX_CONTROL_BUTTONS).
+        guard let ns = NSEvent(cgEvent: event), ns.subtype.rawValue == 8 else { return false }
+        let key = (ns.data1 & 0xFFFF_0000) >> 16
+        let state = (ns.data1 & 0xFF00) >> 8
+        guard let sc = Self.mediaScancodes[key], state == 0xA || state == 0xB else { return false }
+        // The other computer repeats a held key itself.
+        if ns.data1 & 0x1 != 0 { return true }
+        batch.key(sc, state == 0xA)
         return true
     }
 
@@ -534,5 +550,27 @@ final class EdgeControlService {
         85: 0x51, 82: 0x52, 65: 0x53, 103: 0x57, 111: 0x58,
         76: 0xE01C, 54: 0xE01D, 75: 0xE035, 61: 0xE038, 115: 0xE047, 126: 0xE048, 116: 0xE049, 123: 0xE04B,
         124: 0xE04D, 119: 0xE04F, 125: 0xE050, 121: 0xE051, 114: 0xE052, 117: 0xE053, 59: 0xE05B, 62: 0xE05C,
+        // The ISO key by left Shift, keypad =, and the PC keyboard's Menu key.
+        10: 0x56, 81: 0x59, 110: 0xE05D,
+        // A PC keyboard's Print Screen, Scroll Lock and Pause arrive as F13,
+        // F14 and F15, which sit in the same places on a full-size Mac keyboard.
+        105: 0xE037, 107: 0x46, 113: 0x66,
+        106: 0x67, 64: 0x68, 79: 0x69, 80: 0x6A, 90: 0x6B, // F16 to F20
+        // Japanese keyboards: Yen, underscore, keypad comma, Eisu, Kana.
+        93: 0x7D, 94: 0x73, 95: 0x7E, 102: 0x7B, 104: 0x79,
+    ]
+
+    /// NX_SYSDEFINED: the event type of volume, mute and the media keys.
+    /// CGEventType has no case for it, so it is compared by raw value.
+    static let systemDefined: UInt32 = 14
+
+    /// The PC media key for each of the Mac's (NX_KEYTYPE_*).
+    private static let mediaScancodes: [Int: Int] = [
+        0: 0xE030, // sound up
+        1: 0xE02E, // sound down
+        7: 0xE020, // mute
+        16: 0xE022, // play
+        17: 0xE019, 19: 0xE019, // next, fast
+        18: 0xE010, 20: 0xE010, // previous, rewind
     ]
 }
