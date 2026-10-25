@@ -66,7 +66,7 @@ struct EdgeShareView: View {
                 Panel {
                     PanelRow(icon: "keyboard", title: "Share this keyboard and mouse",
                              detail: "Push the pointer against a screen edge for about a quarter of a second to move to the computer on that side. Needs the Accessibility permission.") {
-                        Toggle("", isOn: $enabled).labelsHidden()
+                        Toggle("", isOn: $enabled).labelsHidden().toggleStyle(.switch)
                     }
                 }
 
