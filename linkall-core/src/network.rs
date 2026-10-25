@@ -771,25 +771,101 @@ pub struct PeerSession {
 }
 
 pub struct PeerSessionTx {
-    pub stream: tokio::net::tcp::OwnedWriteHalf,
+    pub stream: Stamped<tokio::net::tcp::OwnedWriteHalf>,
     pub session: SessionKey,
 }
 
 pub struct PeerSessionRx {
-    pub stream: tokio::io::BufReader<tokio::net::tcp::OwnedReadHalf>,
+    pub stream: tokio::io::BufReader<Stamped<tokio::net::tcp::OwnedReadHalf>>,
     pub session: SessionKey,
 }
 
+/// Milliseconds since the Unix epoch, the unit `Stamped` records.
+pub fn now_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// A stream half that records (`now_millis`) whenever bytes move through it.
+/// One 4 MB file chunk over a slow link takes longer than a heartbeat allows,
+/// so a link is judged alive by its bytes, not by whole messages.
+pub struct Stamped<S> {
+    inner: S,
+    at: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl<S> Stamped<S> {
+    pub fn new(inner: S, at: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Self {
+        Self { inner, at }
+    }
+
+    fn stamp(&self) {
+        self.at
+            .store(now_millis(), std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl<S: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for Stamped<S> {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        let before = buf.filled().len();
+        let res = std::pin::Pin::new(&mut self.inner).poll_read(cx, buf);
+        if buf.filled().len() > before {
+            self.stamp();
+        }
+        res
+    }
+}
+
+impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for Stamped<S> {
+    fn poll_write(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<std::io::Result<usize>> {
+        let res = std::pin::Pin::new(&mut self.inner).poll_write(cx, buf);
+        if matches!(res, std::task::Poll::Ready(Ok(n)) if n > 0) {
+            self.stamp();
+        }
+        res
+    }
+
+    fn poll_flush(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        std::pin::Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
 impl PeerSession {
-    pub fn split(self) -> (PeerSessionTx, PeerSessionRx) {
+    /// Splits into a sender and a receiver. `heard` is stamped when bytes
+    /// arrive, `wrote` when the socket takes bytes from us.
+    pub fn split(
+        self,
+        heard: std::sync::Arc<std::sync::atomic::AtomicU64>,
+        wrote: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    ) -> (PeerSessionTx, PeerSessionRx) {
         let (rx, tx) = self.stream.into_split();
         (
             PeerSessionTx {
-                stream: tx,
+                stream: Stamped::new(tx, wrote),
                 session: self.session.clone(),
             },
             PeerSessionRx {
-                stream: tokio::io::BufReader::new(rx),
+                stream: tokio::io::BufReader::new(Stamped::new(rx, heard)),
                 session: self.session,
             },
         )

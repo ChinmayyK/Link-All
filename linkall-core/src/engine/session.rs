@@ -365,24 +365,22 @@ pub(super) fn register_session(
     let panic_peer_name = peer_name.clone();
     let session_outbox_tx = outbox_tx.clone();
     let session_handle = tokio::spawn(async move {
+        let last_seen =
+            std::sync::Arc::new(std::sync::atomic::AtomicU64::new(network::now_millis()));
+        let last_wrote =
+            std::sync::Arc::new(std::sync::atomic::AtomicU64::new(network::now_millis()));
         let (mut sess_tx, mut sess_rx) = PeerSession {
             stream,
             session,
             peer_device_id: peer_id,
             peer_device_name: peer_name.clone(),
         }
-        .split();
+        .split(last_seen.clone(), last_wrote.clone());
         let mut heartbeat = tokio::time::interval(shared.config.heartbeat_interval);
         // After a suspend, the default Burst behaviour fires every missed
         // tick back to back - a pointless ping storm on wake.
         heartbeat.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        let last_seen = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis() as u64,
-        ));
         let ping_sent_at = std::sync::Arc::new(std::sync::Mutex::new(None::<std::time::Instant>));
         let peer_sleeping = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
 
@@ -731,13 +729,13 @@ pub(super) fn register_session(
                     match shutdown {
                         Ok(cmd) => {
                             if cmd.explicit_disconnect {
-                                let _ = write_within(write_limit, sess_tx.send(&mut AppMessage::CallAction {
+                                let _ = write_within(write_limit, &last_wrote, sess_tx.send(&mut AppMessage::CallAction {
                                     action: "system:explicit_disconnect".to_string(),
                                     origin_device: shared.config.device_id,
                                 })).await;
                             }
                             if cmd.send_bye {
-                                let _ = write_within(write_limit, sess_tx.send(&mut AppMessage::Bye)).await;
+                                let _ = write_within(write_limit, &last_wrote, sess_tx.send(&mut AppMessage::Bye)).await;
                             }
                             break cmd.reason;
                         }
@@ -790,8 +788,13 @@ pub(super) fn register_session(
                         .lock()
                         .unwrap_or_else(|e| e.into_inner())
                         .map(|sent| sent.elapsed().as_millis() as u64);
+                    // Bytes still arriving mean the link is alive: the reply
+                    // can sit behind a file chunk the peer is still sending.
                     if let Some(waited) = unanswered_ms {
-                        if waited > reply_timeout && time_since_wake > reply_timeout {
+                        if waited > reply_timeout
+                            && time_since_seen > reply_timeout
+                            && time_since_wake > reply_timeout
+                        {
                             break format!("no reply to ping in {waited} ms (sleeping: {is_sleeping})");
                         }
                     }
@@ -809,13 +812,13 @@ pub(super) fn register_session(
                         let mut ping = probe::make_ping();
                         last_ping_at = Some(std::time::Instant::now());
                         *ping_sent_at.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
-                        if let Err(err) = write_within(write_limit, sess_tx.send(&mut ping)).await {
+                        if let Err(err) = write_within(write_limit, &last_wrote, sess_tx.send(&mut ping)).await {
                             break format!("heartbeat send failed: {err}");
                         }
                     }
                 }
                 Some(mut msg) = outbox_rx.recv() => {
-                    if let Err(err) = write_within(write_limit, sess_tx.send(&mut msg)).await {
+                    if let Err(err) = write_within(write_limit, &last_wrote, sess_tx.send(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
                     // Clipboard sent to a sleeping peer: ask for a reply too,
@@ -828,14 +831,14 @@ pub(super) fn register_session(
                         };
                         if start_ping {
                             let mut ping = probe::make_ping();
-                            if let Err(err) = write_within(write_limit, sess_tx.send(&mut ping)).await {
+                            if let Err(err) = write_within(write_limit, &last_wrote, sess_tx.send(&mut ping)).await {
                                 break format!("heartbeat send failed: {err}");
                             }
                         }
                     }
                 }
                 Some(mut msg) = file_outbox_rx.recv() => {
-                    if let Err(err) = write_within(write_limit, sess_tx.send_no_flush(&mut msg)).await {
+                    if let Err(err) = write_within(write_limit, &last_wrote, sess_tx.send_no_flush(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
                     // Write a few queued chunks per flush, then go back to the
@@ -845,7 +848,7 @@ pub(super) fn register_session(
                     for _ in 0..3 {
                         match file_outbox_rx.try_recv() {
                             Ok(mut next_msg) => {
-                                if let Err(err) = write_within(write_limit, sess_tx.send_no_flush(&mut next_msg)).await {
+                                if let Err(err) = write_within(write_limit, &last_wrote, sess_tx.send_no_flush(&mut next_msg)).await {
                                     batch_err = Some(err);
                                     break;
                                 }
@@ -856,7 +859,7 @@ pub(super) fn register_session(
                     if let Some(err) = batch_err {
                         break format!("send failed: {err}");
                     }
-                    if let Err(err) = write_within(write_limit, sess_tx.flush()).await {
+                    if let Err(err) = write_within(write_limit, &last_wrote, sess_tx.flush()).await {
                         break format!("flush failed: {err}");
                     }
                 }
@@ -1077,13 +1080,29 @@ fn clipboard_to_catch_up(
 const SLEEP_PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// Runs a session write, failing it once it has waited `limit`.
+/// Runs a write until it finishes, or fails it once the socket has taken no
+/// bytes for `limit`. A 4 MB chunk over a slow link takes longer than
+/// `limit` to go out while still moving, which is not a stall.
 async fn write_within<E: std::fmt::Display>(
     limit: std::time::Duration,
+    wrote_at: &std::sync::atomic::AtomicU64,
     write: impl std::future::Future<Output = Result<(), E>>,
 ) -> Result<(), String> {
-    match tokio::time::timeout(limit, write).await {
-        Ok(Ok(())) => Ok(()),
-        Ok(Err(e)) => Err(e.to_string()),
-        Err(_) => Err(format!("write stalled for {} s", limit.as_secs())),
+    let started = network::now_millis();
+    let limit_ms = limit.as_millis() as u64;
+    let check = (limit / 4).max(std::time::Duration::from_millis(100));
+    tokio::pin!(write);
+    loop {
+        tokio::select! {
+            res = &mut write => return res.map_err(|e| e.to_string()),
+            _ = tokio::time::sleep(check) => {
+                let last = wrote_at
+                    .load(std::sync::atomic::Ordering::Relaxed)
+                    .max(started);
+                if network::now_millis().saturating_sub(last) > limit_ms {
+                    return Err(format!("write stalled for {} s", limit.as_secs()));
+                }
+            }
+        }
     }
 }
