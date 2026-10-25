@@ -771,7 +771,7 @@ pub struct PeerSession {
 }
 
 pub struct PeerSessionTx {
-    pub stream: Stamped<tokio::net::tcp::OwnedWriteHalf>,
+    pub stream: Counted<tokio::net::tcp::OwnedWriteHalf>,
     pub session: SessionKey,
 }
 
@@ -788,9 +788,9 @@ pub fn now_millis() -> u64 {
         .as_millis() as u64
 }
 
-/// A stream half that records (`now_millis`) whenever bytes move through it.
-/// One 4 MB file chunk over a slow link takes longer than a heartbeat allows,
-/// so a link is judged alive by its bytes, not by whole messages.
+/// A read half that records (`now_millis`) whenever bytes arrive. One 4 MB
+/// file chunk over a slow link takes longer than a heartbeat allows, so a
+/// link is judged alive by its bytes, not by whole messages.
 pub struct Stamped<S> {
     inner: S,
     at: std::sync::Arc<std::sync::atomic::AtomicU64>,
@@ -822,15 +822,29 @@ impl<S: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for Stamped<S> {
     }
 }
 
-impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for Stamped<S> {
+/// A write half that counts the bytes the socket has taken from us, so a
+/// slow write can be told from a stalled one by its rate.
+pub struct Counted<S> {
+    inner: S,
+    bytes: std::sync::Arc<std::sync::atomic::AtomicU64>,
+}
+
+impl<S> Counted<S> {
+    pub fn new(inner: S, bytes: std::sync::Arc<std::sync::atomic::AtomicU64>) -> Self {
+        Self { inner, bytes }
+    }
+}
+
+impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for Counted<S> {
     fn poll_write(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
         buf: &[u8],
     ) -> std::task::Poll<std::io::Result<usize>> {
         let res = std::pin::Pin::new(&mut self.inner).poll_write(cx, buf);
-        if matches!(res, std::task::Poll::Ready(Ok(n)) if n > 0) {
-            self.stamp();
+        if let std::task::Poll::Ready(Ok(n)) = res {
+            self.bytes
+                .fetch_add(n as u64, std::sync::atomic::Ordering::Relaxed);
         }
         res
     }
@@ -852,16 +866,16 @@ impl<S: tokio::io::AsyncWrite + Unpin> tokio::io::AsyncWrite for Stamped<S> {
 
 impl PeerSession {
     /// Splits into a sender and a receiver. `heard` is stamped when bytes
-    /// arrive, `wrote` when the socket takes bytes from us.
+    /// arrive; `written` counts the bytes the socket has taken from us.
     pub fn split(
         self,
         heard: std::sync::Arc<std::sync::atomic::AtomicU64>,
-        wrote: std::sync::Arc<std::sync::atomic::AtomicU64>,
+        written: std::sync::Arc<std::sync::atomic::AtomicU64>,
     ) -> (PeerSessionTx, PeerSessionRx) {
         let (rx, tx) = self.stream.into_split();
         (
             PeerSessionTx {
-                stream: Stamped::new(tx, wrote),
+                stream: Counted::new(tx, written),
                 session: self.session.clone(),
             },
             PeerSessionRx {
