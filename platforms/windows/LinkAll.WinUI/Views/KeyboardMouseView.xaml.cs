@@ -28,7 +28,7 @@ namespace LinkAll.WinUI.Views
             _timer = DispatcherQueue.GetForCurrentThread().CreateTimer();
             _timer.Interval = TimeSpan.FromSeconds(1);
             _timer.Tick += (s, e) => _ = RefreshAsync();
-            this.Loaded += (s, e) => { _timer.Start(); _ = RefreshAsync(); };
+            this.Loaded += (s, e) => { _timer.Start(); _ = RefreshAsync(); _ = LoadPcKeyboardAsync(); };
             this.Unloaded += (s, e) => _timer.Stop();
         }
 
@@ -77,6 +77,32 @@ namespace LinkAll.WinUI.Views
         }
 
         private void OnEndClicked(object sender, RoutedEventArgs e) => EdgeControlService.Current?.EndSharing();
+
+        // Set while the switch shows the saved value, so that isn't saved straight back.
+        private bool _showingSavedPcKeyboard;
+
+        private async Task LoadPcKeyboardAsync()
+        {
+            var on = await Task.Run(() =>
+            {
+                using var doc = DaemonClient.GetSettings();
+                return doc != null
+                    && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.TryGetProperty("pc_keyboard_on_mac", out var value)
+                    && value.ValueKind == JsonValueKind.True;
+            });
+            _showingSavedPcKeyboard = true;
+            PcKeyboardToggle.IsOn = on;
+            _showingSavedPcKeyboard = false;
+        }
+
+        private async void OnPcKeyboardToggled(object sender, RoutedEventArgs e)
+        {
+            if (_showingSavedPcKeyboard) return;
+            var on = PcKeyboardToggle.IsOn;
+            var resp = await Task.Run(() => DaemonClient.PatchSettings(DaemonClient.Fields(("pc_keyboard_on_mac", on))));
+            DaemonActions.ReportIfFailed("The Mac uses a PC keyboard", resp);
+        }
 
         private async Task RefreshAsync()
         {

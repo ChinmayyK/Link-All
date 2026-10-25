@@ -785,12 +785,12 @@ fn repeat_state() -> std::sync::MutexGuard<'static, Repeat> {
         .unwrap_or_else(|e| e.into_inner())
 }
 
-/// Modifiers and lock keys don't repeat.
+/// Modifiers, lock keys and media keys don't repeat.
 fn repeats(scancode: u16) -> bool {
     !matches!(
         scancode,
         0x1D | 0xE01D | 0x2A | 0x36 | 0x38 | 0xE038 | 0xE05B | 0xE05C | 0x3A | 0x45 | 0x46
-    )
+    ) && scancode_media(scancode).is_none()
 }
 
 fn start_repeating() {
@@ -906,6 +906,8 @@ pub fn release_all() {
     for m in stale_modifiers {
         let _ = imp::modifier(m, false);
     }
+    #[cfg(target_os = "macos")]
+    edge_imp::forget_caps();
 }
 
 #[cfg(windows)]
@@ -939,7 +941,8 @@ mod edge_imp {
 
     pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
         let mut flags = KEYEVENTF_SCANCODE;
-        if scancode & 0xE000 == 0xE000 {
+        // Num Lock travels as 0x45; Windows counts it as an extended key.
+        if scancode & 0xE000 == 0xE000 || scancode == 0x45 {
             flags |= KEYEVENTF_EXTENDEDKEY;
         }
         if !down {
@@ -995,13 +998,45 @@ pub fn scancode_to_evdev(scancode: u16) -> Option<u16> {
         0xE05B => Some(125), // left super
         0xE05C => Some(126), // right super
         0xE05D => Some(127), // menu
-        _ => None,
+        _ => EXTRA_EVDEV
+            .iter()
+            .find(|(sc, _)| *sc == scancode)
+            .map(|(_, code)| *code),
     }
 }
+
+/// Scan codes outside the two tables' main runs: keypad =, F13 to F20, the
+/// Japanese keys and the media keys, with their Linux key codes.
+const EXTRA_EVDEV: &[(u16, u16)] = &[
+    (0x59, 117), // keypad =
+    (0x64, 183), // f13
+    (0x65, 184),
+    (0x66, 185),
+    (0x67, 186),
+    (0x68, 187),
+    (0x69, 188),
+    (0x6A, 189),
+    (0x6B, 190),   // f20
+    (0x70, 93),    // katakana/hiragana
+    (0x73, 89),    // ro
+    (0x79, 92),    // henkan
+    (0x7B, 94),    // muhenkan
+    (0x7D, 124),   // yen
+    (0x7E, 95),    // keypad comma
+    (0xE010, 165), // previous track
+    (0xE019, 163), // next track
+    (0xE020, 113), // mute
+    (0xE022, 164), // play/pause
+    (0xE02E, 114), // volume down
+    (0xE030, 115), // volume up
+];
 
 /// The inverse of [`scancode_to_evdev`]: the PS/2 set 1 scan code for a Linux
 /// key code, or None for a key the hand-off does not carry.
 pub fn evdev_to_scancode(code: u16) -> Option<u16> {
+    if let Some((sc, _)) = EXTRA_EVDEV.iter().find(|(_, c)| *c == code) {
+        return Some(*sc);
+    }
     match code {
         0x01..=0x58 => Some(code),
         96 => Some(0xE01C),
@@ -1130,8 +1165,45 @@ pub fn scancode_to_mac(scancode: u16) -> Option<u16> {
         0xE051 => 121,
         0xE052 => 114,
         0xE053 => 117,
-        0xE05B => 59, // left windows -> left control
-        0xE05C => 62, // right windows -> right control
+        0xE05B => 59,  // left windows -> left control
+        0xE05C => 62,  // right windows -> right control
+        0xE05D => 110, // menu
+        // The keys a Mac has in their place: Print Screen, Scroll Lock and
+        // Pause sit where F13, F14 and F15 do on a full-size Mac keyboard.
+        0xE037 => 105,
+        0x46 => 107,
+        0x56 => 10,  // the extra key by left shift on ISO keyboards
+        0x59 => 81,  // keypad =
+        0x64 => 105, // f13
+        0x65 => 107,
+        0x66 => 113,
+        0x67 => 106,
+        0x68 => 64,
+        0x69 => 79,
+        0x6A => 80,
+        0x6B => 90, // f20
+        // Japanese keyboards.
+        0x70 => 104, // katakana/hiragana -> kana
+        0x73 => 94,  // ro -> underscore
+        0x79 => 104, // henkan -> kana
+        0x7B => 102, // muhenkan -> eisu
+        0x7D => 93,  // yen
+        0x7E => 95,  // keypad comma
+        _ => return None,
+    })
+}
+
+/// The media key a scan code is, if it is one. A Mac plays these through the
+/// system rather than as key presses (see `remote_control`).
+pub fn scancode_media(scancode: u16) -> Option<crate::remote_control::Action> {
+    use crate::remote_control::Action;
+    Some(match scancode {
+        0xE020 => Action::Mute,
+        0xE02E => Action::VolumeDown,
+        0xE030 => Action::VolumeUp,
+        0xE022 => Action::PlayPause,
+        0xE019 => Action::NextTrack,
+        0xE010 => Action::PreviousTrack,
         _ => return None,
     })
 }
@@ -1196,11 +1268,28 @@ mod edge_imp {
         fn CGAssociateMouseAndMouseCursorPosition(connected: bool) -> i32;
         fn CGEventCreateKeyboardEvent(source: *const c_void, key: u16, down: bool) -> *mut c_void;
         fn CGEventSetIntegerValueField(event: *mut c_void, field: u32, value: i64);
+        fn CGEventGetFlags(event: *const c_void) -> u64;
         fn CGEventSetFlags(event: *mut c_void, flags: u64);
+        fn CGEventSourceFlagsState(state: i32) -> u64;
         fn CGEventPost(tap: u32, event: *mut c_void);
     }
 
     const KEYBOARD_EVENT_AUTOREPEAT: u32 = 8;
+    const HID_SYSTEM_STATE: i32 = 1;
+    const CAPS_LOCK: u16 = 57;
+    const ALPHA_SHIFT: u64 = 0x0001_0000;
+    /// Set on arrows, the keypad and the keys above the arrows by macOS itself;
+    /// some apps ignore those keys without them.
+    const KEY_OWN_FLAGS: u64 = 0x0020_0000 | 0x0080_0000;
+
+    /// Caps Lock pressed on the other computer since the hand-off began. A
+    /// posted Caps Lock press doesn't toggle this Mac's own lock, so its state
+    /// rides on the events instead.
+    static CAPS_FLIPPED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+    pub fn forget_caps() {
+        CAPS_FLIPPED.store(false, Ordering::Relaxed);
+    }
 
     /// A number from the user's global preferences (`defaults read -g name`).
     pub fn global_number(name: &str) -> Option<f64> {
@@ -1266,8 +1355,19 @@ mod edge_imp {
     }
 
     pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
+        if let Some(action) = super::scancode_media(scancode) {
+            // Off this thread: playing one takes a moment, and the keys
+            // typed after it shouldn't wait.
+            if down {
+                std::thread::spawn(move || crate::remote_control::perform(action));
+            }
+            return Ok(());
+        }
         let keycode = super::scancode_to_mac(scancode)
             .ok_or_else(|| "that key has no Mac equivalent".to_string())?;
+        if keycode == CAPS_LOCK && down {
+            CAPS_FLIPPED.fetch_xor(true, Ordering::Relaxed);
+        }
         let flag = super::mac_modifier_flag(keycode);
         if flag != 0 {
             if down {
@@ -1295,7 +1395,12 @@ mod edge_imp {
             if repeated {
                 CGEventSetIntegerValueField(event, KEYBOARD_EVENT_AUTOREPEAT, 1);
             }
-            CGEventSetFlags(event, FLAGS.load(Ordering::Relaxed));
+            let caps_on = (CGEventSourceFlagsState(HID_SYSTEM_STATE) & ALPHA_SHIFT != 0)
+                ^ CAPS_FLIPPED.load(Ordering::Relaxed);
+            let flags = FLAGS.load(Ordering::Relaxed)
+                | (CGEventGetFlags(event) & KEY_OWN_FLAGS)
+                | if caps_on { ALPHA_SHIFT } else { 0 };
+            CGEventSetFlags(event, flags);
             CGEventPost(0, event);
             CFRelease(event);
         }
@@ -2404,12 +2509,20 @@ mod keymap_tests {
         assert_eq!(scancode_to_evdev(0xE048), Some(103), "up arrow");
         assert_eq!(scancode_to_evdev(0xE053), Some(111), "delete");
         assert_eq!(scancode_to_evdev(0xE0FF), None);
-        assert_eq!(scancode_to_evdev(0x59), None);
+        assert_eq!(scancode_to_evdev(0x5A), None);
+    }
+
+    #[test]
+    fn keypad_equals_f13_and_media_keys_reach_linux() {
+        assert_eq!(scancode_to_evdev(0x59), Some(117), "keypad =");
+        assert_eq!(scancode_to_evdev(0x64), Some(183), "f13");
+        assert_eq!(scancode_to_evdev(0xE030), Some(115), "volume up");
+        assert_eq!(scancode_to_evdev(0xE022), Some(164), "play/pause");
     }
 
     #[test]
     fn linux_codes_round_trip_through_scan_codes() {
-        for sc in (0x01u16..=0x58).chain(0xE000..=0xE0FF) {
+        for sc in (0x01u16..=0x7E).chain(0xE000..=0xE0FF) {
             if let Some(evdev) = scancode_to_evdev(sc) {
                 assert_eq!(evdev_to_scancode(evdev), Some(sc), "{sc:#x}");
             }
@@ -2450,15 +2563,41 @@ mod keymap_tests {
 
     #[test]
     fn no_two_keys_share_a_mac_code() {
+        // On purpose: F13 and Print Screen, F14 and Scroll Lock share a place
+        // on a Mac keyboard, and Japanese Henkan and Katakana both mean Kana.
+        let alike = [(0x64, 0xE037), (0x65, 0x46), (0x79, 0x70)];
         let mut seen = std::collections::HashMap::new();
-        let all = (0x01u16..=0x58).chain(0xE000..=0xE0FF);
+        let all = (0x01u16..=0x7E).chain(0xE000..=0xE0FF);
         for sc in all {
             if let Some(code) = scancode_to_mac(sc) {
                 if let Some(other) = seen.insert(code, sc) {
-                    panic!("{sc:#x} and {other:#x} both map to mac key {code}");
+                    let pair = (sc.min(other), sc.max(other));
+                    let allowed = alike.iter().any(|&(a, b)| (a.min(b), a.max(b)) == pair);
+                    assert!(allowed, "{sc:#x} and {other:#x} both map to mac key {code}");
                 }
             }
         }
+    }
+
+    #[test]
+    fn pc_only_keys_have_a_mac_key() {
+        assert_eq!(scancode_to_mac(0xE037), Some(105), "print screen -> f13");
+        assert_eq!(scancode_to_mac(0x46), Some(107), "scroll lock -> f14");
+        assert_eq!(scancode_to_mac(0xE05D), Some(110), "menu");
+        assert_eq!(scancode_to_mac(0x56), Some(10), "iso key by left shift");
+        assert_eq!(scancode_to_mac(0x59), Some(81), "keypad =");
+        assert_eq!(scancode_to_mac(0x7D), Some(93), "yen");
+    }
+
+    #[test]
+    fn media_keys_play_through_the_system_and_dont_repeat() {
+        use crate::remote_control::Action;
+        assert_eq!(scancode_media(0xE030), Some(Action::VolumeUp));
+        assert_eq!(scancode_media(0xE020), Some(Action::Mute));
+        assert_eq!(scancode_media(0xE022), Some(Action::PlayPause));
+        assert_eq!(scancode_media(0x1E), None);
+        assert!(!repeats(0xE030));
+        assert!(repeats(0x1E));
     }
 
     #[test]

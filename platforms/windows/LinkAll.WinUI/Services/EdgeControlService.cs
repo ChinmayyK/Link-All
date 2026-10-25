@@ -261,10 +261,31 @@ namespace LinkAll.WinUI.Services
                 Task.Run(() => EndRemote("You pressed Ctrl+Alt+Esc.", tellEngine: true));
                 return true;
             }
-            int scan = (int)kb.scanCode | ((kb.flags & LLKHF_EXTENDED) != 0 ? 0xE000 : 0);
-            _ops.Enqueue(new Op(OpKind.Key, scan, down));
+            int scan = WireScancode(kb);
+            if (scan != 0) _ops.Enqueue(new Op(OpKind.Key, scan, down));
             _wake.Set();
             return true;
+        }
+
+        /// The key as it travels: its PS/2 set 1 scan code, with 0xE000 added
+        /// for an extended key. 0 for a key that doesn't travel.
+        private static int WireScancode(in KBDLLHOOKSTRUCT kb)
+        {
+            // Pause shares 0x45 with Num Lock and has no single code to send.
+            if (kb.vkCode == VK_PAUSE) return 0;
+            int scan = (int)kb.scanCode;
+            // Some keyboards' media and launch keys come with no scan code.
+            if (scan == 0) scan = (int)MapVirtualKeyW(kb.vkCode, MAPVK_VK_TO_VSC_EX);
+            else if ((kb.flags & LLKHF_EXTENDED) != 0) scan |= 0xE000;
+            if ((scan & 0xFF00) is not (0 or 0xE000)) return 0;
+            return scan switch
+            {
+                // The hook marks Right Shift and Num Lock as extended; they
+                // aren't, and the other computer wouldn't know them that way.
+                0xE036 => 0x36,
+                0xE045 => 0x45,
+                _ => scan,
+            };
         }
 
         private void CheckEdges(int x, int y)
@@ -528,6 +549,7 @@ namespace LinkAll.WinUI.Services
         private const uint WM_QUIT = 0x12;
         private const uint LLMHF_INJECTED = 0x1;
         private const uint LLKHF_EXTENDED = 0x1, LLKHF_INJECTED = 0x10, LLKHF_UP = 0x80;
+        private const uint VK_PAUSE = 0x13, MAPVK_VK_TO_VSC_EX = 4;
         private const int SM_CXSCREEN = 0, SM_CYSCREEN = 1, SM_XVIRTUALSCREEN = 76, SM_YVIRTUALSCREEN = 77,
             SM_CXVIRTUALSCREEN = 78, SM_CYVIRTUALSCREEN = 79;
 
@@ -575,6 +597,7 @@ namespace LinkAll.WinUI.Services
         [DllImport("user32.dll")] private static extern int GetSystemMetrics(int index);
         [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool SetCursorPos(int x, int y);
         [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int vKey);
+        [DllImport("user32.dll")] private static extern uint MapVirtualKeyW(uint code, uint mapType);
         [DllImport("kernel32.dll")] private static extern uint GetCurrentThreadId();
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern IntPtr GetModuleHandleW(string? name);
     }

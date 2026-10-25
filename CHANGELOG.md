@@ -37,6 +37,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **All:** Smoother and lighter: the apps ask the background service for less and less often when nothing on screen needs it (Now Playing covers are fetched once per track instead of with every update), and the phone no longer rewrites its status after every synced clip.
 
 ### Fixed
+- **Keyboard and mouse sharing:** Keys that did nothing on the other computer now arrive. From a Mac: Print Screen, Scroll Lock and the Menu key of a PC keyboard, F16 to F20, keypad =, the ISO key by left Shift, the Japanese keys, and volume, mute and play/pause/next/previous (brightness stays with the Mac). From a PC: Right Shift, Num Lock, the Menu key, Scroll Lock, F13 to F20, the ISO and Japanese keys, and the media keys, which play on a Mac as its own. Caps Lock typed on a PC now types capitals on a Mac, and arrows and keypad keys carry the flags macOS gives them. Linux receives the same keys.
+- **Keyboard and mouse sharing:** A PC keyboard plugged into a Mac can drive Windows with its keys as labelled. Turn on Keyboard & mouse › "The Mac uses a PC keyboard" on the PC: Ctrl+W closes a tab, Ctrl+Left jumps a word, Alt+Tab switches apps and the Windows key opens Start. Off, a Mac keyboard keeps working as before, with Command as Ctrl.
 - **Android:** Sharing text with no device connected says so, instead of "Sent to your devices".
 - **Android:** The activity menu no longer offers a Resend that did nothing.
 - **Windows:** Forgetting a device asks first.

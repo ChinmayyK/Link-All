@@ -140,6 +140,11 @@ pub struct Settings {
     /// away for 30 seconds. Off until the user turns it on.
     #[serde(default)]
     pub lock_when_phone_leaves: bool,
+    /// A Mac sharing its keyboard and mouse with this computer types on a PC
+    /// keyboard (Ctrl, Windows, Alt): its keys mean what their caps say here,
+    /// with no Mac shortcuts rewritten (see `edge_keys`). Off: a Mac keyboard.
+    #[serde(default)]
+    pub pc_keyboard_on_mac: bool,
 
     // ── UI ───────────────────────────────────────────────────────────────────
     /// Start Link All automatically on login.
@@ -242,6 +247,7 @@ impl Default for Settings {
             allow_find_device: false,
             drop_folder_enabled: false,
             lock_when_phone_leaves: false,
+            pc_keyboard_on_mac: false,
             start_on_login: false,
             min_text_length: 0,
             sync_urls_only: false,

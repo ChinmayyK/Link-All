@@ -129,6 +129,9 @@ impl Engine {
         if let Some(v) = p.lock_when_phone_leaves {
             s.lock_when_phone_leaves = v;
         }
+        if let Some(v) = p.pc_keyboard_on_mac {
+            s.pc_keyboard_on_mac = v;
+        }
         let persisted = self.persist_settings_snapshot(s)?;
         self.apply_settings(persisted).await;
         Ok(())
