@@ -1338,6 +1338,14 @@ impl PeerManager {
         self.live.get(&device_id).map(|s| s.endpoint)
     }
 
+    /// Whether a connected device is linked from this host, either way round.
+    pub fn has_live_session_at(&self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        self.live
+            .iter()
+            .any(|s| s.endpoint.ip().to_canonical() == ip)
+    }
+
     pub fn endpoint_for(&self, device_id: Uuid) -> Option<SocketAddr> {
         self.get(device_id)
             .and_then(|record| record.socket_addrs().first().copied())
@@ -1955,6 +1963,27 @@ mod tests {
             "192.168.1.22".parse().unwrap(),
         ];
         assert_eq!(manager.get(id).unwrap().ips, ips);
+    }
+
+    #[test]
+    fn a_host_with_an_incoming_session_counts_as_linked() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let (tx, _rx) = mpsc::channel(1);
+        let (stop, _stop_rx) = oneshot::channel();
+        manager
+            .replace_live_session(
+                Uuid::nil(),
+                Uuid::new_v4(),
+                false,
+                "[::ffff:192.168.1.21]:53122".parse().unwrap(),
+                tx.clone(),
+                tx,
+                stop,
+            )
+            .unwrap();
+        assert!(manager.has_live_session_at("192.168.1.21".parse().unwrap()));
+        assert!(!manager.has_live_session_at("192.168.1.22".parse().unwrap()));
     }
 
     #[test]

@@ -133,6 +133,12 @@ pub(super) async fn on_peer_found_via(
         DiscoverySource::LanProbe | DiscoverySource::HotspotProbe
     ) {
         for ip in addrs {
+            // The sweep starts only while nothing is connected, but a device
+            // can connect during it. Dialling it again replaced its live
+            // session (and dropped what was in flight on it).
+            if shared.peer_manager.has_live_session_at(ip) {
+                continue;
+            }
             let addr = SocketAddr::new(ip, port);
             if !mark_probe_connect_inflight(addr) {
                 continue; // already attempting this address
