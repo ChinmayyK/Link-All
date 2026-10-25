@@ -360,7 +360,7 @@ pub(super) async fn connect_once(
 
     if let Some(first_ep) = ep_iter.next() {
         tasks.spawn(async move {
-            tracing::warn!("connect_once: attempting to connect to {}", first_ep);
+            tracing::debug!("connect_once: attempting to connect to {}", first_ep);
             let res = timeout(timeout_dur, TcpStream::connect(first_ep)).await;
             (first_ep, res)
         });
@@ -417,7 +417,7 @@ pub(super) async fn connect_once(
         if spawn_next {
             if let Some(next_ep) = ep_iter.next() {
                 tasks.spawn(async move {
-                    tracing::warn!("connect_once: attempting to connect to {}", next_ep);
+                    tracing::debug!("connect_once: attempting to connect to {}", next_ep);
                     let res = timeout(timeout_dur, TcpStream::connect(next_ep)).await;
                     (next_ep, res)
                 });
@@ -430,7 +430,7 @@ pub(super) async fn connect_once(
         None => {
             let err_msg =
                 last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"));
-            tracing::warn!("connect_once: all connection attempts failed: {}", err_msg);
+            tracing::debug!("connect_once: all connection attempts failed: {}", err_msg);
             return Err(err_msg);
         }
     };
