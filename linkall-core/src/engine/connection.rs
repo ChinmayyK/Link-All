@@ -435,6 +435,16 @@ pub(super) async fn connect_once(
         }
     };
     let endpoint = connected_endpoint.unwrap();
+    // A slow address can take seconds to answer, and the peer may have
+    // linked by another path meanwhile. A handshake now would replace that
+    // fresh session on both sides; closing before it costs the peer nothing.
+    if !is_manual_reconnect {
+        if let Some(device_id) = expected_device_id {
+            if shared.peer_manager.is_connected(device_id) {
+                return Ok(());
+            }
+        }
+    }
     network::optimize_stream(&stream, "outgoing engine stream");
 
     // Always send the real device name — name is not a security concern.
