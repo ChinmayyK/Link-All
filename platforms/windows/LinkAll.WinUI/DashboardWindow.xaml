@@ -27,6 +27,7 @@
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="False"
                         IsTitleBarAutoPaddingEnabled="False"
+                        AlwaysShowHeader="False"
                         OpenPaneLength="212"
                         SelectionChanged="NavView_SelectionChanged"
                         BackRequested="NavView_BackRequested"
@@ -202,8 +203,10 @@
                         <!-- What stops sync right now (engine health), with its fix. -->
                         <StackPanel Grid.Row="0">
                             <!-- A newer Link All exists. Opens its release page; never installs. -->
+                            <!-- Collapsed while closed: a closed InfoBar still keeps its margin. -->
                             <InfoBar x:Name="UpdateBar" Margin="24,0,24,12" CornerRadius="14" Padding="4,2"
-                                     Severity="Informational" IsClosable="True" IsOpen="False">
+                                     Severity="Informational" IsClosable="True" IsOpen="False"
+                                     Visibility="Collapsed" Closed="OnUpdateBarClosed">
                                 <InfoBar.ActionButton>
                                     <Button Content="See what's new" Click="OnUpdateActionClick" />
                                 </InfoBar.ActionButton>
@@ -211,6 +214,7 @@
                             <InfoBar Margin="24,0,24,12" CornerRadius="14" Padding="4,2"
                                      Severity="Warning" IsClosable="False"
                                      IsOpen="{x:Bind mgr.HasHealthIssue, Mode=OneWay}"
+                                     Visibility="{x:Bind mgr.HasHealthIssue, Mode=OneWay}"
                                      Title="{x:Bind mgr.HealthTitle, Mode=OneWay}"
                                      Message="{x:Bind mgr.HealthDetail, Mode=OneWay}">
                                 <InfoBar.ActionButton>

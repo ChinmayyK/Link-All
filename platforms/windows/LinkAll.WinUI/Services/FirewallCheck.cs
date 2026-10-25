@@ -2,6 +2,8 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
+using System.Security.Principal;
 using System.Threading.Tasks;
 
 namespace LinkAll.WinUI.Services
@@ -34,6 +36,34 @@ namespace LinkAll.WinUI.Services
                 return false;
             }
         });
+
+        /// <summary>
+        /// Whether this account can change a firewall rule: an administrator can
+        /// approve the prompt it takes, a standard account can't. Link All
+        /// installs and runs without one, so it mustn't offer a fix that dead-ends.
+        /// </summary>
+        public static bool CanChangeFirewall()
+        {
+            try
+            {
+                using var id = WindowsIdentity.GetCurrent();
+                // Running elevated, or UAC is off.
+                if (new WindowsPrincipal(id).IsInRole(WindowsBuiltInRole.Administrator)) return true;
+                // With UAC on, an administrator runs with a limited token that can be raised.
+                return GetTokenInformation(id.Token, TokenElevationType, out int type, sizeof(int), out _)
+                    && type == TokenElevationTypeLimited;
+            }
+            catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
+        private const int TokenElevationType = 18, TokenElevationTypeLimited = 3;
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetTokenInformation(IntPtr token, int infoClass, out int info, int length, out int returned);
 
         // netsh prints one "Label:  value" block per rule. Labels are localized, so on a
         // non-English Windows nothing matches and no warning shows.

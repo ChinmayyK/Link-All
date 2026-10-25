@@ -26,7 +26,32 @@ namespace LinkAll.WinUI.Views
 
         private async System.Threading.Tasks.Task ShowFirewallNoteAsync()
         {
-            if (await Services.FirewallCheck.IncomingBlockedAsync()) FirewallNote.Visibility = Visibility.Visible;
+            if (!await Services.FirewallCheck.IncomingBlockedAsync()) return;
+            if (Services.FirewallCheck.CanChangeFirewall())
+            {
+                FirewallFix.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                // Nothing this account can do about it, so say what still works.
+                FirewallText.Text = "Incoming connections are blocked, so this PC connects out to your devices";
+                ToolTipService.SetToolTip(FirewallText,
+                    "Windows Firewall blocks devices from reaching this PC, and only an administrator can allow Link All. Your devices still work: this PC connects to them instead.");
+            }
+            FirewallNote.Visibility = Visibility.Visible;
+        }
+
+        // Windows Security's firewall page, where "Allow an app through firewall" is.
+        private void OnOpenFirewallClicked(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("windowsdefender://network/") { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                TraceLog.Write($"Firewall settings didn't open: {ex.Message}");
+            }
         }
 
         // A row opens its device's page, unless the tap was on one of its own buttons.

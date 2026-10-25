@@ -26,8 +26,12 @@ namespace LinkAll.WinUI
                     UpdateBar.Message = "Download it from the release page to update.";
                 }
                 UpdateBar.IsOpen = update != null;
+                UpdateBar.Visibility = update != null ? Visibility.Visible : Visibility.Collapsed;
             });
         }
+
+        private void OnUpdateBarClosed(InfoBar sender, InfoBarClosedEventArgs args) =>
+            sender.Visibility = Visibility.Collapsed;
 
         private void OnUpdateActionClick(object sender, RoutedEventArgs e)
         {
@@ -269,13 +273,6 @@ namespace LinkAll.WinUI
             if (TitleBarBackgroundBorder != null)
             {
                 TitleBarBackgroundBorder.Visibility = Visibility.Collapsed;
-            }
-            if (ContentFrame != null)
-            {
-                // Every page starts below the title bar now: the search bar
-                // lives there, and Devices used to draw its header into that
-                // space.
-                ContentFrame.Margin = new Thickness(0, 40, 0, 0);
             }
 
             PageTitleText.Text = tag switch

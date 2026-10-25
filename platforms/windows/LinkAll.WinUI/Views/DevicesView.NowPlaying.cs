@@ -66,6 +66,8 @@ namespace LinkAll.WinUI.Views
                 NowPlayingHost.Children.Clear();
                 DeviceNowPlayingHost.Children.Clear();
                 if (item != null) host.Children.Add(NowPlayingCard(item.Value));
+                // Empty but visible, Home's host would still take a gap in the page.
+                NowPlayingHost.Visibility = NowPlayingHost.Children.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
             }
             catch (Exception ex) { App.HandleError(ex); }
             finally { _nowPlayingRefreshing = false; }
