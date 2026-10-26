@@ -59,6 +59,8 @@ fn config(tmp: &TempDir, tag: &str, id: Uuid) -> EngineConfig {
         peer_store_path: tmp.path().join(format!("peer_{tag}.json")),
         identity_path: tmp.path().join(format!("id_{tag}.key")),
         data_dir: tmp.path().join(format!("data_{tag}")),
+
+        settings_path: tmp.path().join(format!("settings_{tag}.json")),
         file_save_dir: Some(tmp.path().join(format!("recv_{tag}"))),
         bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         enable_discovery: false,
