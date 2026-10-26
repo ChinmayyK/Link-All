@@ -367,9 +367,9 @@ impl SettingsStore {
                 Settings::default()
             } else {
                 // Use serde default for any missing fields so old configs work.
-                serde_json::from_slice(&bytes).unwrap_or_else(|e| {
-                    tracing::warn!("Settings parse error ({}), using defaults", e);
-                    Settings::default()
+                // A file that still doesn't parse is set aside, not saved over.
+                serde_json::from_slice(&bytes).unwrap_or_else(|err| {
+                    set_aside_corrupt(&path, &err, "your settings are back to their defaults")
                 })
             }
         } else {
@@ -688,6 +688,25 @@ mod tests {
 
         assert_eq!(store.get().clipboard_poll_ms, 10);
         assert_eq!(store.get().history_limit, MIN_HISTORY_ENTRIES);
+    }
+
+    #[test]
+    fn unreadable_settings_are_kept_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let damaged = br#"{"device_name":"Desk","history_limit":"#;
+        std::fs::write(&path, damaged).unwrap();
+
+        let store = SettingsStore::load(&path).unwrap();
+        assert_eq!(store.get().history_limit, Settings::default().history_limit);
+        store.save().unwrap();
+
+        let kept: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| std::fs::read(p).unwrap() == damaged)
+            .collect();
+        assert_eq!(kept.len(), 1, "the old settings are still on disk");
     }
 
     #[test]
