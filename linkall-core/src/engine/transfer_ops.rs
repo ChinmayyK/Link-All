@@ -445,7 +445,14 @@ pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
             .into_iter()
             .map(|(tid, peer_id)| {
                 let session = shared.peer_manager.live_session_id(peer_id);
-                (tid, peer_id, mgr.accept_inbound_or_resume(&tid, session))
+                let accepted = mgr.accept_inbound_or_resume(&tid, session);
+                // A refusal leaves the queue under this lock too: left
+                // queued, the next pump refused it again and the user saw
+                // the same failure twice.
+                if let Err(e) = &accepted {
+                    mgr.cancel_inbound(&tid, &e.to_string());
+                }
+                (tid, peer_id, accepted)
             })
             .collect()
     };
@@ -461,11 +468,6 @@ pub(crate) async fn pump_transfer_queue(shared: &EngineShared) {
             // No disk space, cannot create the file: tell the sender now
             // instead of accepting a transfer that can never be written.
             Err(e) => {
-                shared
-                    .file_transfers
-                    .lock()
-                    .await
-                    .cancel_inbound(&tid, &e.to_string());
                 let _ = shared
                     .event_tx
                     .send(EngineEvent::FileTransferFailed {
