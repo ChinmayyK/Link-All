@@ -41,6 +41,8 @@ bytes = { version = "1", features = ["serde"] }
 libc = "0.2"
 socket2 = { version = "0.5", features = ["all"] }
 image = { version = "0.24", default-features = false, features = ["png", "jpeg"], optional = true }
+# The decoder image uses for JPEG; called directly for scaled-down decodes.
+jpeg-decoder = { version = "0.3", default-features = false, optional = true }
 if-addrs = "0.13"
 
 # Logging
@@ -109,4 +111,4 @@ harness = false
 
 [features]
 compress = ["image"]
-image = ["dep:image"]
+image = ["dep:image", "dep:jpeg-decoder"]

@@ -494,7 +494,12 @@ fn thumbnail(file_id: u64, size_px: u32) -> Result<Vec<u8>> {
     #[cfg(feature = "image")]
     {
         let size = size_px.clamp(32, 1024);
-        if let Ok(img) = image::open(&file.path) {
+        let decoded = if file.mime_type == "image/jpeg" {
+            scaled_jpeg(&file.path, size).or_else(|| image::open(&file.path).ok())
+        } else {
+            image::open(&file.path).ok()
+        };
+        if let Some(img) = decoded {
             let mut out = std::io::Cursor::new(Vec::new());
             image::DynamicImage::ImageRgb8(img.thumbnail(size, size).to_rgb8())
                 .write_to(&mut out, image::ImageOutputFormat::Jpeg(80))?;
@@ -511,6 +516,31 @@ fn thumbnail(file_id: u64, size_px: u32) -> Result<Vec<u8>> {
     Ok(std::fs::read(&file.path)?)
 }
 
+/// A JPEG decoded at 1/2, 1/4 or 1/8 scale when that still covers `size`:
+/// the decoder skips the detail a preview drops anyway. A full decode of a
+/// 48 MP photo took about 370 MB, and the explorer asks for 8 at once.
+/// None for what this can't read (CMYK), which then gets a full decode.
+#[cfg(feature = "image")]
+fn scaled_jpeg(path: &Path, size: u32) -> Option<image::DynamicImage> {
+    let file = std::fs::File::open(path).ok()?;
+    let mut decoder = jpeg_decoder::Decoder::new(std::io::BufReader::new(file));
+    decoder.read_info().ok()?;
+    let side = u16::try_from(size).unwrap_or(u16::MAX);
+    decoder.scale(side, side).ok()?;
+    let pixels = decoder.decode().ok()?;
+    let info = decoder.info()?;
+    let (width, height) = (u32::from(info.width), u32::from(info.height));
+    match info.pixel_format {
+        jpeg_decoder::PixelFormat::RGB24 => {
+            image::RgbImage::from_raw(width, height, pixels).map(image::DynamicImage::ImageRgb8)
+        }
+        jpeg_decoder::PixelFormat::L8 => {
+            image::GrayImage::from_raw(width, height, pixels).map(image::DynamicImage::ImageLuma8)
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -525,6 +555,21 @@ mod tests {
             categorize_file_by_extension("xyz").0,
             RemoteFileCategory::Other
         );
+    }
+
+    #[cfg(feature = "image")]
+    #[test]
+    fn a_large_jpeg_is_decoded_at_a_reduced_scale() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("photo.jpg");
+        image::RgbImage::from_fn(2400, 1600, |x, y| image::Rgb([x as u8, y as u8, 90]))
+            .save(&path)
+            .unwrap();
+
+        let img = scaled_jpeg(&path, 256).expect("an RGB JPEG decodes");
+        // 1/8 scale: its long side still fills a 256-pixel preview.
+        assert_eq!((img.width(), img.height()), (300, 200));
+        assert_eq!(img.thumbnail(256, 256).width(), 256);
     }
 
     #[test]
