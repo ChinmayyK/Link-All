@@ -22,7 +22,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::windows::named_pipe::{PipeMode, ServerOptions};
 use tracing::{debug, info, warn};
 
-const MAX_INSTANCES: usize = 8;
+/// Connections the app may hold at once. Its file explorer alone keeps up to
+/// 8 thumbnail requests open (each up to 12 s); with only 8 instances those
+/// took every one, so the app's status check failed to connect and it
+/// reported the Link All service as unavailable while a grid loaded.
+const MAX_INSTANCES: usize = 32;
 
 pub fn get_pipe_name() -> String {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_else(|_| "default".to_string());
