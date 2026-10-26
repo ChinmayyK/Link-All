@@ -660,12 +660,7 @@ impl InboundTransfer {
         std::fs::create_dir_all(&actual_save_dir).context("creating save dir")?;
 
         if let Some(free_bytes) = get_available_disk_space(save_dir) {
-            anyhow::ensure!(
-                free_bytes > self.meta.size_bytes + 50 * 1024 * 1024,
-                "insufficient disk space: need {} bytes, but only {} bytes are free",
-                self.meta.size_bytes,
-                free_bytes
-            );
+            check_room(self.meta.size_bytes, free_bytes)?;
         }
 
         let partial_name = format!("{}{}", safe_name, PARTIAL_FILE_SUFFIX);
@@ -1601,6 +1596,24 @@ pub fn sanitize_file_name(name: &str) -> String {
     }
 }
 
+/// Space a received file must leave free, so a download never fills the disk.
+const KEEP_FREE_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Whether a file of `size_bytes` fits in `free_bytes` and leaves the reserve.
+/// The refusal names the reserve: "need 12 MB, only 20 MB free" read as a
+/// wrong sum.
+fn check_room(size_bytes: u64, free_bytes: u64) -> Result<()> {
+    use crate::activity::human_size;
+    anyhow::ensure!(
+        free_bytes > size_bytes + KEEP_FREE_BYTES,
+        "Not enough free space: {} needed, plus {} kept free, but {} is free",
+        human_size(size_bytes),
+        human_size(KEEP_FREE_BYTES),
+        human_size(free_bytes)
+    );
+    Ok(())
+}
+
 /// Query available disk space in bytes for a given path.
 fn get_available_disk_space(path: &Path) -> Option<u64> {
     #[cfg(unix)]
@@ -1867,6 +1880,19 @@ mod tests {
         assert!(finished.exists(), "finished downloads are never touched");
     }
     use tempfile::TempDir;
+
+    #[test]
+    fn a_refusal_for_space_counts_the_space_kept_free() {
+        let mb = 1024 * 1024;
+        assert!(check_room(12 * mb, 100 * mb).is_ok());
+        // 12 MB with 20 MB free: refused for the reserve, and it must say so
+        // rather than "need 12 MB, only 20 MB free".
+        let reason = check_room(12 * mb, 20 * mb).unwrap_err().to_string();
+        assert_eq!(
+            reason,
+            "Not enough free space: 12 MB needed, plus 50 MB kept free, but 20 MB is free"
+        );
+    }
 
     #[test]
     fn sanitize_file_name_replaces_characters_windows_refuses() {

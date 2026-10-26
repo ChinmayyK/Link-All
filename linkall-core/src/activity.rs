@@ -132,7 +132,7 @@ pub struct ActivityEntry {
 }
 
 /// "640 MB", "12.9 KB": sizes for people, matching the apps' own labels.
-fn human_size(bytes: u64) -> String {
+pub(crate) fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1024 {
         return format!("{bytes} B");
