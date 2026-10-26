@@ -380,8 +380,13 @@ impl PeerManager {
             if bytes.is_empty() {
                 PeerStoreData::default()
             } else {
-                serde_json::from_slice(&bytes)
-                    .unwrap_or_else(|err| crate::settings::set_aside_corrupt(&path, &err))
+                serde_json::from_slice(&bytes).unwrap_or_else(|err| {
+                    crate::settings::set_aside_corrupt(
+                        &path,
+                        &err,
+                        "you may need to pair your devices again",
+                    )
+                })
             }
         } else {
             PeerStoreData::default()

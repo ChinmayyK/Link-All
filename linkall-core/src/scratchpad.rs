@@ -64,10 +64,14 @@ impl Scratchpad {
             let tmp = path.with_extension("json.tmp");
             std::fs::read_to_string(tmp)
         });
-        let notes: Vec<Note> = text
-            .ok()
-            .and_then(|text| serde_json::from_str(&text).ok())
-            .unwrap_or_default();
+        // A file that doesn't parse is set aside: starting empty and saving
+        // over it would lose every note in it for good.
+        let notes: Vec<Note> = match text {
+            Ok(text) => serde_json::from_str(&text).unwrap_or_else(|err| {
+                crate::settings::set_aside_corrupt(path, &err, "earlier notes won't show")
+            }),
+            Err(_) => Vec::new(),
+        };
         Scratchpad {
             notes: notes.into_iter().map(|n| (n.id, n)).collect(),
             path: Some(path.to_path_buf()),
@@ -372,6 +376,30 @@ mod tests {
         }
         let pad = Scratchpad::load(&path);
         assert_eq!(pad.visible()[0].text, "remember me");
+    }
+
+    #[test]
+    fn an_unreadable_notes_file_is_kept_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("scratchpad.json");
+        let damaged = br#"[{"id":"cut off mid-wri"#;
+        std::fs::write(&path, damaged).unwrap();
+
+        let mut pad = Scratchpad::load(&path);
+        assert!(pad.visible().is_empty());
+        pad.upsert_local(None, "a new note", false, 100).unwrap();
+
+        let kept: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| std::fs::read(p).unwrap() == damaged)
+            .collect();
+        assert_eq!(kept.len(), 1, "the old notes are still on disk");
+        assert!(kept[0]
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .starts_with("scratchpad.json.corrupt"));
     }
 
     #[test]
