@@ -110,5 +110,9 @@ harness = false
 
 
 [features]
+# Every build gets previews in the file explorer: without the image codecs a
+# Windows or Linux computer could only send photos under 2 MB as-is, so most
+# phone camera photos showed no preview.
+default = ["image"]
 compress = ["image"]
 image = ["dep:image", "dep:jpeg-decoder"]
