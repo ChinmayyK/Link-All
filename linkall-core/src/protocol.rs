@@ -39,7 +39,7 @@ impl ClipboardContent {
     /// Fix 16: Returns true if the content carries no actual data.
     ///
     /// Previously every call site re-implemented this guard:
-    /// ```ignore
+    /// ```text
     /// if matches!(&content, ClipboardContent::Text(s) if s.is_empty()) { ... }
     /// ```
     /// Now the engine can do a single `if content.is_empty() { return; }` check

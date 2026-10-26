@@ -209,7 +209,7 @@ impl QualityProbe {
     /// active chunk size proactively.
     ///
     /// # Example
-    /// ```ignore
+    /// ```text
     /// if let Some((old, new)) = probe.degraded_from(&new_result) {
     ///     tracing::warn!("Link quality degraded: {:?} → {:?}", old, new);
     ///     engine.reduce_chunk_size(new.chunk_size());
