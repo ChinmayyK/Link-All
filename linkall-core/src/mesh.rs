@@ -131,11 +131,11 @@ impl MeshRouter {
     /// Register that we are originating content (prevents echo back to us).
     pub fn register_local_send(&mut self, hash: ContentHash) {
         self.evict_expired();
-        let record = self
-            .relay_records
-            .entry(hash)
-            .or_insert_with(|| RelayRecord::new(self.local_device_id));
-        record.mark_seen(self.local_device_id);
+        // A new copy here starts a new record. Reusing the last one for the
+        // same content (copy A, then B, then A again within the TTL) found
+        // every peer already marked as having seen it and sent A to nobody.
+        self.relay_records
+            .insert(hash, RelayRecord::new(self.local_device_id));
     }
 
     /// Fan out a ClipboardPush to all eligible peers.
