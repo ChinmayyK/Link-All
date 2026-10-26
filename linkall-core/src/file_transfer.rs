@@ -1542,7 +1542,9 @@ pub fn is_folder_item(file_name: &str) -> bool {
 /// Rules applied (in order):
 /// 1. Take only the last path component (basename) — removes `../` prefixes.
 /// 2. Remove any remaining `/` or `\` characters, and replace `:` with `_`
-///    (on Windows `a.txt:x` writes a hidden NTFS alternate data stream).
+///    (on Windows `a.txt:x` writes a hidden NTFS alternate data stream), as
+///    well as the other characters Windows refuses in a name (`< > " | ? *`
+///    and control characters), so a file named on a Mac still arrives there.
 /// 3. Strip leading dots to avoid hidden files (e.g. `.bashrc`).
 /// 4. If the result is empty or is a reserved name, substitute "file".
 pub fn sanitize_file_name(name: &str) -> String {
@@ -1556,7 +1558,11 @@ pub fn sanitize_file_name(name: &str) -> String {
     let sanitized: String = base
         .chars()
         .filter(|&c| c != '/' && c != '\\' && c != '\0')
-        .map(|c| if c == ':' { '_' } else { c })
+        .map(|c| match c {
+            ':' | '<' | '>' | '"' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
         .collect();
 
     // Trim leading dots (hidden file prevention).
@@ -1861,6 +1867,15 @@ mod tests {
         assert!(finished.exists(), "finished downloads are never touched");
     }
     use tempfile::TempDir;
+
+    #[test]
+    fn sanitize_file_name_replaces_characters_windows_refuses() {
+        // Legal on a Mac or Linux, refused by Windows' file system.
+        assert_eq!(sanitize_file_name("Report?.pdf"), "Report_.pdf");
+        assert_eq!(sanitize_file_name("\"draft\" <v2>.txt"), "_draft_ _v2_.txt");
+        assert_eq!(sanitize_file_name("a|b*c.txt"), "a_b_c.txt");
+        assert_eq!(sanitize_file_name("tab\there.txt"), "tab_here.txt");
+    }
 
     #[test]
     fn sanitize_file_name_blocks_alternate_data_streams() {
