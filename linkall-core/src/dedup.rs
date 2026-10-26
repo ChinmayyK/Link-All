@@ -157,6 +157,9 @@ impl Deduplicator {
         }
         self.sent_hashes.insert(hash);
         self.sent_at.insert(hash, Instant::now());
+        // Our clipboard holds this now, not what was applied before; sending
+        // that earlier clip again later is a new copy, not a bounce.
+        self.last_applied = None;
         self.stats.sends_allowed += 1;
         true
     }
@@ -191,6 +194,11 @@ impl Deduplicator {
         // A, then B, then A again within the window is a new copy of A, and
         // remembering every hash dropped it, leaving B on the clipboard.
         window.hashes.retain(|seen, _| *seen == hash);
+        // What we sent before is no longer our clipboard. The same content
+        // arriving after this is a new copy on that device, not our own send
+        // bouncing back: copy X here, then Y and X there, left Y here.
+        self.sent_hashes.clear();
+        self.sent_at.clear();
 
         self.last_applied = Some(hash);
         self.stats.applies_allowed += 1;
