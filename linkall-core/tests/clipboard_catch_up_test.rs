@@ -139,3 +139,39 @@ async fn the_newer_copy_wins_when_both_copied_while_apart() {
         "the phone keeps its newer copy"
     );
 }
+
+/// Copying A, then B, then A again on one device quickly must leave A on the
+/// other: the second A is a new copy, not a repeat delivery.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn copying_back_to_an_earlier_clip_reaches_the_other_device() {
+    let tmp = TempDir::new().unwrap();
+    let (mut phone, mut computer) = common::start_pair(&tmp, true, true).await;
+    common::connect(&phone, &computer).await;
+    eventually("both linked", async || {
+        connected(&phone, computer.id).await && connected(&computer, phone.id).await
+    })
+    .await;
+    while phone.events.try_recv().is_ok() {}
+
+    let mut received = Vec::new();
+    for text in ["first", "second", "first"] {
+        phone
+            .engine
+            .push_clipboard(ClipboardContent::Text(text.into()))
+            .await;
+        let got = tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if let Some(EngineEvent::ClipboardReceived { content, .. }) =
+                    computer.events.recv().await
+                {
+                    if let ClipboardContent::Text(t) = content.as_ref() {
+                        return t.clone();
+                    }
+                }
+            }
+        })
+        .await;
+        received.push(got.unwrap_or_else(|_| format!("<nothing for {text}>")));
+    }
+    assert_eq!(received, ["first", "second", "first"]);
+}

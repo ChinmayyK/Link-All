@@ -187,6 +187,10 @@ impl Deduplicator {
             self.stats.windowed_duplicates += 1;
             return false;
         }
+        // Only a repeat of what this peer sent last is a duplicate. Copying
+        // A, then B, then A again within the window is a new copy of A, and
+        // remembering every hash dropped it, leaving B on the clipboard.
+        window.hashes.retain(|seen, _| *seen == hash);
 
         self.last_applied = Some(hash);
         self.stats.applies_allowed += 1;
@@ -322,6 +326,18 @@ mod tests {
         let peer = Uuid::new_v4();
         assert!(dedup.should_apply(peer, hash));
         assert!(!dedup.should_apply(peer, hash)); // same peer, same window
+    }
+
+    #[test]
+    fn copying_a_then_b_then_a_again_applies_a_again() {
+        let mut dedup = Deduplicator::new();
+        let peer = Uuid::new_v4();
+        let a = hash_content(&ClipboardContent::Text("a".into()));
+        let b = hash_content(&ClipboardContent::Text("b".into()));
+        assert!(dedup.should_apply(peer, a));
+        assert!(dedup.should_apply(peer, b));
+        // A new copy of A, not a repeat delivery: the clipboard holds B now.
+        assert!(dedup.should_apply(peer, a));
     }
 
     #[test]
