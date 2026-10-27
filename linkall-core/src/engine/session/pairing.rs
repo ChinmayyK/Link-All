@@ -166,10 +166,37 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     notify_pairing_changed(shared, peer_id).await;
                     return Flow::Continue;
                 }
+                // An acceptance of a request we withdrew: the two crossed on
+                // the wire, and the other device now trusts us alone. Say no
+                // again so it takes its acceptance back.
+                if accepted {
+                    tracing::info!(peer_id = %peer_id, "acceptance of a withdrawn pairing request; withdrawing again");
+                    let _ = ctx.outbox_tx.send(pairing_withdrawal(shared)).await;
+                    return Flow::Continue;
+                }
                 tracing::warn!(
                     peer_id = %peer_id,
                     "ignoring unsolicited PairingResponse — no pending pairing request and not already trusted"
                 );
+                return Flow::Continue;
+            }
+
+            // A "no" from a device we trust but never asked: it withdrew the
+            // request we accepted (see above), so our trust is one-sided.
+            // Take it back instead of staying paired to a device that isn't.
+            if !accepted && !we_requested_pairing {
+                tracing::info!(peer_id = %peer_id, "peer withdrew the pairing request we accepted");
+                {
+                    let mut trust = shared.trust.lock().await;
+                    let _ = trust.revoke_peer(peer_id);
+                    // Untrusted, not blocked: it may ask again.
+                    let _ = trust.unreject_peer(peer_id);
+                }
+                let _ = shared.peer_manager.update_trust(peer_id, false);
+                let _ = shared
+                    .peer_manager
+                    .end_pairing(peer_id, Some(PairingOutcome::Cancelled));
+                notify_pairing_changed(shared, peer_id).await;
                 return Flow::Continue;
             }
 
