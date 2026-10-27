@@ -33,21 +33,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     .transform(std::sync::Arc::make_mut(&mut content));
 
                 // --- Clipboard Security & Throttling ---
-                let payload_size = match &*content {
-                    ClipboardContent::Text(t) => t.len(),
-                    ClipboardContent::Image { data, .. } => data.len(),
-                    ClipboardContent::File { data, .. } => data.len(),
-                };
-
                 // Limit sizes to prevent OOM
-                const MAX_TEXT_BYTES: usize = 4 * 1024 * 1024;
-                const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
-
-                let allowed = match &*content {
-                    ClipboardContent::Text(t) => t.len() <= MAX_TEXT_BYTES,
-                    ClipboardContent::Image { data, .. } => data.len() <= MAX_IMAGE_BYTES,
-                    ClipboardContent::File { data, .. } => data.len() <= MAX_IMAGE_BYTES,
-                };
+                let payload_size = content.byte_len();
+                let allowed = content.within_limits();
 
                 if !allowed {
                     tracing::warn!(peer_id = %peer_id, size = payload_size, "dropped oversized clipboard payload");

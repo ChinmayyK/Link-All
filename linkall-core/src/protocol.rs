@@ -36,6 +36,17 @@ impl ClipboardContent {
         }
     }
 
+    /// Whether a device accepts this on arrival: text up to `MAX_TEXT_BYTES`,
+    /// images and files up to `MAX_IMAGE_BYTES`. Larger ones are dropped.
+    pub fn within_limits(&self) -> bool {
+        match self {
+            ClipboardContent::Text(s) => s.len() <= MAX_TEXT_BYTES,
+            ClipboardContent::Image { data, .. } | ClipboardContent::File { data, .. } => {
+                data.len() <= MAX_IMAGE_BYTES
+            }
+        }
+    }
+
     /// Fix 16: Returns true if the content carries no actual data.
     ///
     /// Previously every call site re-implemented this guard:
