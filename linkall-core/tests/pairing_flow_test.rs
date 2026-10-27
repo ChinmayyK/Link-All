@@ -478,3 +478,39 @@ async fn a_second_device_with_the_same_name_keeps_its_pairing() {
         "both devices stay paired"
     );
 }
+
+/// The requester cancels just as the other user taps Accept: the withdrawal
+/// and the acceptance cross on the wire. Neither device may end up paired on
+/// its own. Seen with a Mac and a phone: the phone showed the Mac as paired
+/// and the Mac ignored the late answer ("ignoring unsolicited
+/// PairingResponse"). The same holds the other way round, phone asking.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn cancel_crossing_an_accept_pairs_neither_side() {
+    let tmp = TempDir::new().unwrap();
+    let (a, mut b) = start_pair(&tmp, false, false).await;
+    connect(&a, &b).await;
+    let (a_id, b_id) = (a.id, b.id);
+
+    a.engine.send_pairing_request(b_id).await;
+    wait_for(
+        &mut b.events,
+        "request on B",
+        |e| matches!(e, EngineEvent::PairingRequested { device_id, .. } if *device_id == a_id),
+    )
+    .await;
+
+    let (_, accepted) = tokio::join!(
+        a.engine.cancel_pairing_request(b_id),
+        b.engine.respond_to_pairing(a_id, true)
+    );
+    accepted.expect("B's accept went out before the withdrawal arrived");
+
+    eventually("both sides agree", async || {
+        a.engine.is_trusted(b_id).await == b.engine.is_trusted(a_id).await
+    })
+    .await;
+    assert!(
+        !a.engine.is_trusted(b_id).await,
+        "A cancelled, so no pairing"
+    );
+}
