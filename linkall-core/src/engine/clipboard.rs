@@ -77,6 +77,27 @@ impl crate::engine::Engine {
             content
         };
 
+        // Larger than any device accepts: not sent. Sent anyway, one over the
+        // frame limit dropped the link, and the catch-up on reconnect sent it
+        // again, so the link dropped every few seconds.
+        if !content.within_limits() {
+            let size = content.byte_len();
+            tracing::warn!(size, "clipboard too large to send");
+            let _ = self
+                .shared
+                .event_tx
+                .send(EngineEvent::Warning(format!(
+                    "Didn't send the clipboard: {} is more than other devices accept",
+                    crate::activity::human_size(size as u64)
+                )))
+                .await;
+            return SyncDispatchReport {
+                seq,
+                target,
+                peers: Vec::new(),
+            };
+        }
+
         // Re-hash after potential compression so the wire message is consistent.
         let hash = hash_content(&content);
 

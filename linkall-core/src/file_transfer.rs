@@ -660,12 +660,7 @@ impl InboundTransfer {
         std::fs::create_dir_all(&actual_save_dir).context("creating save dir")?;
 
         if let Some(free_bytes) = get_available_disk_space(save_dir) {
-            anyhow::ensure!(
-                free_bytes > self.meta.size_bytes + 50 * 1024 * 1024,
-                "insufficient disk space: need {} bytes, but only {} bytes are free",
-                self.meta.size_bytes,
-                free_bytes
-            );
+            check_room(self.meta.size_bytes, free_bytes)?;
         }
 
         let partial_name = format!("{}{}", safe_name, PARTIAL_FILE_SUFFIX);
@@ -1542,7 +1537,9 @@ pub fn is_folder_item(file_name: &str) -> bool {
 /// Rules applied (in order):
 /// 1. Take only the last path component (basename) — removes `../` prefixes.
 /// 2. Remove any remaining `/` or `\` characters, and replace `:` with `_`
-///    (on Windows `a.txt:x` writes a hidden NTFS alternate data stream).
+///    (on Windows `a.txt:x` writes a hidden NTFS alternate data stream), as
+///    well as the other characters Windows refuses in a name (`< > " | ? *`
+///    and control characters), so a file named on a Mac still arrives there.
 /// 3. Strip leading dots to avoid hidden files (e.g. `.bashrc`).
 /// 4. If the result is empty or is a reserved name, substitute "file".
 pub fn sanitize_file_name(name: &str) -> String {
@@ -1556,7 +1553,11 @@ pub fn sanitize_file_name(name: &str) -> String {
     let sanitized: String = base
         .chars()
         .filter(|&c| c != '/' && c != '\\' && c != '\0')
-        .map(|c| if c == ':' { '_' } else { c })
+        .map(|c| match c {
+            ':' | '<' | '>' | '"' | '|' | '?' | '*' => '_',
+            c if c.is_control() => '_',
+            c => c,
+        })
         .collect();
 
     // Trim leading dots (hidden file prevention).
@@ -1593,6 +1594,24 @@ pub fn sanitize_file_name(name: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+/// Space a received file must leave free, so a download never fills the disk.
+const KEEP_FREE_BYTES: u64 = 50 * 1024 * 1024;
+
+/// Whether a file of `size_bytes` fits in `free_bytes` and leaves the reserve.
+/// The refusal names the reserve: "need 12 MB, only 20 MB free" read as a
+/// wrong sum.
+fn check_room(size_bytes: u64, free_bytes: u64) -> Result<()> {
+    use crate::activity::human_size;
+    anyhow::ensure!(
+        free_bytes > size_bytes + KEEP_FREE_BYTES,
+        "Not enough free space: {} needed, plus {} kept free, but {} is free",
+        human_size(size_bytes),
+        human_size(KEEP_FREE_BYTES),
+        human_size(free_bytes)
+    );
+    Ok(())
 }
 
 /// Query available disk space in bytes for a given path.
@@ -1861,6 +1880,28 @@ mod tests {
         assert!(finished.exists(), "finished downloads are never touched");
     }
     use tempfile::TempDir;
+
+    #[test]
+    fn a_refusal_for_space_counts_the_space_kept_free() {
+        let mb = 1024 * 1024;
+        assert!(check_room(12 * mb, 100 * mb).is_ok());
+        // 12 MB with 20 MB free: refused for the reserve, and it must say so
+        // rather than "need 12 MB, only 20 MB free".
+        let reason = check_room(12 * mb, 20 * mb).unwrap_err().to_string();
+        assert_eq!(
+            reason,
+            "Not enough free space: 12 MB needed, plus 50 MB kept free, but 20 MB is free"
+        );
+    }
+
+    #[test]
+    fn sanitize_file_name_replaces_characters_windows_refuses() {
+        // Legal on a Mac or Linux, refused by Windows' file system.
+        assert_eq!(sanitize_file_name("Report?.pdf"), "Report_.pdf");
+        assert_eq!(sanitize_file_name("\"draft\" <v2>.txt"), "_draft_ _v2_.txt");
+        assert_eq!(sanitize_file_name("a|b*c.txt"), "a_b_c.txt");
+        assert_eq!(sanitize_file_name("tab\there.txt"), "tab_here.txt");
+    }
 
     #[test]
     fn sanitize_file_name_blocks_alternate_data_streams() {

@@ -360,7 +360,7 @@ pub(super) async fn connect_once(
 
     if let Some(first_ep) = ep_iter.next() {
         tasks.spawn(async move {
-            tracing::warn!("connect_once: attempting to connect to {}", first_ep);
+            tracing::debug!("connect_once: attempting to connect to {}", first_ep);
             let res = timeout(timeout_dur, TcpStream::connect(first_ep)).await;
             (first_ep, res)
         });
@@ -417,7 +417,7 @@ pub(super) async fn connect_once(
         if spawn_next {
             if let Some(next_ep) = ep_iter.next() {
                 tasks.spawn(async move {
-                    tracing::warn!("connect_once: attempting to connect to {}", next_ep);
+                    tracing::debug!("connect_once: attempting to connect to {}", next_ep);
                     let res = timeout(timeout_dur, TcpStream::connect(next_ep)).await;
                     (next_ep, res)
                 });
@@ -430,11 +430,21 @@ pub(super) async fn connect_once(
         None => {
             let err_msg =
                 last_err.unwrap_or_else(|| anyhow::anyhow!("all connection attempts failed"));
-            tracing::warn!("connect_once: all connection attempts failed: {}", err_msg);
+            tracing::debug!("connect_once: all connection attempts failed: {}", err_msg);
             return Err(err_msg);
         }
     };
     let endpoint = connected_endpoint.unwrap();
+    // A slow address can take seconds to answer, and the peer may have
+    // linked by another path meanwhile. A handshake now would replace that
+    // fresh session on both sides; closing before it costs the peer nothing.
+    if !is_manual_reconnect {
+        if let Some(device_id) = expected_device_id {
+            if shared.peer_manager.is_connected(device_id) {
+                return Ok(());
+            }
+        }
+    }
     network::optimize_stream(&stream, "outgoing engine stream");
 
     // Always send the real device name — name is not a security concern.
@@ -458,6 +468,14 @@ pub(super) async fn connect_once(
     .await?;
 
     if hs.peer_device_id == shared.config.device_id {
+        // This address is ours, so it can't be the expected peer's. Keeping
+        // it made every reconnect cycle dial this device and handshake with
+        // itself.
+        if let Some(expected) = expected_device_id {
+            shared
+                .peer_manager
+                .forget_address(expected, endpoint.ip())?;
+        }
         anyhow::bail!("aborting outbound connect — cannot connect to self");
     }
 

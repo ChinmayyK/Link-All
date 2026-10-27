@@ -41,8 +41,23 @@ impl<S: Subscriber> Layer<S> for Recorder {
         let level = *event.metadata().level();
         let _ = write!(line, "{} {}", level_tag(level), event.metadata().target());
         event.record(&mut Fields(&mut line));
-        push(mask_quoted(&redact(&line)));
+        // The time goes on after redaction, which would read it as an address.
+        push(format!(
+            "{} {}",
+            utc_time_of_day(),
+            mask_quoted(&redact(&line))
+        ));
     }
+}
+
+/// HH:MM:SS in UTC. A report without times showed what happened but not
+/// when, so a drop couldn't be matched to what the user was doing.
+fn utc_time_of_day() -> String {
+    let secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+        % 86_400;
+    format!("{:02}:{:02}:{:02}", secs / 3600, secs / 60 % 60, secs % 60)
 }
 
 fn level_tag(level: Level) -> &'static str {
@@ -172,6 +187,30 @@ fn is_path(word: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_line_starts_with_its_utc_time() {
+        use tracing_subscriber::layer::SubscriberExt;
+        let subscriber = tracing_subscriber::registry().with(layer());
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!("a line to time");
+        });
+        let line = tail(CAPACITY)
+            .into_iter()
+            .rev()
+            .find(|l| l.contains("a line to time"))
+            .expect("the line was recorded");
+        let (time, rest) = line.split_once(' ').unwrap();
+        let parts: Vec<&str> = time.split(':').collect();
+        assert_eq!(parts.len(), 3, "{line}");
+        assert!(
+            parts
+                .iter()
+                .all(|p| p.len() == 2 && p.parse::<u8>().is_ok()),
+            "{line}"
+        );
+        assert!(rest.starts_with("INFO "), "{line}");
+    }
 
     #[test]
     fn addresses_keep_only_the_last_octet() {

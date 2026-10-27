@@ -285,21 +285,13 @@ struct ActiveTransferCard: View {
                         }
                     }
                     
-                    if #available(macOS 13.0, *) {
-                        Text(statusText)
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .contentTransition(.numericText())
-                            .animation(.linear(duration: 0.25), value: statusText)
-                    } else {
-                        Text(statusText)
-                            .font(.system(size: 12, weight: .regular))
-                            .foregroundStyle(CRTheme.inkSoft)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                    }
+                    Text(statusText)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(CRTheme.inkSoft)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .contentTransition(.numericText())
+                        .animation(.linear(duration: 0.25), value: statusText)
                 }
                 
                 Spacer(minLength: 16)
@@ -331,31 +323,19 @@ struct ActiveTransferCard: View {
             } else {
                 VStack(spacing: 8) {
                     HStack {
-                        if #available(macOS 13.0, *) {
-                            Text(percentText)
-                                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                                .foregroundStyle(CRTheme.ink)
-                                .contentTransition(.numericText())
-                                .animation(.linear(duration: 0.15), value: percentText)
-                            
-                            Spacer()
-                            
-                            Text(sizeText)
-                                .font(.system(size: 11, weight: .regular).monospacedDigit())
-                                .foregroundStyle(CRTheme.inkSoft)
-                                .contentTransition(.numericText())
-                                .animation(.linear(duration: 0.15), value: sizeText)
-                        } else {
-                            Text(percentText)
-                                .font(.system(size: 11, weight: .medium).monospacedDigit())
-                                .foregroundStyle(CRTheme.ink)
-                            
-                            Spacer()
-                            
-                            Text(sizeText)
-                                .font(.system(size: 11, weight: .regular).monospacedDigit())
-                                .foregroundStyle(CRTheme.inkSoft)
-                        }
+                        Text(percentText)
+                            .font(.system(size: 11, weight: .medium).monospacedDigit())
+                            .foregroundStyle(CRTheme.ink)
+                            .contentTransition(.numericText())
+                            .animation(.linear(duration: 0.15), value: percentText)
+                        
+                        Spacer()
+                        
+                        Text(sizeText)
+                            .font(.system(size: 11, weight: .regular).monospacedDigit())
+                            .foregroundStyle(CRTheme.inkSoft)
+                            .contentTransition(.numericText())
+                            .animation(.linear(duration: 0.15), value: sizeText)
                     }
                     
                     // Gradient Bar

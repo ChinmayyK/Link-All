@@ -60,6 +60,8 @@ async fn two_engines_exchange_text() {
         trust_store_path: trust_path_1,
         peer_store_path: peer_path_1,
         identity_path: identity_path_1,
+        data_dir: tmp.path().join("data1"),
+        settings_path: tmp.path().join("settings1.json"),
         bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         enable_discovery: false,
         ..EngineConfig::default()
@@ -72,6 +74,8 @@ async fn two_engines_exchange_text() {
         trust_store_path: trust_path_2,
         peer_store_path: peer_path_2,
         identity_path: identity_path_2,
+        data_dir: tmp.path().join("data2"),
+        settings_path: tmp.path().join("settings2.json"),
         bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         enable_discovery: false,
         ..EngineConfig::default()

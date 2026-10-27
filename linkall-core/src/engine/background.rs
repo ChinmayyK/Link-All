@@ -586,7 +586,7 @@ impl Engine {
                                 endpoints = ?endpoints,
                                 "auto-reconnector: attempting reconnection"
                             );
-                            let _ = connect_once(
+                            let res = connect_once(
                                 shared_clone,
                                 endpoints,
                                 Some(peer_id),
@@ -594,6 +594,13 @@ impl Engine {
                                 false,
                             )
                             .await;
+                            // One line per outage; logging every retry filled
+                            // the problem report's log with nothing else.
+                            if let Err(err) = res {
+                                if attempts == 0 {
+                                    tracing::info!(peer_id = %peer_id, error = %err, "auto-reconnector: peer unreachable, retrying with backoff");
+                                }
+                            }
                         });
                     }
                 }

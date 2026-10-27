@@ -291,6 +291,23 @@ impl PeerRecord {
         })
     }
 
+    /// Records an address to dial this peer at. True when it was new.
+    /// An IPv4 address seen through a dual-stack socket (`::ffff:a.b.c.d`)
+    /// is stored as plain IPv4, or every reconnect dialled the host twice.
+    fn add_ip(&mut self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        if self.ips.contains(&ip) {
+            return false;
+        }
+        self.ips.push(ip);
+        // Every stored IP is dialled on reconnect; a phone that
+        // roams DHCP leases would otherwise grow this forever.
+        if self.ips.len() > 8 {
+            self.ips.remove(0);
+        }
+        true
+    }
+
     pub fn socket_addrs(&self) -> Vec<SocketAddr> {
         self.ips
             .iter()
@@ -363,8 +380,13 @@ impl PeerManager {
             if bytes.is_empty() {
                 PeerStoreData::default()
             } else {
-                serde_json::from_slice(&bytes)
-                    .unwrap_or_else(|err| crate::settings::set_aside_corrupt(&path, &err))
+                serde_json::from_slice(&bytes).unwrap_or_else(|err| {
+                    crate::settings::set_aside_corrupt(
+                        &path,
+                        &err,
+                        "you may need to pair your devices again",
+                    )
+                })
             }
         } else {
             PeerStoreData::default()
@@ -373,6 +395,14 @@ impl PeerManager {
         // Connections do not persist across restarts.
         for peer in store.peers.values_mut() {
             peer.status = PeerConnectionState::Disconnected;
+        }
+
+        // Stores written before add_ip hold IPv4 hosts twice, once as
+        // `::ffff:a.b.c.d`.
+        for peer in store.peers.values_mut() {
+            for ip in std::mem::take(&mut peer.ips) {
+                peer.add_ip(ip);
+            }
         }
 
         // One-time migration: a prior bug (see upsert_peer_ext) hard-coded
@@ -573,7 +603,7 @@ impl PeerManager {
                 id: device_id,
                 friendly_name: friendly_name.clone(),
                 platform: platform.clone(),
-                ips: vec![endpoint.ip()],
+                ips: vec![endpoint.ip().to_canonical()],
                 port: endpoint.port(),
                 trusted,
                 // A bare discovery sighting (mDNS/UDP beacon) is not a
@@ -622,13 +652,7 @@ impl PeerManager {
                 record.platform = platform;
                 changed = true;
             }
-            if !record.ips.contains(&endpoint.ip()) {
-                record.ips.push(endpoint.ip());
-                // Every stored IP is dialled on reconnect; a phone that
-                // roams DHCP leases would otherwise grow this forever.
-                if record.ips.len() > 8 {
-                    record.ips.remove(0);
-                }
+            if record.add_ip(endpoint.ip()) {
                 changed = true;
             }
             if record.port != endpoint.port() || record.trusted != trusted {
@@ -701,7 +725,9 @@ impl PeerManager {
                 port: endpoint
                     .map(|addr| addr.port())
                     .unwrap_or(crate::protocol::DEFAULT_PORT),
-                ips: endpoint.map(|addr| vec![addr.ip()]).unwrap_or_default(),
+                ips: endpoint
+                    .map(|addr| vec![addr.ip().to_canonical()])
+                    .unwrap_or_default(),
                 status: PeerConnectionState::Connecting,
                 ..PeerRecord::default()
             });
@@ -711,9 +737,7 @@ impl PeerManager {
                 return Ok(false);
             }
             if let Some(endpoint) = endpoint {
-                if !entry.ips.contains(&endpoint.ip()) {
-                    entry.ips.push(endpoint.ip());
-                }
+                entry.add_ip(endpoint.ip());
                 entry.port = endpoint.port();
             }
             entry.status = PeerConnectionState::Connecting;
@@ -781,9 +805,7 @@ impl PeerManager {
                 ..PeerRecord::default()
             });
             if let Some(dial) = dial {
-                if !entry.ips.contains(&dial.ip()) {
-                    entry.ips.push(dial.ip());
-                }
+                entry.add_ip(dial.ip());
                 entry.port = dial.port();
             }
             entry.last_seen = Some(now_secs());
@@ -862,9 +884,7 @@ impl PeerManager {
                     if let Some(mut entry) = self.store.get_mut(&device_id) {
                         // Only an outgoing session's endpoint can be dialled again.
                         if live_is_outbound {
-                            if !entry.ips.contains(&live_endpoint.ip()) {
-                                entry.ips.push(live_endpoint.ip());
-                            }
+                            entry.add_ip(live_endpoint.ip());
                             entry.port = live_endpoint.port();
                         }
                         entry.status = PeerConnectionState::Connected;
@@ -1199,6 +1219,28 @@ impl PeerManager {
         Ok(removed)
     }
 
+    /// Stop dialling this peer at one address, because that address leads
+    /// back to this device: a loopback address learnt through a VM's port
+    /// forward, or a LAN address this device was given after the peer left.
+    pub fn forget_address(&self, device_id: Uuid, ip: IpAddr) -> Result<bool> {
+        let ip = ip.to_canonical();
+        let removed = match self.store.get_mut(&device_id) {
+            Some(mut entry) => {
+                let before = entry.ips.len() + entry.addr_history.len();
+                entry.ips.retain(|known| *known != ip);
+                entry
+                    .addr_history
+                    .retain(|record| record.addr.ip().to_canonical() != ip);
+                before != entry.ips.len() + entry.addr_history.len()
+            }
+            None => false,
+        };
+        if removed {
+            self.save()?;
+        }
+        Ok(removed)
+    }
+
     // ── Sender views ──────────────────────────────────────────────────────────
 
     /// Connected + trusted + sync_enabled peers — receives clipboard payloads.
@@ -1299,6 +1341,14 @@ impl PeerManager {
 
     pub fn live_endpoint(&self, device_id: Uuid) -> Option<SocketAddr> {
         self.live.get(&device_id).map(|s| s.endpoint)
+    }
+
+    /// Whether a connected device is linked from this host, either way round.
+    pub fn has_live_session_at(&self, ip: IpAddr) -> bool {
+        let ip = ip.to_canonical();
+        self.live
+            .iter()
+            .any(|s| s.endpoint.ip().to_canonical() == ip)
     }
 
     pub fn endpoint_for(&self, device_id: Uuid) -> Option<SocketAddr> {
@@ -1871,6 +1921,100 @@ mod tests {
         let record = manager.get(old).unwrap();
         assert!(record.ips.is_empty() && record.addr_history.is_empty());
         assert!(record.trusted, "the pairing itself is kept");
+    }
+
+    #[test]
+    fn an_ipv4_host_seen_through_a_dual_stack_socket_is_stored_once() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        for addr in ["192.168.1.21:47823", "[::ffff:192.168.1.21]:47823"] {
+            manager
+                .upsert_peer(
+                    id,
+                    "Phone".into(),
+                    addr.parse().unwrap(),
+                    true,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+        }
+        let ip: IpAddr = "192.168.1.21".parse().unwrap();
+        assert_eq!(manager.get(id).unwrap().ips, vec![ip]);
+    }
+
+    #[test]
+    fn load_merges_ipv4_hosts_stored_twice() {
+        let file = NamedTempFile::new().unwrap();
+        let id = Uuid::new_v4();
+        let record = PeerRecord {
+            id,
+            ips: vec![
+                "192.168.1.21".parse().unwrap(),
+                "::ffff:192.168.1.21".parse().unwrap(),
+                "::ffff:192.168.1.22".parse().unwrap(),
+            ],
+            trusted: true,
+            ..PeerRecord::default()
+        };
+        let data = PeerStoreData {
+            peers: HashMap::from([(id, record)]),
+        };
+        std::fs::write(file.path(), serde_json::to_vec(&data).unwrap()).unwrap();
+
+        let manager = PeerManager::load(file.path()).unwrap();
+        let ips: Vec<IpAddr> = vec![
+            "192.168.1.21".parse().unwrap(),
+            "192.168.1.22".parse().unwrap(),
+        ];
+        assert_eq!(manager.get(id).unwrap().ips, ips);
+    }
+
+    #[test]
+    fn a_host_with_an_incoming_session_counts_as_linked() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let (tx, _rx) = mpsc::channel(1);
+        let (stop, _stop_rx) = oneshot::channel();
+        manager
+            .replace_live_session(
+                Uuid::nil(),
+                Uuid::new_v4(),
+                false,
+                "[::ffff:192.168.1.21]:53122".parse().unwrap(),
+                tx.clone(),
+                tx,
+                stop,
+            )
+            .unwrap();
+        assert!(manager.has_live_session_at("192.168.1.21".parse().unwrap()));
+        assert!(!manager.has_live_session_at("192.168.1.22".parse().unwrap()));
+    }
+
+    #[test]
+    fn an_address_that_leads_back_here_is_forgotten_alone() {
+        let file = NamedTempFile::new().unwrap();
+        let manager = PeerManager::load(file.path()).unwrap();
+        let id = Uuid::new_v4();
+        for addr in ["127.0.0.1:47823", "192.168.1.21:47823"] {
+            manager
+                .upsert_peer(
+                    id,
+                    "Ubuntu".into(),
+                    addr.parse().unwrap(),
+                    true,
+                    DiscoverySource::Mdns,
+                )
+                .unwrap();
+        }
+
+        let loopback: IpAddr = "::ffff:127.0.0.1".parse().unwrap();
+        assert!(manager.forget_address(id, loopback).unwrap());
+        let record = manager.get(id).unwrap();
+        let lan: IpAddr = "192.168.1.21".parse().unwrap();
+        assert_eq!(record.ips, vec![lan]);
+        assert!(record.addr_history.iter().all(|r| r.addr.ip() == lan));
+        assert!(!manager.forget_address(id, loopback).unwrap());
     }
 
     #[test]

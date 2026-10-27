@@ -462,6 +462,7 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
             bytes_received,
             total_bytes,
             speed_bps,
+            outbound,
             ..
         } => {
             let speed_str = match speed_bps {
@@ -476,7 +477,8 @@ async fn handle_event(state: DaemonState, event: EngineEvent) -> Result<()> {
                     timestamp: now_secs(),
                     kind: "file_transfer_progress".into(),
                     message: format!(
-                        "Receiving {file_name}: {percent}% ({bytes_received}/{total_bytes} bytes, {speed_str})"
+                        "{} {file_name}: {percent}% ({bytes_received}/{total_bytes} bytes, {speed_str})",
+                        if outbound { "Sending" } else { "Receiving" }
                     ),
                     device_id: None,
                     device_name: None,

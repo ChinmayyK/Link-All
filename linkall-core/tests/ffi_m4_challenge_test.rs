@@ -20,6 +20,8 @@ fn create_test_handle() -> (*mut LinkAllHandle, TempDir) {
         peer_store_path: temp_dir.path().join("peers.json"),
         identity_path: temp_dir.path().join("identity.bin"),
         data_dir: temp_dir.path().join("data"),
+
+        settings_path: temp_dir.path().join("settings.json"),
         enable_discovery: false,
         ..EngineConfig::default()
     };

@@ -52,6 +52,8 @@ async fn setup_test_nodes() -> (
         peer_store_path: tmp.path().join("peer_a.json"),
         identity_path: id_path_a,
         data_dir: tmp.path().join("data_a"),
+
+        settings_path: tmp.path().join("settings_a.json"),
         bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         enable_discovery: false,
         ..Default::default()
@@ -65,6 +67,8 @@ async fn setup_test_nodes() -> (
         peer_store_path: tmp.path().join("peer_b.json"),
         identity_path: id_path_b,
         data_dir: tmp.path().join("data_b"),
+
+        settings_path: tmp.path().join("settings_b.json"),
         bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         enable_discovery: false,
         ..Default::default()

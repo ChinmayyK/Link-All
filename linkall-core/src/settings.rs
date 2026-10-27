@@ -373,9 +373,9 @@ impl SettingsStore {
                 Settings::default()
             } else {
                 // Use serde default for any missing fields so old configs work.
-                serde_json::from_slice(&bytes).unwrap_or_else(|e| {
-                    tracing::warn!("Settings parse error ({}), using defaults", e);
-                    Settings::default()
+                // A file that still doesn't parse is set aside, not saved over.
+                serde_json::from_slice(&bytes).unwrap_or_else(|err| {
+                    set_aside_corrupt(&path, &err, "your settings are back to their defaults")
                 })
             }
         } else {
@@ -481,7 +481,12 @@ pub(crate) fn take_aside_notices() -> Vec<String> {
 /// For a store file that no longer parses: keep it beside the original as
 /// `<name>.corrupt.<unix time>` and start empty. Failing instead would stop the app from
 /// ever starting again; an empty trust store only means pairing again.
-pub(crate) fn set_aside_corrupt<T: Default>(path: &Path, err: &serde_json::Error) -> T {
+/// `what_now` tells the user what starting empty means for this store.
+pub(crate) fn set_aside_corrupt<T: Default>(
+    path: &Path,
+    err: &serde_json::Error,
+    what_now: &str,
+) -> T {
     // Timestamped, so a second corruption doesn't overwrite the first copy.
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -490,10 +495,15 @@ pub(crate) fn set_aside_corrupt<T: Default>(path: &Path, err: &serde_json::Error
     let mut aside = path.as_os_str().to_owned();
     aside.push(format!(".corrupt.{stamp}"));
     tracing::warn!(error = %err, path = ?path, "store does not parse; starting empty");
-    ASIDE_NOTICES.lock().unwrap_or_else(|e| e.into_inner()).push(format!(
-        "Set aside an unreadable file: {}. Starting fresh, so you may need to pair your devices again.",
-        path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
-    ));
+    ASIDE_NOTICES
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(format!(
+            "Set aside an unreadable file: {}. Starting fresh, so {what_now}.",
+            path.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        ));
     if let Err(e) = std::fs::rename(path, &aside) {
         tracing::warn!(error = %e, "could not set the unreadable store aside");
     }
@@ -684,6 +694,25 @@ mod tests {
 
         assert_eq!(store.get().clipboard_poll_ms, 10);
         assert_eq!(store.get().history_limit, MIN_HISTORY_ENTRIES);
+    }
+
+    #[test]
+    fn unreadable_settings_are_kept_not_overwritten() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        let damaged = br#"{"device_name":"Desk","history_limit":"#;
+        std::fs::write(&path, damaged).unwrap();
+
+        let store = SettingsStore::load(&path).unwrap();
+        assert_eq!(store.get().history_limit, Settings::default().history_limit);
+        store.save().unwrap();
+
+        let kept: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .map(|e| e.unwrap().path())
+            .filter(|p| std::fs::read(p).unwrap() == damaged)
+            .collect();
+        assert_eq!(kept.len(), 1, "the old settings are still on disk");
     }
 
     #[test]

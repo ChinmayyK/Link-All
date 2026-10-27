@@ -147,6 +147,9 @@ impl Engine {
         // Engine events pass through the folder tap on their way to the host.
         let host_event_tx = event_tx;
         let (event_tx, tap_rx) = mpsc::channel(1024);
+        // Before the notices below, so an unreadable notes file is reported too.
+        let scratchpad =
+            crate::scratchpad::Scratchpad::load(&config.data_dir.join("scratchpad.json"));
         for notice in crate::settings::take_aside_notices() {
             let _ = event_tx.try_send(EngineEvent::Warning(notice));
         }
@@ -204,9 +207,7 @@ impl Engine {
             guest: Arc::default(),
             now_playing_sent: Arc::default(),
             now_playing_remote: Arc::default(),
-            scratchpad: Arc::new(std::sync::Mutex::new(crate::scratchpad::Scratchpad::load(
-                &config.data_dir.join("scratchpad.json"),
-            ))),
+            scratchpad: Arc::new(std::sync::Mutex::new(scratchpad)),
             started_at: Instant::now(),
             network_hint: Arc::default(),
             shutdown: tokio_util::sync::CancellationToken::new(),

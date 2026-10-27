@@ -325,8 +325,11 @@ namespace LinkAll.WinUI
 
         // Make a paired phone ring (ring = true) or stop. The daemon answers once
         // the phone has: an error status carries the phone's reason for not ringing.
+        // The daemon waits up to 5 s for the phone's answer, and a sleeping
+        // phone often takes more than the default second: the phone rang, but
+        // the app saw no reply, said it failed, and offered no Stop button.
         public static JsonDocument? FindDevice(string deviceId, bool ring) =>
-            Send(Req("find_device", ("target", deviceId), ("ring", ring)));
+            Send(Req("find_device", ("target", deviceId), ("ring", ring)), 7000);
 
         // Ask a paired phone to take a photo ("photo") or scan a document ("document") and send it back.
         public static JsonDocument? CaptureRequest(string deviceId, string mode) =>
