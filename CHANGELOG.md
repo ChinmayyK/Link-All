@@ -8,6 +8,8 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-27
+
 ### Added
 - **Now Playing.** What one device plays shows on the others with its title, artist, cover and controls. A computer's track (Spotify or Music on a Mac, any MPRIS player on Linux, any app using the system media controls on Windows) appears on the phone's lock screen and notification shade as a real player with a scrub bar; its buttons control the computer, and the scrub bar does too on a Mac or Linux (Windows can't be sought from the phone yet). Remote control must be on at the computer. The phone's track (it needs notification access) appears in the Mac's menu-bar panel and at the top of Devices on Windows and Linux, with play/pause, skip and a scrub bar. `linkall-cli nowplaying` and `linkall-cli media <device-id> play_pause|next|previous|seek <s>` do the same.
 - **Guest Drop.** Take a file from someone who isn't paired. A QR code, a link and a PIN (Mac: Window › Receive from Guest, ⇧⌘G; Windows and Linux: the ⋯ menu on Devices › Receive from a guest; or `linkall-cli guest`). The guest opens the page in any browser on the same network, types the PIN and sends files straight to Downloads › Link All › Guest at full network speed. It works for five minutes, five wrong PINs end it, nothing is paired or remembered, and the page is not encrypted, so use it on a network you trust. Windows shows the link and PIN without a QR code.
@@ -45,6 +47,18 @@ Versioning follows [Semantic Versioning](https://semver.org/).
 - **macOS, Windows:** Answer and Decline on the call banner follow the phone, and the banner says "Unknown caller" instead of showing the phone's name.
 - **Windows:** A send with no window to ask in no longer goes to an arbitrary device; it asks you to open Link All and choose.
 - **Linux:** The tray's clipboard send says it went to all devices.
+- **All:** A file sent over a slow link (a weak Wi-Fi signal, a VPN) no longer drops the connection halfway; a link that has truly stopped moving is still caught within seconds.
+- **All:** Copying text again after copying something else (A, then B, then A) reaches the other devices every time, including text this device sent earlier.
+- **All:** A clipboard too large for other devices (over 4 MB of text, or 32 MB for an image) is not sent, with a message saying so. Before, a very large copy made the connection drop and come back every few seconds.
+- **All:** A file whose name has characters Windows doesn't allow (such as `:` or `?`) is saved on Windows with those characters replaced, instead of failing.
+- **All:** When there isn't room for a file, the message says how much is needed, including the 50 MB kept free, and each file is refused once instead of twice.
+- **All:** Settings and Notes files that can't be read are kept aside and you are told, instead of being replaced and lost.
+- **All:** Previews in the file explorer of large photos use far less memory and load faster, and a Windows or Linux computer now shows previews of photos over 2 MB.
+- **All:** Fewer reconnect attempts: a device no longer redials its own address or a computer it is already linked to, and a late answer to an old dial no longer replaces a working link.
+- **All:** Lines in Report a problem show the time they happened.
+- **macOS:** The Files list draws on macOS versions before 26, and the app no longer restarts device discovery right after launch.
+- **macOS:** A file this Mac is sending shows as Sending, not Receiving.
+- **Windows:** Find my phone waits for a sleeping phone to answer instead of reporting a failure, and the app no longer reports the Link All service as unavailable while the file explorer loads many previews.
 
 ## [2.0.2] - 2026-10-20
 
