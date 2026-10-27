@@ -243,3 +243,31 @@ async fn many_small_files_throughput() {
         count as f64 / el.as_secs_f64()
     );
 }
+
+/// One file that can't be read (no permission, or gone since the folder was
+/// listed) must not stop the rest of the folder.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn an_unreadable_file_does_not_stop_the_rest_of_the_folder() {
+    use std::os::unix::fs::PermissionsExt;
+    let tmp = TempDir::new().unwrap();
+    let (mut a, mut b) = start_pair(&tmp, true, true).await;
+    connect(&a, &b).await;
+    let src = tmp.path().join("src").join("Notes");
+    std::fs::create_dir_all(&src).unwrap();
+    for name in ["a.txt", "b.txt", "c.txt", "d.txt"] {
+        std::fs::write(src.join(name), name.as_bytes()).unwrap();
+    }
+    let locked = src.join("b.txt");
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+    let send = a.engine.send_folder(src.clone(), Some(b.id)).await.unwrap();
+    assert_eq!(send.file_count, 4);
+    let (sent, received) = tokio::join!(folder_result(&mut a), folder_result(&mut b));
+    std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o644)).unwrap();
+
+    assert_eq!((sent.file_count, sent.failed_count), (4, 1));
+    let dest = received.dest_dir.expect("receiver knows the folder");
+    let got: Vec<String> = tree(&dest).into_keys().collect();
+    assert_eq!(got, ["a.txt", "c.txt", "d.txt"]);
+}
