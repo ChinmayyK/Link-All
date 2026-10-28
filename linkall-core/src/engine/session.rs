@@ -447,6 +447,10 @@ pub(super) fn register_session(
                             .await
                             {
                                 Ok(res) => res,
+                                // The engine is shutting down. Leave the transfer
+                                // as it is so it resumes after a restart, rather
+                                // than cancelling it as a disk error on both sides.
+                                Err(join_err) if join_err.is_cancelled() => break,
                                 Err(join_err) => {
                                     Err(anyhow::anyhow!("disk write task failed: {join_err}"))
                                 }
