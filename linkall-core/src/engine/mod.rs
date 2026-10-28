@@ -188,10 +188,7 @@ impl Engine {
             history: Arc::new(Mutex::new(history)),
             feedback: Arc::new(Mutex::new(crate::engine_support::FeedbackLog::new(200))),
             local_last_wake: Arc::new(std::sync::atomic::AtomicU64::new(
-                std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64,
+                crate::network::now_millis(),
             )),
             local_sleeping: Arc::new(std::sync::atomic::AtomicBool::new(false)),
             local_background_restricted: Arc::new(std::sync::Mutex::new(None)),
@@ -538,10 +535,7 @@ impl Engine {
     /// (e.g., Wi-Fi comes back after Doze). Immediately attempts to reconnect
     /// to all known trusted peers.
     pub async fn reconnect_all_peers(&self) {
-        let now_millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
+        let now_millis = crate::network::now_millis();
         self.shared
             .local_last_wake
             .store(now_millis, std::sync::atomic::Ordering::Relaxed);
@@ -566,10 +560,7 @@ impl Engine {
             .local_sleeping
             .store(is_asleep, std::sync::atomic::Ordering::Relaxed);
         if !is_asleep {
-            let now_millis = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
+            let now_millis = crate::network::now_millis();
             self.shared
                 .local_last_wake
                 .store(now_millis, std::sync::atomic::Ordering::Relaxed);
