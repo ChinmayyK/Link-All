@@ -20,6 +20,7 @@ struct Relay {
     port: u16,
     cut: watch::Sender<u32>,
     freeze: watch::Sender<u32>,
+    accept: tokio::task::JoinHandle<()>,
 }
 
 impl Relay {
@@ -28,7 +29,7 @@ impl Relay {
         let port = listener.local_addr().unwrap().port();
         let (cut, cuts) = watch::channel(0u32);
         let (freeze, freezes) = watch::channel(0u32);
-        tokio::spawn(async move {
+        let accept = tokio::spawn(async move {
             while let Ok((inbound, _)) = listener.accept().await {
                 let Ok(outbound) = TcpStream::connect(("127.0.0.1", target)).await else {
                     continue;
@@ -53,7 +54,12 @@ impl Relay {
                 });
             }
         });
-        Relay { port, cut, freeze }
+        Relay {
+            port,
+            cut,
+            freeze,
+            accept,
+        }
     }
 
     fn cut(&self) {
@@ -62,6 +68,13 @@ impl Relay {
 
     fn freeze(&self) {
         self.freeze.send_modify(|n| *n += 1);
+    }
+
+    /// Cuts every connection and stops listening: the old address is gone,
+    /// like a phone that left Wi-Fi for mobile data.
+    fn close(&self) {
+        self.accept.abort();
+        self.cut();
     }
 }
 
@@ -222,4 +235,63 @@ async fn a_link_that_goes_silent_mid_transfer_is_noticed_by_the_sender() {
 
     relay.freeze();
     wait_for_drop_or_redial(&mut phone, computer.id, Duration::from_secs(45)).await;
+}
+
+/// The network changes in the middle of a transfer: the old address stops
+/// answering and the devices find each other again on a new one. The transfer
+/// picks up on the new link and the file arrives whole.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_transfer_finishes_after_the_network_changes_mid_way() {
+    let tmp = TempDir::new().unwrap();
+    let (mut phone, mut computer) = start_pair(&tmp, true, true).await;
+    let wifi = Relay::start(computer.engine.bound_port().await).await;
+    phone
+        .engine
+        .connect_to_peer("127.0.0.1".into(), wifi.port)
+        .await
+        .expect("the phone dials the computer over Wi-Fi");
+    eventually("both sides connected", async || {
+        connected(&computer, phone.id).await && connected(&phone, computer.id).await
+    })
+    .await;
+
+    let data: Vec<u8> = (0..SIZE).map(|i| (i % 241) as u8).collect();
+    let path = tmp.path().join("photos.bin");
+    std::fs::write(&path, &data).unwrap();
+    phone
+        .engine
+        .send_file_path(
+            path,
+            "photos.bin".into(),
+            "application/octet-stream".into(),
+            Some(computer.id),
+            None,
+            false,
+            1,
+        )
+        .await
+        .expect("send");
+    wait_for_progress(&mut phone, 40).await;
+
+    wifi.close();
+    wait_for_drop_or_redial(&mut phone, computer.id, Duration::from_secs(20)).await;
+
+    // Discovery hands the phone the computer's new address.
+    let mobile = Relay::start(computer.engine.bound_port().await).await;
+    phone
+        .engine
+        .connect_to_peer("127.0.0.1".into(), mobile.port)
+        .await
+        .expect("the phone dials the computer on the new network");
+    eventually_within(
+        Duration::from_secs(60),
+        "they reconnect on the new network",
+        async || connected(&computer, phone.id).await && connected(&phone, computer.id).await,
+    )
+    .await;
+
+    let dest = wait_for_completion(&mut computer).await;
+    let got = std::fs::read(&dest).unwrap();
+    assert_eq!(got.len(), data.len());
+    assert!(got == data, "received file differs from the original");
 }
