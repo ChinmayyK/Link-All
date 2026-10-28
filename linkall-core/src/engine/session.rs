@@ -697,10 +697,7 @@ pub(super) fn register_session(
             }
         });
 
-        let mut last_tick_millis = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
+        let mut last_tick_millis = crate::network::now_millis();
         // When this session last pinged. Kept apart from `ping_sent_at`,
         // which the Pong clears: reading that one made a sleeping link ping
         // on every 5 s tick, keeping the phone's radio awake all night.
@@ -716,10 +713,7 @@ pub(super) fn register_session(
             } else {
                 shared.config.heartbeat_timeout
             };
-            let now_millis = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64;
+            let now_millis = crate::network::now_millis();
             let last_seen_millis = last_seen.load(std::sync::atomic::Ordering::Relaxed);
 
             tokio::select! {
