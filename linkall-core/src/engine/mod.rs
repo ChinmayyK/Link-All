@@ -152,9 +152,6 @@ impl Engine {
         // Before the notices below, so an unreadable notes file is reported too.
         let scratchpad =
             crate::scratchpad::Scratchpad::load(&config.data_dir.join("scratchpad.json"));
-        for notice in crate::settings::take_aside_notices() {
-            let _ = event_tx.try_send(EngineEvent::Warning(notice));
-        }
         let shared = EngineShared {
             config: config.clone(),
             trust,
@@ -318,6 +315,14 @@ impl Engine {
         // with those defaults.
         if let Ok(store) = SettingsStore::load(engine.settings_path()) {
             engine.apply_settings(store.get().clone()).await;
+        }
+        // After every store has loaded, the settings above included, so an
+        // unreadable settings file is reported too.
+        for notice in crate::settings::take_aside_notices() {
+            let _ = engine
+                .shared
+                .event_tx
+                .try_send(EngineEvent::Warning(notice));
         }
 
         engine.spawn_network_monitor().await?;
