@@ -31,7 +31,7 @@ pub fn get_buffer(capacity: usize) -> Vec<u8> {
     let mut pool = BUFFER_POOL
         .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
         .lock()
-        .unwrap();
+        .unwrap_or_else(|e| e.into_inner());
     if let Some(mut buf) = pool.pop() {
         if buf.capacity() < capacity {
             buf.reserve(capacity - buf.capacity());
@@ -53,7 +53,7 @@ pub fn return_buffer(mut buf: Vec<u8>) {
     let mut pool = BUFFER_POOL
         .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
         .lock()
-        .unwrap();
+        .unwrap_or_else(|e| e.into_inner());
     if pool.len() < 16 {
         buf.clear();
         pool.push(buf);
@@ -1217,5 +1217,25 @@ mod tests {
         )
         .await;
         assert!(waited.is_err(), "the reader gave up on a quiet link");
+    }
+}
+
+#[cfg(test)]
+mod buffer_pool_poison_tests {
+    use super::*;
+
+    #[test]
+    fn pool_survives_a_panic_while_locked() {
+        let _ = std::thread::spawn(|| {
+            let _guard = BUFFER_POOL
+                .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
+                .lock()
+                .unwrap();
+            panic!("poison the pool");
+        })
+        .join();
+        let buf = get_buffer(1024);
+        assert_eq!(buf.len(), 1024);
+        return_buffer(buf);
     }
 }
