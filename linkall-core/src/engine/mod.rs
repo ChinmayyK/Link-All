@@ -117,17 +117,19 @@ impl Engine {
                 }
                 let history_path = config.data_dir.join("history.json");
                 let limit = config.history_limit.unwrap_or(500);
-                let history = crate::history::History::load_with_limit(&history_path, limit)
-                    .unwrap_or_else(|_| {
+                let history = match crate::history::History::load_with_limit(&history_path, limit) {
+                    Ok(history) => history,
+                    Err(_) => {
                         let tmp = std::env::temp_dir().join("linkall_history_fallback.json");
                         crate::history::History::load_with_limit(&tmp, limit)
-                            .expect("cannot create fallback history store")
-                    });
+                            .context("opening history store")?
+                    }
+                };
                 Ok::<_, anyhow::Error>((identity, trust, peer_manager, history))
             }
         })
         .await
-        .unwrap()?;
+        .context("startup task panicked")??;
 
         if config.device_id.is_nil() {
             config.device_id = stable_device_id(identity.public_bytes);
