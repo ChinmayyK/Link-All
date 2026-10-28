@@ -7,11 +7,19 @@ impl Engine {
     pub async fn apply_settings(&self, new_settings: Settings) {
         let mut policy = self.shared.apply_policy.lock().await;
         policy.update_from_settings(&new_settings);
-        *self.shared.settings.lock().unwrap() = new_settings;
+        *self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = new_settings;
     }
 
     pub async fn current_settings(&self) -> Settings {
-        self.shared.settings.lock().unwrap().clone()
+        self.shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Where this engine's settings.json lives. The daemon shares the default
@@ -40,13 +48,24 @@ impl Engine {
 
     /// Apply a JSON merge-patch to the current settings.
     pub async fn patch_settings(&self, patch: String) -> Result<()> {
-        let mut current = serde_json::to_value(&*self.shared.settings.lock().unwrap())?;
+        let mut current = serde_json::to_value(
+            &*self
+                .shared
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner()),
+        )?;
         let patch_val: serde_json::Value =
             serde_json::from_str(&patch).context("patch_settings: invalid JSON patch")?;
         json_merge_patch(&mut current, &patch_val);
         let new_settings: Settings = serde_json::from_value(current)
             .context("patch_settings: patched value is invalid Settings")?;
-        let was_on = self.shared.settings.lock().unwrap().sync_enabled;
+        let was_on = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sync_enabled;
         let persisted = self.persist_settings_snapshot(new_settings)?;
         let now_on = persisted.sync_enabled;
         self.apply_settings(persisted).await;
@@ -59,7 +78,12 @@ impl Engine {
     /// Apply a partial settings update from the Mac preferences UI.
     pub async fn save_settings_partial(&self, p: crate::ipc::PartialSettings) -> Result<()> {
         // Clone first so we're not holding the lock while calling apply_settings.
-        let mut s = self.shared.settings.lock().unwrap().clone();
+        let mut s = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         if let Some(v) = p.port {
             s.port = v;
         }
@@ -162,7 +186,12 @@ impl Engine {
     }
 
     pub async fn set_sync_enabled(&self, enabled: bool) -> Result<()> {
-        let mut settings = self.shared.settings.lock().unwrap().clone();
+        let mut settings = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         settings.sync_enabled = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
@@ -171,7 +200,12 @@ impl Engine {
     }
 
     pub async fn set_timeline_first_mode(&self, enabled: bool) -> Result<()> {
-        let mut settings = self.shared.settings.lock().unwrap().clone();
+        let mut settings = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         settings.timeline_first_mode = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
@@ -179,7 +213,12 @@ impl Engine {
     }
 
     pub async fn set_auto_apply_clipboard(&self, enabled: bool) -> Result<()> {
-        let mut settings = self.shared.settings.lock().unwrap().clone();
+        let mut settings = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
         settings.auto_apply_remote_clipboard = enabled;
         let persisted = self.persist_settings_snapshot(settings)?;
         self.apply_settings(persisted).await;
@@ -202,7 +241,11 @@ impl Engine {
     }
 
     pub async fn patch_peer_settings(&self, device_id: Uuid, patch: String) -> Result<()> {
-        let mut settings = self.shared.settings.lock().unwrap();
+        let mut settings = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let key = device_id.to_string();
         let existing = settings.per_peer.entry(key).or_default();
         let mut val = serde_json::to_value(&*existing)?;

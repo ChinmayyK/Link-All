@@ -309,7 +309,10 @@ pub(super) fn spawn_folder_event_tap(
     tokio::spawn(async move {
         while let Some(event) = events.recv().await {
             let mut event = event;
-            let folder_done = folders.lock().unwrap().record(&mut event);
+            let folder_done = folders
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .record(&mut event);
             for event in std::iter::once(event).chain(folder_done) {
                 if let EngineEvent::FolderTransferComplete {
                     peer_id,
@@ -353,7 +356,12 @@ pub(crate) fn incoming_folder(meta: &FileTransferMetadata) -> Option<(String, St
 impl Engine {
     /// Folder transfers in flight, in both directions.
     pub async fn folders(&self) -> Vec<FolderProgress> {
-        let mut folders = self.shared.folders.lock().unwrap().progress();
+        let mut folders = self
+            .shared
+            .folders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .progress();
         let mgr = self.shared.file_transfers.lock().await;
         for f in &mut folders {
             let (in_flight, speed) = mgr.folder_in_flight(&f.batch_id);
@@ -378,14 +386,18 @@ impl Engine {
             total_bytes: files.iter().map(|(_, _, size)| size).sum(),
         };
         let (peer_id, peer_name) = self.target_label(target);
-        self.shared.folders.lock().unwrap().begin(
-            &summary.batch_id,
-            &summary.folder_name,
-            summary.file_count,
-            peer_id,
-            &peer_name,
-            true,
-        );
+        self.shared
+            .folders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .begin(
+                &summary.batch_id,
+                &summary.folder_name,
+                summary.file_count,
+                peer_id,
+                &peer_name,
+                true,
+            );
         let engine = self.clone();
         let send = summary.clone();
         tokio::spawn(async move {
@@ -449,15 +461,19 @@ impl Engine {
             )
             .await?;
         let (peer_id, peer_name) = self.target_label(target);
-        self.shared.folders.lock().unwrap().track(
-            transfer_id,
-            batch_id,
-            folder_name,
-            file_count,
-            peer_id,
-            &peer_name,
-            true,
-        );
+        self.shared
+            .folders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .track(
+                transfer_id,
+                batch_id,
+                folder_name,
+                file_count,
+                peer_id,
+                &peer_name,
+                true,
+            );
         Ok(transfer_id)
     }
 
@@ -477,8 +493,17 @@ impl Engine {
             }
             // Let the last file's result reach the tally first.
             tokio::time::sleep(Duration::from_secs(2)).await;
-            let done = shared.folders.lock().unwrap().finish(&batch_id);
-            shared.folders.lock().unwrap().cancelled.remove(&batch_id);
+            let done = shared
+                .folders
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .finish(&batch_id);
+            shared
+                .folders
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .cancelled
+                .remove(&batch_id);
             if let Some(event) = done {
                 let _ = shared.event_tx.send(event).await;
             }
@@ -489,7 +514,11 @@ impl Engine {
     /// sent, files in flight are cancelled, and later files are declined.
     pub async fn cancel_folder(&self, batch_id: &str) -> Result<()> {
         {
-            let mut folders = self.shared.folders.lock().unwrap();
+            let mut folders = self
+                .shared
+                .folders
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             folders.stop_sending(batch_id);
             folders.decide(batch_id, false);
         }
@@ -509,7 +538,12 @@ impl Engine {
         let mut gone_since: Option<Instant> = None;
         loop {
             anyhow::ensure!(
-                !self.shared.folders.lock().unwrap().is_cancelled(batch_id),
+                !self
+                    .shared
+                    .folders
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .is_cancelled(batch_id),
                 "cancelled"
             );
             // Registered before counting, so a file that finishes between the
