@@ -716,6 +716,7 @@ enum LinkAllIPCError: Error, Equatable, LocalizedError {
     case connectionFailed
     case noData
     case disconnected
+    case timedOut
     case serverError(String)
 
     var errorDescription: String? {
@@ -728,6 +729,8 @@ enum LinkAllIPCError: Error, Equatable, LocalizedError {
             return "Received an empty response from the local service."
         case .disconnected:
             return "The background service disconnected unexpectedly."
+        case .timedOut:
+            return "The local background service stopped responding."
         case .serverError(let msg):
             if msg == "PermissionError" {
                 return "Permission Required: The remote device has not granted file access permissions. Please accept the prompt on the device."
