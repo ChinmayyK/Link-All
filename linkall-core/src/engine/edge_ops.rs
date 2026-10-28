@@ -72,7 +72,11 @@ impl Engine {
         // Remembered for a page that shows what to fix; being busy is not a refusal.
         if let Err(why) = &result {
             if !why.starts_with("The keyboard and mouse are already") {
-                self.shared.edge_notice.lock().unwrap().refused = Some((target, why.clone()));
+                self.shared
+                    .edge_notice
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .refused = Some((target, why.clone()));
             }
         }
         result
@@ -102,7 +106,7 @@ impl Engine {
             .map(|(_, tx)| tx)
             .ok_or_else(|| "That computer isn't connected.".to_string())?;
         {
-            let mut state = self.shared.edge.lock().unwrap();
+            let mut state = self.shared.edge.lock().unwrap_or_else(|e| e.into_inner());
             if *state != EdgeState::Idle {
                 return Err("The keyboard and mouse are already being shared.".to_string());
             }
@@ -133,11 +137,15 @@ impl Engine {
         match &result {
             Ok(()) => watch(self.shared.clone(), target, true),
             Err(why) => {
-                let mut state = self.shared.edge.lock().unwrap();
+                let mut state = self.shared.edge.lock().unwrap_or_else(|e| e.into_inner());
                 if *state == (EdgeState::Hosting { peer: target }) {
                     *state = EdgeState::Idle;
                 }
-                self.shared.edge_notice.lock().unwrap().refused = Some((target, why.clone()));
+                self.shared
+                    .edge_notice
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .refused = Some((target, why.clone()));
             }
         }
         result
@@ -164,7 +172,7 @@ impl Engine {
             AppMessage::RemotePointerButton { .. } | AppMessage::RemoteKeyEvent { .. } => true,
             _ => return Err("That isn't a keyboard or mouse event.".to_string()),
         };
-        let peer = match *self.shared.edge.lock().unwrap() {
+        let peer = match *self.shared.edge.lock().unwrap_or_else(|e| e.into_inner()) {
             EdgeState::Hosting { peer } => peer,
             _ => return Err("The keyboard and mouse aren't being shared.".to_string()),
         };
@@ -186,7 +194,7 @@ impl Engine {
                     // other computer releases everything on EdgeEnd.
                     let why = "The link to that computer is too slow, so the keyboard and mouse came back.";
                     {
-                        let mut state = self.shared.edge.lock().unwrap();
+                        let mut state = self.shared.edge.lock().unwrap_or_else(|e| e.into_inner());
                         if *state == (EdgeState::Hosting { peer }) {
                             *state = EdgeState::Idle;
                         }
@@ -212,7 +220,7 @@ impl Engine {
     /// Takes the keyboard and mouse back and tells the other computer.
     pub async fn edge_end(&self) {
         let peer = {
-            let mut state = self.shared.edge.lock().unwrap();
+            let mut state = self.shared.edge.lock().unwrap_or_else(|e| e.into_inner());
             match *state {
                 EdgeState::Hosting { peer } => {
                     *state = EdgeState::Idle;
@@ -248,7 +256,7 @@ fn watch(shared: EngineShared, peer: Uuid, hosting: bool) {
         loop {
             tick.tick().await;
             let mine = {
-                let state = shared.edge.lock().unwrap();
+                let state = shared.edge.lock().unwrap_or_else(|e| e.into_inner());
                 match (&*state, hosting) {
                     (EdgeState::Hosting { peer: p }, true) => *p == peer,
                     (EdgeState::Controlled { peer: p, .. }, false) => *p == peer,
@@ -285,7 +293,7 @@ fn watch(shared: EngineShared, peer: Uuid, hosting: bool) {
                 }
             }
             {
-                let mut state = shared.edge.lock().unwrap();
+                let mut state = shared.edge.lock().unwrap_or_else(|e| e.into_inner());
                 let still_mine = match (&*state, hosting) {
                     (EdgeState::Hosting { peer: p }, true) => *p == peer,
                     (EdgeState::Controlled { peer: p, .. }, false) => *p == peer,
@@ -323,13 +331,18 @@ fn refusal(shared: &EngineShared, peer: Uuid) -> Option<String> {
     if !trusted {
         return Some("That computer isn't paired.".to_string());
     }
-    if !shared.settings.lock().unwrap().allow_remote_control {
+    if !shared
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .allow_remote_control
+    {
         return Some(
             "Remote control is off on this computer. Turn it on in Link All's settings."
                 .to_string(),
         );
     }
-    match *shared.edge.lock().unwrap() {
+    match *shared.edge.lock().unwrap_or_else(|e| e.into_inner()) {
         EdgeState::Idle => None,
         EdgeState::Controlled { peer: p, .. } if p == peer => None,
         _ => Some("This computer is already sharing its keyboard and mouse.".to_string()),
@@ -357,7 +370,7 @@ pub(super) async fn on_enter(ctx: &InboundCtx, edge: u8, pos: u16) {
         // Checked again: another computer may have taken over while the
         // pointer was being placed.
         let taken = placed.and_then(|()| {
-            let mut state = shared.edge.lock().unwrap();
+            let mut state = shared.edge.lock().unwrap_or_else(|e| e.into_inner());
             let again = match *state {
                 EdgeState::Idle => false,
                 EdgeState::Controlled { peer: p, .. } if p == peer => true,
@@ -389,7 +402,11 @@ pub(super) async fn on_enter(ctx: &InboundCtx, edge: u8, pos: u16) {
                 } else {
                     watch(shared.clone(), peer, false);
                 }
-                let pc_keyboard = shared.settings.lock().unwrap().pc_keyboard_on_mac;
+                let pc_keyboard = shared
+                    .settings
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .pc_keyboard_on_mac;
                 *KEYS.lock().unwrap_or_else(|e| e.into_inner()) = Some(if pc_keyboard {
                     edge_keys::Translator::pc_keyboard(host, edge_keys::System::this())
                 } else {
@@ -425,7 +442,7 @@ pub(super) async fn after_move(
     size: Option<(i32, i32)>,
 ) {
     let shared = &ctx.shared;
-    let entry = match *shared.edge.lock().unwrap() {
+    let entry = match *shared.edge.lock().unwrap_or_else(|e| e.into_inner()) {
         EdgeState::Controlled { peer, entry, .. } if peer == ctx.peer_id => entry,
         _ => return,
     };
@@ -441,7 +458,7 @@ pub(super) async fn after_move(
         _ => asked.max(0),
     };
     let leave = {
-        let mut state = shared.edge.lock().unwrap();
+        let mut state = shared.edge.lock().unwrap_or_else(|e| e.into_inner());
         let EdgeState::Controlled { peer, push, .. } = &mut *state else {
             return;
         };
@@ -472,13 +489,13 @@ pub(super) async fn after_move(
 
 /// True while `peer`'s keyboard and mouse drive this computer.
 pub(super) fn controlled_by(shared: &EngineShared, peer: Uuid) -> bool {
-    matches!(*shared.edge.lock().unwrap(), EdgeState::Controlled { peer: p, .. } if p == peer)
+    matches!(*shared.edge.lock().unwrap_or_else(|e| e.into_inner()), EdgeState::Controlled { peer: p, .. } if p == peer)
 }
 
 /// A keepalive came back from `ctx`'s computer: if this one's keyboard drives
 /// it, it is still there.
 pub(super) fn answered(ctx: &InboundCtx) {
-    if matches!(*ctx.shared.edge.lock().unwrap(), EdgeState::Hosting { peer } if peer == ctx.peer_id)
+    if matches!(*ctx.shared.edge.lock().unwrap_or_else(|e| e.into_inner()), EdgeState::Hosting { peer } if peer == ctx.peer_id)
     {
         *DRIVEN_HEARD.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
     }
@@ -549,7 +566,7 @@ pub(super) async fn on_reply(ctx: &InboundCtx, accepted: bool, error: Option<Str
 pub(super) async fn on_leave(ctx: &InboundCtx, pos: u16) {
     ctx.touch_last_seen();
     let hosting = {
-        let mut state = ctx.shared.edge.lock().unwrap();
+        let mut state = ctx.shared.edge.lock().unwrap_or_else(|e| e.into_inner());
         if *state == (EdgeState::Hosting { peer: ctx.peer_id }) {
             *state = EdgeState::Idle;
             true
@@ -558,7 +575,11 @@ pub(super) async fn on_leave(ctx: &InboundCtx, pos: u16) {
         }
     };
     if hosting {
-        ctx.shared.edge_notice.lock().unwrap().returned_pos = Some(pos);
+        ctx.shared
+            .edge_notice
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .returned_pos = Some(pos);
         let _ = ctx
             .shared
             .event_tx
@@ -577,7 +598,7 @@ pub(super) async fn on_end(ctx: &InboundCtx) {
 /// buttons it held down here are let go.
 pub(super) async fn end_with_peer(shared: &EngineShared, peer: Uuid, reason: &str) {
     let was = {
-        let mut state = shared.edge.lock().unwrap();
+        let mut state = shared.edge.lock().unwrap_or_else(|e| e.into_inner());
         match &*state {
             EdgeState::Controlled { peer: p, .. } | EdgeState::Hosting { peer: p }
                 if *p == peer =>
@@ -600,7 +621,11 @@ pub(super) async fn end_with_peer(shared: &EngineShared, peer: Uuid, reason: &st
 
 /// Tells the app a hand-off ended without the pointer coming back.
 async fn announce_ended(shared: &EngineShared, reason: &str) {
-    shared.edge_notice.lock().unwrap().ended_reason = Some(reason.to_string());
+    shared
+        .edge_notice
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .ended_reason = Some(reason.to_string());
     let _ = shared
         .event_tx
         .send(EngineEvent::EdgeEnded {
@@ -632,12 +657,17 @@ impl Engine {
     /// coming back, or an end) is reported once, then cleared; `peek` leaves it
     /// for whoever acts on it, so a page can look without taking it.
     pub fn edge_status(&self, peek: bool) -> EdgeStatus {
-        let (hosting, controlled, peer) = match *self.shared.edge.lock().unwrap() {
-            EdgeState::Hosting { peer } => (true, false, Some(peer.to_string())),
-            EdgeState::Controlled { peer, .. } => (false, true, Some(peer.to_string())),
-            EdgeState::Idle => (false, false, None),
-        };
-        let mut notice = self.shared.edge_notice.lock().unwrap();
+        let (hosting, controlled, peer) =
+            match *self.shared.edge.lock().unwrap_or_else(|e| e.into_inner()) {
+                EdgeState::Hosting { peer } => (true, false, Some(peer.to_string())),
+                EdgeState::Controlled { peer, .. } => (false, true, Some(peer.to_string())),
+                EdgeState::Idle => (false, false, None),
+            };
+        let mut notice = self
+            .shared
+            .edge_notice
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let refused = notice.refused.clone();
         EdgeStatus {
             hosting,
@@ -660,7 +690,11 @@ impl Engine {
 
     /// Clears what an earlier hand-off left to report; a new one starts clean.
     pub(super) fn edge_clear_notice(&self) {
-        *self.shared.edge_notice.lock().unwrap() = EdgeNotice::default();
+        *self
+            .shared
+            .edge_notice
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = EdgeNotice::default();
     }
 }
 
