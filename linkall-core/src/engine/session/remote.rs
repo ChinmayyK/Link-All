@@ -244,7 +244,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             if !trusted {
                 return Flow::Continue;
             }
-            let allowed = shared.settings.lock().unwrap().allow_remote_control;
+            let allowed = shared
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .allow_remote_control;
             let (success, error) = if !allowed {
                 (
                     false,
@@ -288,7 +292,12 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 return Flow::Continue;
             }
             let (success, error) = if cfg!(target_os = "android") {
-                if !shared.settings.lock().unwrap().allow_find_device {
+                if !shared
+                    .settings
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .allow_find_device
+                {
                     (
                         false,
                         Some(
@@ -306,7 +315,12 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                         .await;
                     (true, None)
                 }
-            } else if !shared.settings.lock().unwrap().allow_remote_control {
+            } else if !shared
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .allow_remote_control
+            {
                 (
                     false,
                     Some("Remote control is off on this computer. Turn it on in Link All's settings.".to_string()),
@@ -447,7 +461,12 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                         value,
                     })
                     .await;
-            } else if shared.settings.lock().unwrap().allow_remote_control {
+            } else if shared
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .allow_remote_control
+            {
                 if let Some(action) = crate::now_playing::MediaAction::parse(&action, value) {
                     let _ =
                         tokio::task::spawn_blocking(move || crate::now_playing::control(action))
@@ -520,7 +539,12 @@ async fn input(ctx: &InboundCtx, run: impl FnOnce() -> Result<(), String> + Send
     if !trusted {
         return;
     }
-    let problem = if !shared.settings.lock().unwrap().allow_remote_control {
+    let problem = if !shared
+        .settings
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .allow_remote_control
+    {
         Some(
             "Remote control is off on this computer. Turn it on in Link All's settings."
                 .to_string(),
