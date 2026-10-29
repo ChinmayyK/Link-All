@@ -229,7 +229,12 @@ pub extern "system" fn Java_app_linkall_LinkAllJni_stop(
     handle: jlong,
 ) {
     if handle != 0 {
-        unsafe { drop(Box::from_raw(handle as *mut AndroidHandle)) };
+        let handle = unsafe { Box::from_raw(handle as *mut AndroidHandle) };
+        // Dropping the handle alone left the engine running: its tasks hold
+        // their own references, so the port stayed bound, sessions stayed
+        // up, and the next start ran a second engine in the same process.
+        handle.engine.shutdown();
+        drop(handle);
     }
 }
 
