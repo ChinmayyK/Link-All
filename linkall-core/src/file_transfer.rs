@@ -985,6 +985,7 @@ pub struct TransferProgress {
     pub eta_secs: Option<u64>,
 }
 
+
 /// A transfer `prune_stale_transfers` gave up on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrunedTransfer {
@@ -997,8 +998,7 @@ pub struct PrunedTransfer {
 /// How long an active transfer may go without a chunk or an ack.
 const STALLED_TRANSFER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 /// How long an outbound transfer may wait on a person or a reconnect.
-const WAITING_TRANSFER_TIMEOUT: std::time::Duration =
-    std::time::Duration::from_secs(24 * 60 * 60);
+const WAITING_TRANSFER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(24 * 60 * 60);
 
 // ── Transfer manager ──────────────────────────────────────────────────────────
 
@@ -1012,6 +1012,58 @@ pub struct FileTransferManager {
     /// Signalled whenever an outbound transfer leaves, so a folder send
     /// waiting for room goes on at once instead of on its next poll.
     outbound_left: std::sync::Arc<tokio::sync::Notify>,
+    /// Where a record of each accepted inbound transfer is kept, so it can
+    /// go on after this app restarts; None keeps none.
+    resume_dir: Option<PathBuf>,
+    /// Transfers an earlier run left unfinished, until their sender
+    /// announces them again.
+    resumable: HashMap<TransferId, ResumeRecord>,
+}
+
+/// What an unfinished inbound transfer needs to go on after the app
+/// restarts: which announce it belongs to and where its bytes are. How much
+/// arrived is read from the partial file itself, so nothing is written per
+/// chunk. A phone that killed the app at 95% of a large file used to start
+/// it again from nothing, and leave the partial file behind.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct ResumeRecord {
+    transfer_id: String,
+    from_device: Uuid,
+    file_name: String,
+    size_bytes: u64,
+    partial: PathBuf,
+    final_name: String,
+    saved_at: u64,
+}
+
+/// How long an unfinished transfer waits for its sender to come back.
+const RESUME_KEEP_SECS: u64 = 7 * 24 * 60 * 60;
+
+/// An unfinished transfer from an earlier run that an announce matched.
+#[derive(Debug)]
+pub struct ResumablePartial {
+    pub partial: PathBuf,
+    /// Whole chunks the partial file holds.
+    pub chunks: u32,
+    final_name: String,
+}
+
+/// The checksum state after the first `chunks` chunks of `partial`, which
+/// is what the transfer's running checksum was when the app stopped.
+pub fn rehash_partial(partial: &Path, chunks: u32) -> Result<Sha256> {
+    let mut file =
+        File::open(partial).with_context(|| format!("opening {} to resume", partial.display()))?;
+    let mut hasher = Sha256::new();
+    let mut left = chunks as u64 * FILE_CHUNK_SIZE as u64;
+    let mut buf = vec![0u8; 1 << 20];
+    while left > 0 {
+        let want = (left.min(buf.len() as u64)) as usize;
+        file.read_exact(&mut buf[..want])
+            .context("reading the part of the file already received")?;
+        hasher.update(&buf[..want]);
+        left -= want as u64;
+    }
+    Ok(hasher)
 }
 
 impl FileTransferManager {
@@ -1022,7 +1074,181 @@ impl FileTransferManager {
             save_dir,
             folder_roots: HashMap::new(),
             outbound_left: Default::default(),
+            resume_dir: None,
+            resumable: HashMap::new(),
         }
+    }
+
+    /// Like `new`, and keeps a record of each accepted inbound transfer in
+    /// `resume_dir`. Records an earlier run left there become resumable.
+    pub fn with_resume_dir(save_dir: PathBuf, resume_dir: PathBuf) -> Self {
+        let mut mgr = Self::new(save_dir);
+        let now = now_unix();
+        for entry in std::fs::read_dir(&resume_dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let record = std::fs::read(&path)
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<ResumeRecord>(&bytes).ok());
+            let tid = record.as_ref().and_then(|r| {
+                let bytes = hex::decode(&r.transfer_id).ok()?;
+                TransferId::try_from(bytes.as_slice()).ok()
+            });
+            match (record, tid) {
+                (Some(record), Some(tid))
+                    if now.saturating_sub(record.saved_at) < RESUME_KEEP_SECS
+                        && record.partial.is_file() =>
+                {
+                    mgr.resumable.insert(tid, record);
+                }
+                // Unreadable, too old, or its partial file is gone. The
+                // partial of an old one goes with the other orphans.
+                _ => {
+                    let _ = std::fs::remove_file(&path);
+                }
+            }
+        }
+        mgr.resume_dir = Some(resume_dir);
+        mgr
+    }
+
+    /// Partial files an earlier run left that can still be resumed; the
+    /// cleanup of orphaned partial files must leave these.
+    pub fn resumable_partials(&self) -> std::collections::HashSet<PathBuf> {
+        self.resumable.values().map(|r| r.partial.clone()).collect()
+    }
+
+    fn resume_record_path(&self, tid: &TransferId) -> Option<PathBuf> {
+        Some(
+            self.resume_dir
+                .as_ref()?
+                .join(format!("{}.json", hex::encode(tid))),
+        )
+    }
+
+    /// Records an accepted transfer so a restart can go on with it.
+    fn save_resume_record(&self, tid: &TransferId) {
+        let (Some(path), Some(t)) = (self.resume_record_path(tid), self.inbound.get(tid)) else {
+            return;
+        };
+        let (Some(partial), Some(final_name)) = (&t.dest_path, &t.final_name) else {
+            return;
+        };
+        let record = ResumeRecord {
+            transfer_id: hex::encode(tid),
+            from_device: t.from_device,
+            file_name: t.meta.file_name.clone(),
+            size_bytes: t.meta.size_bytes,
+            partial: partial.clone(),
+            final_name: final_name.clone(),
+            saved_at: now_unix(),
+        };
+        let written = path
+            .parent()
+            .map_or(Ok(()), std::fs::create_dir_all)
+            .and_then(|()| std::fs::write(&path, serde_json::to_vec(&record)?));
+        if let Err(e) = written {
+            // The transfer itself is fine; it just can't outlive a restart.
+            tracing::warn!(error = %e, "could not save the transfer's resume record");
+        }
+    }
+
+    fn forget_resume_record(&mut self, tid: &TransferId) {
+        let from_earlier_run = self.resumable.remove(tid).is_some();
+        let has_record = from_earlier_run
+            || self
+                .inbound
+                .get(tid)
+                .is_some_and(|t| t.dest_path.is_some());
+        if !has_record {
+            return;
+        }
+        if let Some(path) = self.resume_record_path(tid) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// The unfinished transfer from an earlier run that `meta`, announced
+    /// by `from_device`, continues, if there is one worth continuing. The
+    /// caller hashes it (`rehash_partial`) and hands it to `restore_inbound`,
+    /// or gives it up with `discard_resumable`.
+    pub fn take_resumable(
+        &mut self,
+        meta: &FileTransferMetadata,
+        from_device: Uuid,
+    ) -> Option<ResumablePartial> {
+        let tid = meta.transfer_id;
+        if self.inbound.contains_key(&tid) {
+            return None;
+        }
+        let record = self.resumable.remove(&tid)?;
+        let same = record.from_device == from_device
+            && record.size_bytes == meta.size_bytes
+            && record.file_name == meta.file_name;
+        let on_disk = std::fs::metadata(&record.partial).map(|m| m.len()).ok();
+        // Whole chunks only: the app may have stopped part-way through one.
+        let chunks = on_disk
+            .filter(|len| *len <= meta.size_bytes)
+            .map(|len| len / FILE_CHUNK_SIZE as u64)
+            .and_then(|chunks| u32::try_from(chunks).ok())
+            .unwrap_or(0);
+        let found = ResumablePartial {
+            partial: record.partial,
+            chunks,
+            final_name: record.final_name,
+        };
+        if !same || chunks == 0 {
+            self.discard_resumable(&tid, found);
+            return None;
+        }
+        Some(found)
+    }
+
+    /// Gives up on a transfer `take_resumable` returned: it starts over.
+    pub fn discard_resumable(&mut self, tid: &TransferId, found: ResumablePartial) {
+        let _ = std::fs::remove_file(&found.partial);
+        self.resumable.remove(tid);
+        if let Some(path) = self.resume_record_path(tid) {
+            let _ = std::fs::remove_file(path);
+        }
+    }
+
+    /// Puts back a transfer `take_resumable` returned, as it stood when the
+    /// app stopped: paused by a disconnect, waiting for its sender. The
+    /// announce that follows resumes it like any reconnect. False (and the
+    /// partial file is dropped) if the transfer was announced again
+    /// meanwhile and started over.
+    pub fn restore_inbound(
+        &mut self,
+        meta: FileTransferMetadata,
+        from_device: Uuid,
+        from_device_name: String,
+        found: ResumablePartial,
+        hasher: Sha256,
+    ) -> bool {
+        let tid = meta.transfer_id;
+        if self.inbound.contains_key(&tid) {
+            let _ = std::fs::remove_file(&found.partial);
+            return false;
+        }
+        let mut t = InboundTransfer::new(meta, from_device, from_device_name);
+        let chunks = found.chunks.min(t.total_chunks);
+        t.queued_chunk_count = chunks;
+        t.received_chunk_count = chunks;
+        t.last_confirmed_chunk = chunks.saturating_sub(1);
+        t.bytes_received = (chunks as u64 * FILE_CHUNK_SIZE as u64).min(t.meta.size_bytes);
+        t.dest_path = Some(found.partial);
+        t.final_name = Some(found.final_name);
+        t.hasher = hasher;
+        t.started_at = Some(Instant::now());
+        self.inbound.insert(tid, t);
+        true
     }
 
     pub fn save_dir(&self) -> &Path {
@@ -1199,6 +1425,7 @@ impl FileTransferManager {
         let root = self.folder_root_for(tid);
         let transfer = self.inbound.get_mut(tid).context("unknown transfer")?;
         transfer.accept(&self.save_dir, root.as_deref())?;
+        self.save_resume_record(tid);
         // Return resume_from_chunk (0 for new transfers).
         Ok(0)
     }
@@ -1216,6 +1443,7 @@ impl FileTransferManager {
         transfer.owner_session = session;
         if transfer.dest_path.is_none() {
             transfer.accept(&self.save_dir, root.as_deref())?;
+            self.save_resume_record(tid);
             return Ok(0);
         }
         transfer.reopen_for_resume()
@@ -1258,6 +1486,7 @@ impl FileTransferManager {
     }
 
     pub fn reject_inbound(&mut self, tid: &TransferId) {
+        self.forget_resume_record(tid);
         if let Some(mut t) = self.inbound.remove(tid) {
             t.status = TransferStatus::Cancelled;
             t.file_handle = None;
@@ -1276,10 +1505,12 @@ impl FileTransferManager {
     }
 
     pub fn remove_inbound(&mut self, tid: &TransferId) -> Option<InboundTransfer> {
+        self.forget_resume_record(tid);
         self.inbound.remove(tid)
     }
 
     pub fn cancel_inbound(&mut self, tid: &TransferId, _reason: &str) {
+        self.forget_resume_record(tid);
         if let Some(mut t) = self.inbound.remove(tid) {
             t.file_handle = None;
             if let Some(dest) = t.dest_path {
@@ -1775,13 +2006,24 @@ fn now_unix() -> u64 {
 }
 
 /// Delete `.linkall-part` files under `dir` (and its subfolders, where folder
-/// transfers land) not written to for `older_than`. A transfer's resume state
-/// lives in memory, so once the engine restarts nothing can finish a partial
-/// file: a transfer cut off by the app being killed left its partial file in
+/// transfers land) not written to for `older_than`, except those in `keep`
+/// (`FileTransferManager::resumable_partials`: a restart can still finish
+/// them). Any other partial file has nothing left that could finish it: a
+/// transfer cut off by the app being killed left its partial file in
 /// Downloads for good (seen on a phone: two of 224 and 268 MB, weeks old). The
 /// age check spares a file another running instance is still writing.
-pub fn remove_orphaned_partials(dir: &std::path::Path, older_than: std::time::Duration) -> usize {
-    fn walk(dir: &std::path::Path, cutoff: std::time::SystemTime, depth: u8, removed: &mut usize) {
+pub fn remove_orphaned_partials(
+    dir: &std::path::Path,
+    older_than: std::time::Duration,
+    keep: &std::collections::HashSet<PathBuf>,
+) -> usize {
+    fn walk(
+        dir: &std::path::Path,
+        cutoff: std::time::SystemTime,
+        depth: u8,
+        keep: &std::collections::HashSet<PathBuf>,
+        removed: &mut usize,
+    ) {
         let Ok(entries) = std::fs::read_dir(dir) else {
             return;
         };
@@ -1791,12 +2033,13 @@ pub fn remove_orphaned_partials(dir: &std::path::Path, older_than: std::time::Du
             };
             let path = entry.path();
             if kind.is_dir() && depth < 6 {
-                walk(&path, cutoff, depth + 1, removed);
+                walk(&path, cutoff, depth + 1, keep, removed);
             } else if kind.is_file()
                 && path
                     .file_name()
                     .and_then(|n| n.to_str())
                     .is_some_and(|n| n.ends_with(PARTIAL_FILE_SUFFIX))
+                && !keep.contains(&path)
                 && entry
                     .metadata()
                     .and_then(|m| m.modified())
@@ -1811,7 +2054,7 @@ pub fn remove_orphaned_partials(dir: &std::path::Path, older_than: std::time::Du
         return 0;
     };
     let mut removed = 0;
-    walk(dir, cutoff, 0, &mut removed);
+    walk(dir, cutoff, 0, keep, &mut removed);
     removed
 }
 
@@ -1871,7 +2114,12 @@ mod tests {
     fn outbound_idle_for(mgr: &mut FileTransferManager, secs: u64) -> Option<TransferId> {
         let peer = Uuid::new_v4();
         let tid = mgr
-            .start_outbound(vec![1u8; 10], "notes.txt".into(), "text/plain".into(), Some(peer))
+            .start_outbound(
+                vec![1u8; 10],
+                "notes.txt".into(),
+                "text/plain".into(),
+                Some(peer),
+            )
             .unwrap()
             .transfer_id;
         let idle_since = Instant::now().checked_sub(std::time::Duration::from_secs(secs))?;
@@ -1923,6 +2171,117 @@ mod tests {
         assert!(mgr.get_outbound(&stalled).is_none());
     }
 
+    fn meta_for(tid: TransferId, name: &str, size: usize) -> FileTransferMetadata {
+        FileTransferMetadata {
+            transfer_id: tid,
+            file_name: name.into(),
+            size_bytes: size as u64,
+            mime_type: "application/octet-stream".into(),
+            is_directory: false,
+            item_count: 1,
+            batch_id: None,
+        }
+    }
+
+    /// Receives chunks 0..`upto` of `data` into transfer `tid`.
+    fn receive(mgr: &mut FileTransferManager, tid: &TransferId, data: &[u8], from: u32, upto: u32) {
+        for i in from..upto {
+            let start = i as usize * FILE_CHUNK_SIZE;
+            let end = (start + FILE_CHUNK_SIZE).min(data.len());
+            mgr.get_inbound_mut(tid)
+                .unwrap()
+                .receive_chunk(i, data[start..end].to_vec())
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn a_transfer_goes_on_after_the_app_restarts() {
+        let dir = tempfile::tempdir().unwrap();
+        let (save, state) = (dir.path().join("downloads"), dir.path().join("resume"));
+        let data: Vec<u8> = (0..2 * FILE_CHUNK_SIZE + 4321)
+            .map(|i| (i % 251) as u8)
+            .collect();
+        let checksum = hex::encode(Sha256::digest(&data));
+        let sender = Uuid::new_v4();
+        let tid = [9u8; 16];
+        let meta = meta_for(tid, "holiday.mov", data.len());
+
+        // First run: two of three chunks arrive, then the app is killed.
+        let partial = {
+            let mut mgr = FileTransferManager::with_resume_dir(save.clone(), state.clone());
+            mgr.register_inbound(meta.clone(), sender, "Phone".into())
+                .unwrap();
+            assert_eq!(mgr.accept_inbound_or_resume(&tid, Some(1)).unwrap(), 0);
+            receive(&mut mgr, &tid, &data, 0, 2);
+            let t = mgr.get_inbound_mut(&tid).unwrap();
+            t.file_handle.as_mut().unwrap().flush().unwrap();
+            t.dest_path.clone().unwrap()
+        };
+
+        // Second run: the cleanup spares the partial file, and the sender's
+        // announce picks the transfer up after the two chunks it holds.
+        let mut mgr = FileTransferManager::with_resume_dir(save.clone(), state.clone());
+        let keep = mgr.resumable_partials();
+        assert!(keep.contains(&partial));
+        remove_orphaned_partials(&save, std::time::Duration::ZERO, &keep);
+        assert!(partial.exists());
+
+        let found = mgr.take_resumable(&meta, sender).expect("resumable");
+        assert_eq!(found.chunks, 2);
+        let hasher = rehash_partial(&found.partial, found.chunks).unwrap();
+        assert!(mgr.restore_inbound(meta.clone(), sender, "Phone".into(), found, hasher));
+        mgr.register_inbound(meta, sender, "Phone".into()).unwrap();
+        assert_eq!(mgr.accept_inbound_or_resume(&tid, Some(2)).unwrap(), 2);
+
+        // The disk writer seeks to each chunk's offset on a reopened file.
+        let t = mgr.get_inbound_mut(&tid).unwrap();
+        t.file_handle
+            .as_mut()
+            .unwrap()
+            .seek(SeekFrom::Start(2 * FILE_CHUNK_SIZE as u64))
+            .unwrap();
+        receive(&mut mgr, &tid, &data, 2, 3);
+        let dest = mgr
+            .get_inbound_mut(&tid)
+            .unwrap()
+            .finalize(checksum)
+            .unwrap();
+        mgr.remove_inbound(&tid);
+        assert_eq!(std::fs::read(&dest).unwrap(), data);
+        assert_eq!(dest.file_name().unwrap(), "holiday.mov");
+        // Nothing is left to resume.
+        assert_eq!(std::fs::read_dir(&state).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn an_announce_that_is_not_the_same_file_starts_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let (save, state) = (dir.path().join("downloads"), dir.path().join("resume"));
+        let data = vec![5u8; FILE_CHUNK_SIZE + 10];
+        let sender = Uuid::new_v4();
+        let tid = [3u8; 16];
+        let meta = meta_for(tid, "report.pdf", data.len());
+        let partial = {
+            let mut mgr = FileTransferManager::with_resume_dir(save.clone(), state.clone());
+            mgr.register_inbound(meta.clone(), sender, "Phone".into())
+                .unwrap();
+            mgr.accept_inbound_or_resume(&tid, Some(1)).unwrap();
+            receive(&mut mgr, &tid, &data, 0, 1);
+            let t = mgr.get_inbound_mut(&tid).unwrap();
+            t.file_handle.as_mut().unwrap().flush().unwrap();
+            t.dest_path.clone().unwrap()
+        };
+
+        // Another device reusing the id must not continue this one's file.
+        let mut mgr = FileTransferManager::with_resume_dir(save, state.clone());
+        assert!(mgr.take_resumable(&meta, Uuid::new_v4()).is_none());
+        assert!(!partial.exists());
+        assert_eq!(std::fs::read_dir(&state).unwrap().count(), 0);
+        // And it is gone for the real sender too: it starts over.
+        assert!(mgr.take_resumable(&meta, sender).is_none());
+    }
+
     #[test]
     fn a_file_cut_short_mid_send_fails_the_chunk_read() {
         let dir = tempfile::tempdir().unwrap();
@@ -1965,7 +2324,11 @@ mod tests {
         old(&finished);
         std::fs::File::create(&fresh).unwrap();
 
-        let removed = remove_orphaned_partials(dir.path(), std::time::Duration::from_secs(3600));
+        let removed = remove_orphaned_partials(
+            dir.path(),
+            std::time::Duration::from_secs(3600),
+            &Default::default(),
+        );
 
         assert_eq!(removed, 2);
         assert!(!stale.exists() && !stale_in_folder.exists());

@@ -23,6 +23,142 @@ fn decompress_chunk(payload: &[u8]) -> Result<Vec<u8>, String> {
     }
 }
 
+/// A trusted peer announced a file: register it, then resume, accept, or
+/// ask the user.
+async fn announced(
+    shared: &EngineShared,
+    outbox_tx: &mpsc::Sender<AppMessage>,
+    peer_id: Uuid,
+    peer_name: &str,
+    meta: crate::protocol::FileTransferMetadata,
+) {
+    let transfer_id = meta.transfer_id;
+    let file_name = meta.file_name.clone();
+    let file_bytes = meta.size_bytes;
+    let mime_type = meta.mime_type.clone();
+    let folder = crate::engine::folder_ops::incoming_folder(&meta);
+
+    // Register inbound transfer.
+    let reg_result = shared
+        .file_transfers
+        .lock()
+        .await
+        .register_inbound(meta, peer_id, peer_name.to_string())
+        .map(|t| t.dest_path.is_some());
+    // Already accepted once: this is the sender resuming
+    // after a reconnect, so continue without asking again.
+    let resuming = matches!(reg_result, Ok(true));
+    if let Err(e) = reg_result {
+        tracing::warn!(error = %e, "rejected file transfer announce");
+        let _ = outbox_tx
+            .send(AppMessage::FileTransferCancel {
+                transfer_id,
+                reason: e.to_string(),
+            })
+            .await;
+        return;
+    }
+
+    // Check auto-accept policy: trusted/paired devices auto-accept without requiring manual approval.
+    let is_trusted = shared
+        .peer_manager
+        .get(peer_id)
+        .map(|p| p.trusted)
+        .unwrap_or(false);
+    let settings = shared.settings.lock().unwrap().clone();
+    let mut auto_accept = (is_trusted && settings.auto_accept_file_transfers)
+        && (settings.auto_accept_max_bytes == 0 || file_bytes <= settings.auto_accept_max_bytes);
+
+    // One answer covers a whole folder: once any file of it is
+    // accepted the rest are too, and once declined the rest are
+    // declined without asking again.
+    if let Some((batch_id, folder_name, total)) = &folder {
+        let decision = {
+            let mut folders = shared.folders.lock().unwrap();
+            let decision = folders.decision(batch_id);
+            if decision != Some(false) {
+                folders.track(
+                    transfer_id,
+                    batch_id,
+                    folder_name,
+                    *total,
+                    peer_id,
+                    peer_name,
+                    false,
+                );
+            }
+            decision
+        };
+        match decision {
+            Some(false) if !resuming => {
+                shared
+                    .file_transfers
+                    .lock()
+                    .await
+                    .reject_inbound(&transfer_id);
+                let _ = outbox_tx
+                    .send(AppMessage::FileTransferAccept {
+                        transfer_id,
+                        accepted: false,
+                        resume_from_chunk: 0,
+                        reject_reason: Some("folder declined".into()),
+                    })
+                    .await;
+                return;
+            }
+            Some(true) => auto_accept = true,
+            _ => {}
+        }
+    }
+
+    if resuming {
+        let _ = shared
+            .file_transfers
+            .lock()
+            .await
+            .queue_inbound(&transfer_id);
+        let bg_shared = shared.clone();
+        tokio::spawn(async move {
+            pump_transfer_queue(&bg_shared).await;
+        });
+    } else if auto_accept {
+        let _ = shared
+            .file_transfers
+            .lock()
+            .await
+            .queue_inbound(&transfer_id);
+
+        // Trigger the queue manager
+        let bg_shared = shared.clone();
+        tokio::spawn(async move {
+            pump_transfer_queue(&bg_shared).await;
+        });
+
+        // Record in feed.
+        shared.activity.lock().await.record_file_transfer_started(
+            peer_id,
+            peer_name.to_string(),
+            file_name.clone(),
+            file_bytes,
+            hex::encode(transfer_id),
+            false,
+        );
+    } else {
+        // Prompt the user via event.
+        let _ = shared
+            .event_tx
+            .send(EngineEvent::FileTransferIncoming {
+                transfer_id,
+                from_device: peer_id,
+                from_name: peer_name.to_string(),
+                file_name,
+                file_bytes,
+                mime_type,
+            })
+            .await;
+    }
+}
+
 pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
     let shared = &ctx.shared;
     let peer_id = ctx.peer_id;
@@ -52,134 +188,48 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     .await;
                 return Flow::Continue;
             }
-            let transfer_id = meta.transfer_id;
-            let file_name = meta.file_name.clone();
-            let file_bytes = meta.size_bytes;
-            let mime_type = meta.mime_type.clone();
-            let folder = crate::engine::folder_ops::incoming_folder(&meta);
-
-            // Register inbound transfer.
-            let reg_result = shared
+            // Unfinished from before this app restarted: work out where it
+            // stood (hashing what arrived, off this reader) and resume it.
+            let earlier = shared
                 .file_transfers
                 .lock()
                 .await
-                .register_inbound(meta, peer_id, peer_name.clone())
-                .map(|t| t.dest_path.is_some());
-            // Already accepted once: this is the sender resuming
-            // after a reconnect, so continue without asking again.
-            let resuming = matches!(reg_result, Ok(true));
-            if let Err(e) = reg_result {
-                tracing::warn!(error = %e, "rejected file transfer announce");
-                let _ = ctx
-                    .outbox_tx
-                    .send(AppMessage::FileTransferCancel {
-                        transfer_id,
-                        reason: e.to_string(),
+                .take_resumable(&meta, peer_id);
+            if let Some(found) = earlier {
+                let shared = shared.clone();
+                let outbox_tx = ctx.outbox_tx.clone();
+                let peer_name = peer_name.clone();
+                tokio::spawn(async move {
+                    let (partial, chunks) = (found.partial.clone(), found.chunks);
+                    let hashed = tokio::task::spawn_blocking(move || {
+                        crate::file_transfer::rehash_partial(&partial, chunks)
                     })
                     .await;
+                    {
+                        let mut mgr = shared.file_transfers.lock().await;
+                        match hashed {
+                            Ok(Ok(hasher)) => {
+                                tracing::info!(
+                                    chunks,
+                                    "resuming a transfer from before the restart"
+                                );
+                                mgr.restore_inbound(
+                                    meta.clone(),
+                                    peer_id,
+                                    peer_name.clone(),
+                                    found,
+                                    hasher,
+                                );
+                            }
+                            // Unreadable: start the file over.
+                            _ => mgr.discard_resumable(&meta.transfer_id, found),
+                        }
+                    }
+                    announced(&shared, &outbox_tx, peer_id, &peer_name, meta).await;
+                });
                 return Flow::Continue;
             }
-
-            // Check auto-accept policy: trusted/paired devices auto-accept without requiring manual approval.
-            let is_trusted = shared
-                .peer_manager
-                .get(peer_id)
-                .map(|p| p.trusted)
-                .unwrap_or(false);
-            let settings = shared.settings.lock().unwrap().clone();
-            let mut auto_accept = (is_trusted && settings.auto_accept_file_transfers)
-                && (settings.auto_accept_max_bytes == 0
-                    || file_bytes <= settings.auto_accept_max_bytes);
-
-            // One answer covers a whole folder: once any file of it is
-            // accepted the rest are too, and once declined the rest are
-            // declined without asking again.
-            if let Some((batch_id, folder_name, total)) = &folder {
-                let decision = {
-                    let mut folders = shared.folders.lock().unwrap();
-                    let decision = folders.decision(batch_id);
-                    if decision != Some(false) {
-                        folders.track(
-                            transfer_id,
-                            batch_id,
-                            folder_name,
-                            *total,
-                            peer_id,
-                            peer_name,
-                            false,
-                        );
-                    }
-                    decision
-                };
-                match decision {
-                    Some(false) if !resuming => {
-                        shared
-                            .file_transfers
-                            .lock()
-                            .await
-                            .reject_inbound(&transfer_id);
-                        let _ = ctx
-                            .outbox_tx
-                            .send(AppMessage::FileTransferAccept {
-                                transfer_id,
-                                accepted: false,
-                                resume_from_chunk: 0,
-                                reject_reason: Some("folder declined".into()),
-                            })
-                            .await;
-                        return Flow::Continue;
-                    }
-                    Some(true) => auto_accept = true,
-                    _ => {}
-                }
-            }
-
-            if resuming {
-                let _ = shared
-                    .file_transfers
-                    .lock()
-                    .await
-                    .queue_inbound(&transfer_id);
-                let bg_shared = shared.clone();
-                tokio::spawn(async move {
-                    pump_transfer_queue(&bg_shared).await;
-                });
-            } else if auto_accept {
-                let _ = shared
-                    .file_transfers
-                    .lock()
-                    .await
-                    .queue_inbound(&transfer_id);
-
-                // Trigger the queue manager
-                let bg_shared = shared.clone();
-                tokio::spawn(async move {
-                    pump_transfer_queue(&bg_shared).await;
-                });
-
-                // Record in feed.
-                shared.activity.lock().await.record_file_transfer_started(
-                    peer_id,
-                    peer_name.clone(),
-                    file_name.clone(),
-                    file_bytes,
-                    hex::encode(transfer_id),
-                    false,
-                );
-            } else {
-                // Prompt the user via event.
-                let _ = shared
-                    .event_tx
-                    .send(EngineEvent::FileTransferIncoming {
-                        transfer_id,
-                        from_device: peer_id,
-                        from_name: peer_name.clone(),
-                        file_name,
-                        file_bytes,
-                        mime_type,
-                    })
-                    .await;
-            }
+            announced(shared, &ctx.outbox_tx, peer_id, peer_name, meta).await;
         }
         AppMessage::FileTransferAccept {
             transfer_id,
@@ -298,8 +348,8 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                         );
                         return Flow::Continue;
                     } else {
-                        breaks_transfer = transfer.status
-                            == crate::file_transfer::TransferStatus::Transferring;
+                        breaks_transfer =
+                            transfer.status == crate::file_transfer::TransferStatus::Transferring;
                         transfer.validate_chunk(chunk_index, data.len())
                     }
                 } else {
