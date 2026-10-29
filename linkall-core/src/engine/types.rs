@@ -371,6 +371,10 @@ pub struct EngineConfig {
     pub heartbeat_timeout: Duration,
     pub bind_ip: Option<IpAddr>,
     pub enable_discovery: bool,
+    /// Whether the engine reads this computer's own player (macOS, Linux)
+    /// to tell paired devices what is playing. Off in tests that set a
+    /// track themselves: the real player's state replaced theirs.
+    pub read_system_player: bool,
     pub network_poll_interval: Duration,
     /// Root directory for daemon-managed data files (history, feedback, etc.).
     pub data_dir: PathBuf,
@@ -411,6 +415,7 @@ impl Default for EngineConfig {
             heartbeat_timeout: Duration::from_secs(12),
             bind_ip: None,
             enable_discovery: true,
+            read_system_player: true,
             // Android has no netlink hint path (see network_manager) and the
             // app already reports connectivity changes through
             // notifyNetworkRestored, so a 1 s interface poll only kept the

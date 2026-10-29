@@ -205,10 +205,12 @@ impl Engine {
     /// Starts reading this computer's own player. Windows and Android read theirs in
     /// their apps and call `set_now_playing`.
     pub(super) fn spawn_now_playing_source(&self) {
-        if !cfg!(any(
-            target_os = "macos",
-            all(unix, not(target_os = "android"))
-        )) {
+        if !self.shared.config.read_system_player
+            || !cfg!(any(
+                target_os = "macos",
+                all(unix, not(target_os = "android"))
+            ))
+        {
             return;
         }
         let engine = self.clone();

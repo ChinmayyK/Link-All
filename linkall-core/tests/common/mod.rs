@@ -73,6 +73,7 @@ pub async fn start_pair(tmp: &TempDir, a_trusts_b: bool, b_trusts_a: bool) -> (N
             file_save_dir: Some(tmp.path().join(format!("received{i}"))),
             bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
             enable_discovery: false,
+            read_system_player: false,
             ..EngineConfig::default()
         };
         let engine = Engine::start(cfg, tx).await.expect("engine start");
@@ -140,6 +141,7 @@ pub fn twin_config(tmp: &TempDir, tag: &str, id: Uuid, name: &str) -> EngineConf
         file_save_dir: Some(tmp.path().join(format!("received_{tag}"))),
         bind_ip: Some(IpAddr::V4(Ipv4Addr::LOCALHOST)),
         enable_discovery: false,
+        read_system_player: false,
         ..EngineConfig::default()
     }
 }
