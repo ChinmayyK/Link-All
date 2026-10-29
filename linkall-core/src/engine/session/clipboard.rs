@@ -43,8 +43,9 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 }
 
                 // Run inbound payload through the FilterChain (e.g. executable blocking, etc.)
-                let filter_chain =
-                    crate::filter::FilterChain::from_settings(&shared.settings.lock().unwrap());
+                let filter_chain = crate::filter::FilterChain::from_settings(
+                    &shared.settings.lock().unwrap_or_else(|e| e.into_inner()),
+                );
                 if let crate::filter::Verdict::Deny { reason } = filter_chain.run(&content) {
                     tracing::warn!(peer_id = %peer_id, reason, "inbound clipboard payload denied by filter");
                     return Flow::Continue;
@@ -73,7 +74,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 // nothing. Off: remote clips still land in history
                 // (so they can be applied by hand) but never
                 // overwrite the local clipboard or get relayed on.
-                let sharing_on = shared.settings.lock().unwrap().sync_enabled;
+                let sharing_on = shared
+                    .settings
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .sync_enabled;
                 let auto_apply = sharing_on
                     && shared
                         .apply_policy
@@ -165,7 +170,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
 
                 // Persist the incoming item to history.
                 {
-                    let max_bytes = shared.settings.lock().unwrap().max_history_text_bytes;
+                    let max_bytes = shared
+                        .settings
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .max_history_text_bytes;
                     let source = display_name.clone();
                     let _ = shared
                         .history

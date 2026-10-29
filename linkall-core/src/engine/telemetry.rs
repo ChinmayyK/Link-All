@@ -74,7 +74,12 @@ impl crate::engine::Engine {
 
     /// Push this device's battery status to all connected trusted peers.
     pub async fn push_battery_status(&self, level: u8, charging: bool) {
-        *self.shared.device_status.local_battery.lock().unwrap() = Some((level, charging));
+        *self
+            .shared
+            .device_status
+            .local_battery
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some((level, charging));
         let msg = AppMessage::BatteryStatus {
             level,
             charging,
@@ -92,7 +97,12 @@ impl crate::engine::Engine {
 
     /// Push this device's network status to all connected trusted peers.
     pub async fn push_network_status(&self, network_type: String) {
-        *self.shared.device_status.local_network.lock().unwrap() = Some(network_type.clone());
+        *self
+            .shared
+            .device_status
+            .local_network
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(network_type.clone());
         let msg = AppMessage::NetworkStatus {
             network_type,
             origin_device: self.shared.config.device_id,
@@ -164,7 +174,12 @@ impl crate::engine::Engine {
         free_bytes: u64,
         total_bytes: u64,
     ) {
-        *self.shared.device_status.local_storage.lock().unwrap() = Some((
+        *self
+            .shared
+            .device_status
+            .local_storage
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some((
             images_bytes,
             videos_bytes,
             apps_bytes,

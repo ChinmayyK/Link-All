@@ -23,16 +23,20 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
     if !trusted {
         return Flow::Continue;
     }
-    let changed = shared.scratchpad.lock().unwrap().merge(
-        crate::scratchpad::Note {
-            id,
-            text,
-            pinned,
-            updated_at_ms,
-            deleted,
-        },
-        crate::scratchpad::now_ms(),
-    );
+    let changed = shared
+        .scratchpad
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .merge(
+            crate::scratchpad::Note {
+                id,
+                text,
+                pinned,
+                updated_at_ms,
+                deleted,
+            },
+            crate::scratchpad::now_ms(),
+        );
     if changed {
         let _ = shared.event_tx.send(EngineEvent::ScratchpadChanged).await;
     }
