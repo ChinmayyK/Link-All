@@ -876,10 +876,8 @@ impl InboundTransfer {
             actual
         );
 
-        // Flush and sync to durable storage before renaming.
         if let Some(mut file) = self.file_handle.take() {
-            file.flush()?;
-            file.get_ref().sync_all()?;
+            finish_writing(&mut file, self.meta.size_bytes)?;
         }
 
         let partial = self.dest_path.as_ref().context("no dest path")?.clone();
@@ -983,6 +981,25 @@ pub struct TransferProgress {
     pub percent: u8,
     pub speed_bps: Option<u64>,
     pub eta_secs: Option<u64>,
+}
+
+/// A received file this big or bigger is forced onto the disk before it
+/// gets its real name, so a power cut right after can't leave it damaged.
+/// Smaller files are left to the system to write out, as a browser's
+/// downloads are: forcing each one cost 4 ms on a Mac's SSD (more on a
+/// phone's flash) however small the file, which was 91% of the time a folder
+/// of 2000 photos took. A write that fails still fails the transfer, and the
+/// size on disk is checked either way. Set to 0 to force every file.
+pub const SYNC_TO_DISK_FROM_BYTES: u64 = 8 * 1024 * 1024;
+
+/// Hands a finished file's last bytes to the system, and for a large file
+/// waits until they are on the disk (see `SYNC_TO_DISK_FROM_BYTES`).
+pub fn finish_writing(file: &mut BufWriter<File>, size_bytes: u64) -> std::io::Result<()> {
+    file.flush()?;
+    if size_bytes >= SYNC_TO_DISK_FROM_BYTES {
+        file.get_ref().sync_all()?;
+    }
+    Ok(())
 }
 
 
@@ -1137,6 +1154,10 @@ impl FileTransferManager {
         let (Some(path), Some(t)) = (self.resume_record_path(tid), self.inbound.get(tid)) else {
             return;
         };
+        // A file of one chunk has no whole chunk to go on from.
+        if t.total_chunks < 2 {
+            return;
+        }
         let (Some(partial), Some(final_name)) = (&t.dest_path, &t.final_name) else {
             return;
         };
@@ -1165,7 +1186,7 @@ impl FileTransferManager {
             || self
                 .inbound
                 .get(tid)
-                .is_some_and(|t| t.dest_path.is_some());
+                .is_some_and(|t| t.total_chunks >= 2 && t.dest_path.is_some());
         if !has_record {
             return;
         }

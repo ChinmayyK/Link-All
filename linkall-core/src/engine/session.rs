@@ -588,18 +588,18 @@ pub(super) fn register_session(
                     } => {
                         let file_handle = {
                             let mut mgr = dw_shared.file_transfers.lock().await;
-                            mgr.get_inbound_mut(&transfer_id)
-                                .and_then(|t| t.file_handle.take())
+                            mgr.get_inbound_mut(&transfer_id).and_then(|t| {
+                                let size = t.meta.size_bytes;
+                                t.file_handle.take().map(|file| (file, size))
+                            })
                         };
 
                         // A failed final flush (disk full) must fail the transfer,
                         // not rename a short file and ack success.
                         let mut flush_err: Option<String> = None;
-                        if let Some(mut file) = file_handle {
+                        if let Some((mut file, size)) = file_handle {
                             let res = tokio::task::spawn_blocking(move || {
-                                use std::io::Write;
-                                file.flush()?;
-                                file.get_ref().sync_all()
+                                crate::file_transfer::finish_writing(&mut file, size)
                             })
                             .await;
                             flush_err = match res {
