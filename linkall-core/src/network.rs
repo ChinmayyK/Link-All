@@ -24,46 +24,104 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> =
-    std::sync::OnceLock::new();
+/// Buffers for frames and file chunks, reused so a transfer doesn't
+/// allocate 4 MB per chunk.
+struct BufferPool {
+    buffers: Vec<Vec<u8>>,
+    /// When a large buffer was last asked for: a transfer is running.
+    last_large: Option<std::time::Instant>,
+}
 
 /// Room left after a buffer's contents for an AEAD tag, so encrypting a
 /// full buffer in place never reallocates (and copies) it.
 const BUFFER_TAG_ROOM: usize = 32;
+/// The most buffers kept. Chunk buffers are 4 MB, so a bigger pool keeps a
+/// lot of memory pinned during a transfer.
+const POOLED_BUFFERS: usize = 16;
+/// From this size a buffer is a file chunk's (or an image's), not a message's.
+const LARGE_BUFFER: usize = 256 * 1024;
+/// How long after the last large request the large buffers are kept. The
+/// pool held up to 16 of them (64 MB, more after big images) for as long as
+/// the app ran once a single file had gone through, which a phone notices.
+const LARGE_BUFFER_IDLE: Duration = Duration::from_secs(30);
+
+impl BufferPool {
+    const fn new() -> Self {
+        Self {
+            buffers: Vec::new(),
+            last_large: None,
+        }
+    }
+
+    fn get(&mut self, len: usize, now: std::time::Instant) -> Vec<u8> {
+        if len >= LARGE_BUFFER {
+            self.last_large = Some(now);
+        }
+        let mut buf = self.buffers.pop().unwrap_or_default();
+        if buf.capacity() < len + BUFFER_TAG_ROOM {
+            // Nothing in it is worth copying to the new allocation.
+            buf.clear();
+            buf.reserve_exact(len + BUFFER_TAG_ROOM);
+        }
+        buf.resize(len, 0);
+        buf
+    }
+
+    fn put(&mut self, buf: Vec<u8>, now: std::time::Instant) {
+        self.trim_idle(now);
+        // Don't pool huge ones (e.g., > MAX_FRAME_SIZE).
+        if buf.capacity() == 0 || buf.capacity() > MAX_FRAME_SIZE as usize {
+            return;
+        }
+        if buf.capacity() >= LARGE_BUFFER && !self.transfer_running(now) {
+            return;
+        }
+        if self.buffers.len() < POOLED_BUFFERS {
+            self.buffers.push(buf);
+        }
+    }
+
+    fn transfer_running(&self, now: std::time::Instant) -> bool {
+        self.last_large
+            .is_some_and(|at| now.saturating_duration_since(at) < LARGE_BUFFER_IDLE)
+    }
+
+    /// Frees the large buffers once no transfer has needed one for a while.
+    fn trim_idle(&mut self, now: std::time::Instant) {
+        if self.last_large.is_some() && !self.transfer_running(now) {
+            self.last_large = None;
+            self.buffers.retain(|b| b.capacity() < LARGE_BUFFER);
+        }
+    }
+}
+
+static BUFFER_POOL: std::sync::Mutex<BufferPool> = std::sync::Mutex::new(BufferPool::new());
 
 /// A buffer of `len` bytes from the pool. Its contents are whatever the last
 /// user left: every caller overwrites all of it (a socket or file read, or a
 /// frame it builds), and zeroing 4 MB per file chunk first was wasted work.
 pub fn get_buffer(len: usize) -> Vec<u8> {
-    let pooled = BUFFER_POOL
-        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(16)))
+    BUFFER_POOL
         .lock()
         .unwrap_or_else(|e| e.into_inner())
-        .pop();
-    let mut buf = pooled.unwrap_or_default();
-    if buf.capacity() < len + BUFFER_TAG_ROOM {
-        // Nothing in it is worth copying to the new allocation.
-        buf.clear();
-        buf.reserve_exact(len + BUFFER_TAG_ROOM);
-    }
-    buf.resize(len, 0);
-    buf
+        .get(len, std::time::Instant::now())
 }
 
 pub fn return_buffer(buf: Vec<u8>) {
-    // Only pool up to 16 buffers, and don't pool huge ones (e.g., > MAX_FRAME_SIZE).
-    // Chunk buffers are 4 MB, so a bigger pool keeps a lot of memory pinned
-    // after a transfer.
-    if buf.capacity() == 0 || buf.capacity() > MAX_FRAME_SIZE as usize {
-        return;
-    }
-    let mut pool = BUFFER_POOL
-        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(16)))
+    BUFFER_POOL
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    if pool.len() < 16 {
-        pool.push(buf);
-    }
+        .unwrap_or_else(|e| e.into_inner())
+        .put(buf, std::time::Instant::now());
+}
+
+/// Frees the pool's large buffers if no transfer has run for a while. Any
+/// message does this as it returns its buffer; this is for an engine with no
+/// traffic at all.
+pub fn trim_idle_buffers() {
+    BUFFER_POOL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .trim_idle(std::time::Instant::now());
 }
 
 const MAX_FRAME_SIZE: u32 = 40 * 1024 * 1024; // 40 MB limit for safety (to accommodate 32MB images)
@@ -989,6 +1047,32 @@ fn dual_stack_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn large_buffers_are_reused_during_a_transfer_and_freed_after_it() {
+        let mut pool = BufferPool::new();
+        let start = std::time::Instant::now();
+        let chunk = 4 * 1024 * 1024;
+
+        let buf = pool.get(chunk, start);
+        let address = buf.as_ptr();
+        pool.put(buf, start);
+        let again = pool.get(chunk, start + Duration::from_secs(1));
+        assert_eq!(again.as_ptr(), address, "the chunk buffer was not reused");
+        pool.put(again, start + Duration::from_secs(1));
+
+        // Small messages go on (pings); the transfer is long over.
+        let later = start + Duration::from_secs(1) + LARGE_BUFFER_IDLE;
+        let ping = pool.get(64, later);
+        pool.put(ping, later);
+        assert!(
+            pool.buffers.iter().all(|b| b.capacity() < LARGE_BUFFER),
+            "a chunk buffer is still held after the transfer"
+        );
+        // A late chunk buffer coming back with no transfer running is not kept.
+        pool.put(Vec::with_capacity(chunk), later);
+        assert!(pool.buffers.iter().all(|b| b.capacity() < LARGE_BUFFER));
+    }
+
     #[tokio::test]
     async fn a_message_from_a_newer_build_is_skipped_and_the_stream_stays_in_step() {
         let (a, b) = (EphemeralKeypair::generate(), EphemeralKeypair::generate());
@@ -1234,10 +1318,7 @@ mod buffer_pool_poison_tests {
     #[test]
     fn pool_survives_a_panic_while_locked() {
         let _ = std::thread::spawn(|| {
-            let _guard = BUFFER_POOL
-                .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
-                .lock()
-                .unwrap();
+            let _guard = BUFFER_POOL.lock().unwrap();
             panic!("poison the pool");
         })
         .join();
