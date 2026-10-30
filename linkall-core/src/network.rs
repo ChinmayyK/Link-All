@@ -186,6 +186,48 @@ pub fn optimize_stream(stream: &TcpStream, label: &'static str) {
     if let Err(err) = apply_keepalive(stream) {
         debug!(error = %err, %label, "TCP keepalive unavailable");
     }
+
+    if let Err(err) = apply_unsent_limit(stream) {
+        debug!(error = %err, %label, "unsent-data limit unavailable");
+    }
+}
+
+/// The most file data the system may hold that it has not yet put on the
+/// wire. The send buffer is 16 MB so a fast link stays busy, but a write
+/// "succeeds" as soon as its bytes are in that buffer: 16 MB of file could
+/// sit ahead of a clipboard or a mouse move (half a second on good Wi-Fi,
+/// far longer on a slow link). With this limit a write only goes ahead once
+/// little is waiting, so what is sent next follows closely. Data on the wire
+/// but not yet acknowledged does not count, so a fast link is not slowed.
+const UNSENT_LIMIT: u32 = 256 * 1024;
+
+/// Sets `UNSENT_LIMIT` (TCP_NOTSENT_LOWAT). Linux, Android and Apple
+/// systems have it; Windows does not.
+fn apply_unsent_limit(stream: &TcpStream) -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    {
+        use std::os::fd::AsRawFd;
+        #[cfg(target_vendor = "apple")]
+        const TCP_NOTSENT_LOWAT: libc::c_int = 0x201;
+        #[cfg(not(target_vendor = "apple"))]
+        const TCP_NOTSENT_LOWAT: libc::c_int = libc::TCP_NOTSENT_LOWAT;
+        let limit = UNSENT_LIMIT as libc::c_int;
+        let ret = unsafe {
+            libc::setsockopt(
+                stream.as_raw_fd(),
+                libc::IPPROTO_TCP,
+                TCP_NOTSENT_LOWAT,
+                &limit as *const libc::c_int as *const libc::c_void,
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+        if ret != 0 {
+            return Err(std::io::Error::last_os_error()).context("setting TCP_NOTSENT_LOWAT");
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    let _ = stream;
+    Ok(())
 }
 
 fn apply_socket_buffers(stream: &TcpStream) -> Result<()> {
@@ -478,6 +520,8 @@ pub struct HandshakeResult {
     pub peer_clipboard_at: Option<u64>,
     /// The peer's network card address, when it is a computer that said so.
     pub peer_mac: Option<String>,
+    /// The peer reads `AppMessage::FileChunkPart`.
+    pub peer_chunk_parts: bool,
 }
 
 /// The OS this build runs on, as peers show it.
@@ -516,6 +560,7 @@ fn my_metadata_json(
         background_restricted: announce.background_restricted,
         clipboard_at: announce.clipboard_at,
         mac_address: own_mac(),
+        chunk_parts: Some(true),
         ..Default::default()
     })
     .ok()
@@ -669,6 +714,7 @@ pub async fn handshake_initiator(
         peer_background_restricted: ack_metadata.background_restricted,
         peer_clipboard_at: ack_metadata.clipboard_at,
         peer_mac: ack_metadata.mac_address,
+        peer_chunk_parts: ack_metadata.chunk_parts.unwrap_or(false),
     })
 }
 
@@ -788,6 +834,7 @@ where
         peer_background_restricted: peer_metadata.background_restricted,
         peer_clipboard_at: peer_metadata.clipboard_at,
         peer_mac: peer_metadata.mac_address,
+        peer_chunk_parts: peer_metadata.chunk_parts.unwrap_or(false),
     })
 }
 
@@ -972,6 +1019,77 @@ impl PeerSessionTx {
             .context("flush to peer timed out")?
             .context("flushing stream")
     }
+
+    /// Waits until the socket holds less than `UNSENT_LIMIT` of unsent data,
+    /// so the next piece sent goes into the queue right after it. Fails if
+    /// the unsent queue shrinks by less than `min_bytes` over `window`:
+    /// the link is gone. A write would notice that only once the whole send
+    /// buffer had filled, and waiting here would hide it from the caller.
+    pub async fn wait_until_little_unsent(
+        &self,
+        window: Duration,
+        min_bytes: u64,
+    ) -> std::result::Result<(), String> {
+        #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+        {
+            use std::os::fd::AsRawFd;
+            let fd = self.stream.inner.as_ref().as_raw_fd();
+            let mut window_started = tokio::time::Instant::now();
+            let mut queued_then = queued_bytes(fd);
+            loop {
+                // With TCP_NOTSENT_LOWAT set, the socket only reports
+                // writable while less than the limit is unsent.
+                let mut poll = libc::pollfd {
+                    fd,
+                    events: libc::POLLOUT,
+                    revents: 0,
+                };
+                if unsafe { libc::poll(&mut poll, 1, 0) } != 0 {
+                    return Ok(());
+                }
+                if window_started.elapsed() >= window {
+                    let (Some(then), Some(now)) = (queued_then, queued_bytes(fd)) else {
+                        // Can't tell: let the write and its own check decide.
+                        return Ok(());
+                    };
+                    if then.saturating_sub(now) < min_bytes {
+                        return Err(format!("write stalled for {} s", window.as_secs()));
+                    }
+                    window_started = tokio::time::Instant::now();
+                    queued_then = Some(now);
+                }
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+        {
+            let _ = (window, min_bytes);
+            Ok(())
+        }
+    }
+}
+
+/// Bytes in the socket's send buffer: unsent, and sent but not acknowledged.
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+fn queued_bytes(fd: std::os::fd::RawFd) -> Option<u64> {
+    let mut queued: libc::c_int = 0;
+    #[cfg(target_vendor = "apple")]
+    let ret = {
+        const SO_NWRITE: libc::c_int = 0x1024;
+        let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+        unsafe {
+            libc::getsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                SO_NWRITE,
+                &mut queued as *mut libc::c_int as *mut libc::c_void,
+                &mut len,
+            )
+        }
+    };
+    #[cfg(not(target_vendor = "apple"))]
+    let ret = unsafe { libc::ioctl(fd, libc::TIOCOUTQ as _, &mut queued) };
+    (ret == 0).then_some(queued.max(0) as u64)
 }
 
 impl PeerSessionRx {

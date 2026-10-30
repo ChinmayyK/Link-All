@@ -163,6 +163,10 @@ pub struct PeerRecord {
     /// it didn't say: a computer, or an older build.
     #[serde(default)]
     pub background_restricted: Option<bool>,
+    /// Whether the peer's current build reads file chunks sent in parts
+    /// (`AppMessage::FileChunkPart`), as its last handshake said.
+    #[serde(skip)]
+    pub chunk_parts: bool,
     /// The peer's network card address, kept from its last handshake so it
     /// can be woken with Wake-on-LAN while it sleeps and is not connected.
     #[serde(default)]
@@ -232,6 +236,7 @@ impl Default for PeerRecord {
             pairing_declined_at: None,
             app_version: None,
             background_restricted: None,
+            chunk_parts: false,
             mac_address: None,
             last_discovery_at: None,
             discovery_sources: Vec::new(),
@@ -1094,6 +1099,13 @@ impl PeerManager {
         };
         if changed {
             let _ = self.save();
+        }
+    }
+
+    /// Records whether the peer said it reads file chunks sent in parts.
+    pub fn set_chunk_parts(&self, device_id: Uuid, chunk_parts: bool) {
+        if let Some(mut entry) = self.store.get_mut(&device_id) {
+            entry.chunk_parts = chunk_parts;
         }
     }
 
