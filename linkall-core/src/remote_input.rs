@@ -644,6 +644,31 @@ pub fn cursor_position() -> Option<(i32, i32)> {
     edge_imp::cursor_position()
 }
 
+/// What the other device is told when `input_permitted` is false.
+pub const NOT_PERMITTED: &str = "That Mac hasn't allowed Link All to control it. On the Mac, open \
+     System Settings > Privacy & Security > Accessibility and turn on Link All.";
+
+/// Whether the system lets this app move the pointer and press keys. A Mac
+/// drops the events of an app without the Accessibility permission and
+/// reports nothing, so a hand-off looked accepted while nothing moved.
+pub fn input_permitted() -> bool {
+    if testing::backend().is_some() {
+        return true;
+    }
+    #[cfg(target_os = "macos")]
+    {
+        #[link(name = "ApplicationServices", kind = "framework")]
+        extern "C" {
+            fn AXIsProcessTrusted() -> u8;
+        }
+        unsafe { AXIsProcessTrusted() != 0 }
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        true
+    }
+}
+
 /// The width and height of the screen the pointer moves on.
 pub fn screen_size() -> Option<(i32, i32)> {
     if let Some(b) = testing::backend() {
