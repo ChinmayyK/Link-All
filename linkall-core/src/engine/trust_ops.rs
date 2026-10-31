@@ -254,10 +254,7 @@ impl Engine {
         // can't be reported ahead of it.
         let peer = self.shared.peer_manager.get(target_device);
         let started = peer.as_ref().and_then(|p| p.pairing_started_at);
-        let addrs = peer
-            .as_ref()
-            .map(|p| p.socket_addrs())
-            .unwrap_or_default();
+        let addrs = peer.as_ref().map(|p| p.socket_addrs()).unwrap_or_default();
         let pin = peer
             .as_ref()
             .and_then(|p| p.pairing_pin.clone())
