@@ -1002,7 +1002,6 @@ pub fn finish_writing(file: &mut BufWriter<File>, size_bytes: u64) -> std::io::R
     Ok(())
 }
 
-
 /// A transfer `prune_stale_transfers` gave up on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PrunedTransfer {
