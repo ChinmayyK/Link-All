@@ -500,6 +500,9 @@ impl OutboundTransfer {
 
     /// Resume from the given chunk (skip already-delivered ones).
     pub fn resume_from(&mut self, chunk_index: u32) {
+        // The receiver names the chunk; one past the end would have the
+        // whole file hashed again only to send nothing.
+        let chunk_index = chunk_index.min(self.total_chunks);
         if self.started_at.is_none() {
             self.started_at = Some(Instant::now());
         }

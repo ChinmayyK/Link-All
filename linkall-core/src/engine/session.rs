@@ -481,6 +481,9 @@ pub(super) fn register_session(
                                     hasher.update(vec![0u8; padding]);
                                 }
                                 let new_offset = offset + data.len() as u64;
+                                // Back to the pool the socket reader draws from,
+                                // or every chunk costs a fresh 4 MB allocation.
+                                crate::network::return_buffer(data);
                                 Ok::<_, anyhow::Error>((file, hasher, new_offset))
                             })
                             .await
@@ -562,13 +565,19 @@ pub(super) fn register_session(
                         } else {
                             // The chunk was accepted but there is no open file
                             // to write it to. Dropping it left a gap, the sender
-                            // went on to the end, and the transfer failed.
+                            // went on to send the whole file, and it failed only
+                            // at the end on "missing chunks".
+                            tracing::error!(
+                                "Missing io_ctx for chunk {} of transfer {:?}",
+                                chunk_index,
+                                transfer_id
+                            );
                             fail_inbound_transfer(
                                 &dw_shared,
                                 &dw_outbox_tx,
                                 dw_peer_id,
                                 transfer_id,
-                                "transfer has no file to write to".to_string(),
+                                "the file being received was no longer open".to_string(),
                             )
                             .await;
                         }
@@ -1139,6 +1148,37 @@ fn clipboard_to_catch_up(
     (fresh && missed && newer_than_theirs && !came_from_them && wants_it).then_some(latest)
 }
 
+/// Whether a peer running `app_version` knows `msg`; see
+/// `AppMessage::min_app_version`.
+fn peer_can_read(app_version: Option<&str>, msg: &AppMessage) -> bool {
+    msg.min_app_version()
+        .is_none_or(|min| crate::device_choice::at_least(app_version, min))
+}
+
+#[cfg(test)]
+mod peer_can_read_tests {
+    use super::*;
+
+    #[test]
+    fn newer_messages_are_kept_from_older_peers() {
+        let note = AppMessage::ScratchpadNote {
+            id: Uuid::nil(),
+            text: String::new(),
+            pinned: false,
+            updated_at_ms: 0,
+            deleted: false,
+        };
+        for old in [None, Some(""), Some("2.0.2"), Some("1.3.4")] {
+            assert!(!peer_can_read(old, &note), "{old:?}");
+            assert!(!peer_can_read(old, &AppMessage::EdgeEnd), "{old:?}");
+            // What every build knows still goes out.
+            assert!(peer_can_read(old, &AppMessage::Bye), "{old:?}");
+        }
+        assert!(peer_can_read(Some("2.1.0"), &note));
+        assert!(peer_can_read(Some("2.2.0"), &AppMessage::EdgeEnd));
+    }
+}
+
 /// How often a session pings while either side is asleep.
 const SLEEP_PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(60);
 
@@ -1269,35 +1309,3 @@ mod write_within_tests {
         );
     }
 }
-
-/// Whether a peer running `app_version` knows `msg`; see
-/// `AppMessage::min_app_version`.
-fn peer_can_read(app_version: Option<&str>, msg: &AppMessage) -> bool {
-    msg.min_app_version()
-        .is_none_or(|min| crate::device_choice::at_least(app_version, min))
-}
-
-#[cfg(test)]
-mod peer_can_read_tests {
-    use super::*;
-
-    #[test]
-    fn newer_messages_are_kept_from_older_peers() {
-        let note = AppMessage::ScratchpadNote {
-            id: Uuid::nil(),
-            text: String::new(),
-            pinned: false,
-            updated_at_ms: 0,
-            deleted: false,
-        };
-        for old in [None, Some(""), Some("2.0.2"), Some("1.3.4")] {
-            assert!(!peer_can_read(old, &note), "{old:?}");
-            assert!(!peer_can_read(old, &AppMessage::EdgeEnd), "{old:?}");
-            // What every build knows still goes out.
-            assert!(peer_can_read(old, &AppMessage::Bye), "{old:?}");
-        }
-        assert!(peer_can_read(Some("2.1.0"), &note));
-        assert!(peer_can_read(Some("2.2.0"), &AppMessage::EdgeEnd));
-    }
-}
-

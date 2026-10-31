@@ -27,35 +27,41 @@ use uuid::Uuid;
 static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> =
     std::sync::OnceLock::new();
 
-pub fn get_buffer(capacity: usize) -> Vec<u8> {
-    let mut pool = BUFFER_POOL
-        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
+/// Room left after a buffer's contents for an AEAD tag, so encrypting a
+/// full buffer in place never reallocates (and copies) it.
+const BUFFER_TAG_ROOM: usize = 32;
+
+/// A buffer of `len` bytes from the pool. Its contents are whatever the last
+/// user left: every caller overwrites all of it (a socket or file read, or a
+/// frame it builds), and zeroing 4 MB per file chunk first was wasted work.
+pub fn get_buffer(len: usize) -> Vec<u8> {
+    let pooled = BUFFER_POOL
+        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(16)))
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    if let Some(mut buf) = pool.pop() {
-        if buf.capacity() < capacity {
-            buf.reserve(capacity - buf.capacity());
-        }
-        buf.resize(capacity, 0);
-        buf
-    } else {
-        vec![0u8; capacity]
+        .unwrap_or_else(|e| e.into_inner())
+        .pop();
+    let mut buf = pooled.unwrap_or_default();
+    if buf.capacity() < len + BUFFER_TAG_ROOM {
+        // Nothing in it is worth copying to the new allocation.
+        buf.clear();
+        buf.reserve_exact(len + BUFFER_TAG_ROOM);
     }
+    buf.resize(len, 0);
+    buf
 }
 
-pub fn return_buffer(mut buf: Vec<u8>) {
+pub fn return_buffer(buf: Vec<u8>) {
     // Only pool up to 16 buffers, and don't pool huge ones (e.g., > MAX_FRAME_SIZE).
     // Chunk buffers are 4 MB, so a bigger pool keeps a lot of memory pinned
     // after a transfer.
-    if buf.capacity() > MAX_FRAME_SIZE as usize {
+    if buf.capacity() == 0 || buf.capacity() > MAX_FRAME_SIZE as usize {
         return;
     }
     let mut pool = BUFFER_POOL
-        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
+        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(16)))
         .lock()
         .unwrap_or_else(|e| e.into_inner());
     if pool.len() < 16 {
-        buf.clear();
         pool.push(buf);
     }
 }
@@ -254,39 +260,7 @@ async fn send_encrypted(
     session: &mut SessionKey,
     msg: &mut AppMessage,
 ) -> Result<()> {
-    let payload = msg.take_raw_payload();
-
-    let serialized = postcard::to_allocvec(msg).context("serializing AppMessage")?;
-    let serialized_len = serialized.len();
-
-    let mut buffer = get_buffer(16 + serialized_len + 16); // Header (16) + body + tag (16)
-    buffer[16..16 + serialized_len].copy_from_slice(&serialized);
-
-    let (nonce, tag) = session.encrypt_slice_in_place(&mut buffer[16..16 + serialized_len])?;
-    buffer[16 + serialized_len..16 + serialized_len + 16].copy_from_slice(&tag);
-    let total_ct_len = serialized_len + 16;
-    let len = (12 + total_ct_len) as u32;
-
-    buffer[0..4].copy_from_slice(&len.to_le_bytes());
-    buffer[4..16].copy_from_slice(&nonce);
-
-    use bytes::Buf;
-    if let Some(mut p) = payload {
-        let p_nonce = session
-            .encrypt_in_place(&mut p)
-            .context("encrypting payload")?;
-        let p_len = (12 + p.len()) as u32;
-        let p_len_bytes = p_len.to_le_bytes();
-        let mut chained = Buf::chain(&buffer[..16 + total_ct_len], &p_len_bytes[..])
-            .chain(&p_nonce[..])
-            .chain(&p[..]);
-        stream.write_all_buf(&mut chained).await?;
-        return_buffer(p);
-    } else {
-        stream.write_all(&buffer[..16 + total_ct_len]).await?;
-    }
-    return_buffer(buffer);
-
+    send_encrypted_no_flush(stream, session, msg).await?;
     stream.flush().await?;
     Ok(())
 }
@@ -350,6 +324,41 @@ impl std::fmt::Display for UnknownMessage {
 
 impl std::error::Error for UnknownMessage {}
 
+/// How long the rest of a frame may take once its first bytes are in.
+const FRAME_BODY_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Reads one sealed frame's nonce and body (`len` bytes together) and
+/// decrypts the body into a pooled buffer.
+async fn read_sealed(
+    stream: &mut (impl AsyncReadExt + Unpin),
+    session: &mut SessionKey,
+    len: u32,
+) -> Result<Vec<u8>> {
+    anyhow::ensure!(
+        (12 + 16..=MAX_FRAME_SIZE).contains(&len),
+        "encrypted frame length invalid: {len}"
+    );
+    let mut nonce = [0u8; 12];
+    let mut body = get_buffer(len as usize - 12);
+    let read = tokio::time::timeout(FRAME_BODY_TIMEOUT, async {
+        stream.read_exact(&mut nonce).await?;
+        stream.read_exact(&mut body).await
+    })
+    .await;
+    let res = match read {
+        Ok(Ok(_)) => session.decrypt_body_in_place(&nonce, &mut body),
+        Ok(Err(e)) => Err(anyhow::Error::new(e).context("reading encrypted frame body")),
+        Err(_) => Err(anyhow::anyhow!("timeout waiting for encrypted frame body")),
+    };
+    match res {
+        Ok(()) => Ok(body),
+        Err(e) => {
+            return_buffer(body);
+            Err(e)
+        }
+    }
+}
+
 async fn recv_encrypted(
     stream: &mut (impl AsyncReadExt + Unpin),
     session: &mut SessionKey,
@@ -364,28 +373,9 @@ async fn recv_encrypted(
         .await
         .context("reading encrypted frame length")?;
 
-    let len = u32::from_le_bytes(len_buf);
-    anyhow::ensure!(
-        (16..=MAX_FRAME_SIZE).contains(&len),
-        "encrypted frame length invalid: {len}"
-    );
-
-    let mut cipher_buffer = get_buffer(len as usize);
-    tokio::time::timeout(
-        Duration::from_secs(30),
-        stream.read_exact(&mut cipher_buffer),
-    )
-    .await
-    .context("timeout waiting for encrypted frame body")?
-    .context("reading encrypted frame body")?;
-
-    let decrypt_res = session.decrypt_in_place(&mut cipher_buffer);
-    if let Err(e) = decrypt_res {
-        return_buffer(cipher_buffer);
-        return Err(e).context("decrypting");
-    }
-    let msg_res: Result<AppMessage, _> = postcard::from_bytes(&cipher_buffer);
-    return_buffer(cipher_buffer); // Return metadata buffer immediately
+    let plain = read_sealed(stream, session, u32::from_le_bytes(len_buf)).await?;
+    let msg_res: Result<AppMessage, _> = postcard::from_bytes(&plain);
+    return_buffer(plain); // Return metadata buffer immediately
     let mut msg = msg_res.map_err(|e| {
         tracing::debug!(error = %e, "received a message this build can't read");
         anyhow::Error::new(UnknownMessage)
@@ -393,42 +383,15 @@ async fn recv_encrypted(
 
     if msg.expects_raw_payload() {
         let mut p_len_buf = [0u8; 4];
-        tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut p_len_buf))
+        tokio::time::timeout(FRAME_BODY_TIMEOUT, stream.read_exact(&mut p_len_buf))
             .await
             .context("timeout waiting for payload frame length")?
             .context("reading payload frame length")?;
 
-        let p_len = u32::from_le_bytes(p_len_buf);
-        anyhow::ensure!(
-            (16..=MAX_FRAME_SIZE).contains(&p_len),
-            "payload frame length invalid: {p_len}"
-        );
-
-        let mut p_cipher_buffer = get_buffer(p_len as usize);
-        let read_res = tokio::time::timeout(
-            Duration::from_secs(30),
-            stream.read_exact(&mut p_cipher_buffer),
-        )
-        .await;
-        match read_res {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => {
-                return_buffer(p_cipher_buffer);
-                return Err(e).context("reading payload frame body");
-            }
-            Err(elapsed) => {
-                return_buffer(p_cipher_buffer);
-                return Err(anyhow::anyhow!(
-                    "timeout waiting for payload frame body: {elapsed}"
-                ));
-            }
-        }
-
-        if let Err(e) = session.decrypt_in_place(&mut p_cipher_buffer) {
-            return_buffer(p_cipher_buffer);
-            return Err(e).context("decrypting payload");
-        }
-        msg.set_raw_payload(p_cipher_buffer);
+        let payload = read_sealed(stream, session, u32::from_le_bytes(p_len_buf))
+            .await
+            .context("receiving payload frame")?;
+        msg.set_raw_payload(payload);
     }
 
     Ok(msg)
