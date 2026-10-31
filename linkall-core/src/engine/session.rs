@@ -800,7 +800,8 @@ pub(super) fn register_session(
                         }
                     }
 
-                    shared.file_transfers.lock().await.prune_stale_transfers();
+                    let pruned = shared.file_transfers.lock().await.prune_stale_transfers();
+                    report_pruned_transfers(&shared, pruned);
 
                     // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
                     // Asleep, a ping a minute: rare enough for the radio to
@@ -1051,6 +1052,39 @@ pub(super) fn register_session(
     });
 
     Ok(())
+}
+
+/// Tells the user and the other device about transfers that were given up
+/// on. Nothing here waits: this runs inside a session's heartbeat.
+fn report_pruned_transfers(
+    shared: &EngineShared,
+    pruned: Vec<crate::file_transfer::PrunedTransfer>,
+) {
+    if pruned.is_empty() {
+        return;
+    }
+    let reason = "Transfer timed out: nothing arrived for 5 minutes".to_string();
+    let mut freed_inbound = false;
+    for t in pruned {
+        freed_inbound |= !t.outbound;
+        if let Some(tx) = t.peer.and_then(|peer| shared.peer_manager.sender(peer)) {
+            let _ = tx.try_send(AppMessage::FileTransferCancel {
+                transfer_id: t.transfer_id,
+                reason: reason.clone(),
+            });
+        }
+        let _ = shared.event_tx.try_send(EngineEvent::FileTransferFailed {
+            in_folder: false,
+            transfer_id: t.transfer_id,
+            from_device: t.peer.unwrap_or_default(),
+            reason: reason.clone(),
+        });
+    }
+    // A dropped inbound transfer leaves room for a queued one.
+    if freed_inbound {
+        let shared = shared.clone();
+        tokio::spawn(async move { pump_transfer_queue(&shared).await });
+    }
 }
 
 /// How long a clipboard stays worth sending to a device that missed it.

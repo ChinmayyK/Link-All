@@ -982,6 +982,21 @@ pub struct TransferProgress {
     pub eta_secs: Option<u64>,
 }
 
+/// A transfer `prune_stale_transfers` gave up on.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PrunedTransfer {
+    pub transfer_id: TransferId,
+    /// The device at the other end; None for a send to every device.
+    pub peer: Option<Uuid>,
+    pub outbound: bool,
+}
+
+/// How long an active transfer may go without a chunk or an ack.
+const STALLED_TRANSFER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5 * 60);
+/// How long an outbound transfer may wait on a person or a reconnect.
+const WAITING_TRANSFER_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(24 * 60 * 60);
+
 // ── Transfer manager ──────────────────────────────────────────────────────────
 
 /// Manages all active file transfers (inbound and outbound).
@@ -1318,35 +1333,66 @@ impl FileTransferManager {
         }
     }
 
-    pub fn prune_stale_transfers(&mut self) {
+    /// Drops transfers that stopped moving, and returns them so the caller
+    /// can tell the user and the other device: dropped without a word, the
+    /// transfer stayed on both screens with nothing behind it.
+    pub fn prune_stale_transfers(&mut self) -> Vec<PrunedTransfer> {
         let now = Instant::now();
-        let timeout = std::time::Duration::from_secs(300); // 5 minutes
+        let stalled = |waiting: bool, last_active_at: Instant| {
+            let limit = if waiting {
+                WAITING_TRANSFER_TIMEOUT
+            } else {
+                STALLED_TRANSFER_TIMEOUT
+            };
+            now.duration_since(last_active_at) > limit
+        };
+        // Paused, disconnect-paused (Pending) and queued transfers are
+        // waiting on a person or a reconnect, not dead.
+        let waiting = |paused: bool, status: &TransferStatus| {
+            paused || matches!(status, TransferStatus::Pending | TransferStatus::Queued)
+        };
+        let mut pruned = Vec::new();
 
         let stale_inbound: Vec<_> = self
             .inbound
-            .iter()
-            .filter(|(_, t)| {
-                // Paused, disconnect-paused (Pending) and queued transfers are
-                // waiting on a person or a reconnect, not dead.
-                !t.paused
-                    && !matches!(t.status, TransferStatus::Pending | TransferStatus::Queued)
-                    && now.duration_since(t.last_active_at) > timeout
-            })
-            .map(|(tid, _)| *tid)
+            .values()
+            .filter(|t| !waiting(t.paused, &t.status) && stalled(false, t.last_active_at))
+            .map(|t| t.transfer_id)
             .collect();
         for tid in stale_inbound {
+            if let Some(t) = self.inbound.get(&tid) {
+                pruned.push(PrunedTransfer {
+                    transfer_id: tid,
+                    peer: Some(t.from_device),
+                    outbound: false,
+                });
+            }
             self.cancel_inbound(&tid, "transfer timed out (zombie)");
         }
 
+        // An outbound transfer waits too: for the receiver to accept, for
+        // its user to resume a pause, for a dropped link to come back. Those
+        // used to go after 5 minutes like a stalled one, so a file accepted
+        // or resumed later than that never arrived. They still hold the
+        // file (in memory, for a pasted one), so they go after a day.
         let stale_outbound: Vec<_> = self
             .outbound
-            .iter()
-            .filter(|(_, t)| now.duration_since(t.last_active_at) > timeout)
-            .map(|(tid, _)| *tid)
+            .values()
+            .filter(|t| stalled(waiting(t.paused, &t.status), t.last_active_at))
+            .map(|t| t.transfer_id)
             .collect();
         for tid in stale_outbound {
-            self.cancel_outbound(&tid);
+            if let Some(t) = self.outbound.get(&tid) {
+                pruned.push(PrunedTransfer {
+                    transfer_id: tid,
+                    peer: t.target_device,
+                    outbound: true,
+                });
+            }
+            self.cancel_outbound(&tid, "transfer timed out (zombie)");
         }
+
+        pruned
     }
 
     pub fn active_inbound_count(&self) -> usize {
@@ -1852,6 +1898,61 @@ pub fn checksum_file(path: &Path) -> Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn outbound_idle_for(mgr: &mut FileTransferManager, secs: u64) -> Option<TransferId> {
+        let peer = Uuid::new_v4();
+        let tid = mgr
+            .start_outbound(vec![1u8; 10], "notes.txt".into(), "text/plain".into(), Some(peer))
+            .unwrap()
+            .transfer_id;
+        let idle_since = Instant::now().checked_sub(std::time::Duration::from_secs(secs))?;
+        mgr.get_outbound_mut(&tid).unwrap().last_active_at = idle_since;
+        Some(tid)
+    }
+
+    #[test]
+    fn a_send_waiting_on_the_receiver_or_a_pause_outlives_five_minutes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mgr = FileTransferManager::new(dir.path().to_path_buf());
+        // A machine up for less than the idle time cannot stage the test.
+        let Some(unaccepted) = outbound_idle_for(&mut mgr, 600) else {
+            return;
+        };
+        let paused = outbound_idle_for(&mut mgr, 600).unwrap();
+        let idle_since = mgr.get_outbound(&paused).unwrap().last_active_at;
+        let t = mgr.get_outbound_mut(&paused).unwrap();
+        t.resume_from(0);
+        t.paused = true;
+        t.last_active_at = idle_since;
+
+        assert!(mgr.prune_stale_transfers().is_empty());
+        assert!(mgr.get_outbound(&unaccepted).is_some());
+        assert!(mgr.get_outbound(&paused).is_some());
+    }
+
+    #[test]
+    fn a_stalled_send_is_dropped_and_reported() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut mgr = FileTransferManager::new(dir.path().to_path_buf());
+        let Some(stalled) = outbound_idle_for(&mut mgr, 600) else {
+            return;
+        };
+        let idle_since = mgr.get_outbound(&stalled).unwrap().last_active_at;
+        let t = mgr.get_outbound_mut(&stalled).unwrap();
+        let peer = t.target_device;
+        t.resume_from(0);
+        t.last_active_at = idle_since;
+
+        assert_eq!(
+            mgr.prune_stale_transfers(),
+            vec![PrunedTransfer {
+                transfer_id: stalled,
+                peer,
+                outbound: true,
+            }]
+        );
+        assert!(mgr.get_outbound(&stalled).is_none());
+    }
 
     #[test]
     fn orphaned_partial_files_are_removed_and_others_kept() {
