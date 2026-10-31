@@ -154,6 +154,11 @@ impl Engine {
         for notice in crate::settings::take_aside_notices() {
             let _ = event_tx.try_send(EngineEvent::Warning(notice));
         }
+        // Looked up now, in the background, so the first handshake has it.
+        if !cfg!(target_os = "android") {
+            crate::wol::cached_local_mac();
+        }
+
         // Reads the records of transfers an earlier run left unfinished.
         let file_transfers = FileTransferManager::with_resume_dir(
             config

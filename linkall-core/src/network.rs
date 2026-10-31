@@ -546,11 +546,12 @@ pub struct Announce {
     pub clipboard_at: Option<u64>,
 }
 
-fn my_metadata_json(
+async fn my_metadata_json(
     device_name: &str,
     is_manual_reconnect: bool,
     announce: Announce,
 ) -> Option<String> {
+    let mac_address = own_mac().await;
     serde_json::to_string(&crate::protocol::DeviceMetadata {
         device_name: device_name.to_string(),
         app_version: crate::protocol::APP_VERSION.to_string(),
@@ -559,7 +560,7 @@ fn my_metadata_json(
         listen_port: announce.listen_port,
         background_restricted: announce.background_restricted,
         clipboard_at: announce.clipboard_at,
-        mac_address: own_mac(),
+        mac_address,
         chunk_parts: Some(true),
         ..Default::default()
     })
@@ -568,11 +569,13 @@ fn my_metadata_json(
 
 /// Our network card's address for a computer's peers, who may wake us with
 /// it. A phone has nothing to wake, and its address is not readable anyway.
-fn own_mac() -> Option<String> {
+/// Known at once except just after the app starts, when it is waited for
+/// briefly: well inside the 5 s the other side allows each handshake step.
+async fn own_mac() -> Option<String> {
     if cfg!(target_os = "android") {
         None
     } else {
-        crate::wol::local_mac()
+        crate::wol::local_mac_within(Duration::from_secs(2)).await
     }
 }
 
@@ -631,7 +634,7 @@ pub async fn handshake_initiator(
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
-    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect, announce);
+    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect, announce).await;
 
     let mut hello = AppMessage::Hello {
         device_id: my_device_id,
@@ -796,6 +799,16 @@ where
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ecdh.ecdh_pubkey, &session_salt);
 
+    let ack_metadata_json = my_metadata_json(
+        &my_device_name,
+        false,
+        Announce {
+            listen_port: None,
+            ..announce
+        },
+    )
+    .await;
+
     let mut ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
@@ -806,14 +819,7 @@ where
         nonce_response,
         identity_proof,
         trusted: peer_is_trusted,
-        metadata_json: my_metadata_json(
-            &my_device_name,
-            false,
-            Announce {
-                listen_port: None,
-                ..announce
-            },
-        ),
+        metadata_json: ack_metadata_json,
     };
 
     send_encrypted(stream, &mut session, &mut ack)
