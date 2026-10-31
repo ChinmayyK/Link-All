@@ -65,6 +65,9 @@ pub fn watch(hub: &Hub) {
                 let ended = match peer["pairing_outcome"].as_str() {
                     Some("declined") => Some(format!("{name} declined")),
                     Some("expired") => Some(format!("{name} didn't answer in time")),
+                    Some("unreachable") => Some(format!(
+                        "Couldn't reach {name}. Check both are on the same Wi-Fi"
+                    )),
                     Some("update_needed") => {
                         Some(format!("Update Link All on {name}, then try again"))
                     }

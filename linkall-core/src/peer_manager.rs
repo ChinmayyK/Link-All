@@ -75,6 +75,10 @@ pub enum PairingOutcome {
     Cancelled,
     /// Nobody answered within `pairing::PAIRING_TIMEOUT`.
     Expired,
+    /// The request never left: no connection to the other device could be
+    /// made (another network, a firewall, Link All not running there).
+    /// Waiting out the timeout and then saying "no answer" blamed its user.
+    Unreachable,
     /// The other device runs a Link All from before this pairing flow. Those
     /// decline on their own after 30 s, so the answer says nothing about its
     /// user; updating Link All there fixes it.
