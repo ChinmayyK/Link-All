@@ -15,7 +15,12 @@ fn decompress_chunk(payload: &[u8]) -> Result<Vec<u8>, String> {
     if size > max {
         return Err(format!("declared chunk size {size} exceeds limit"));
     }
-    lz4_flex::block::decompress(&payload[4..], size).map_err(|e| e.to_string())
+    let mut out = crate::network::get_buffer(size);
+    match lz4_flex::block::decompress_into(&payload[4..], &mut out) {
+        Ok(written) if written == size => Ok(out),
+        Ok(written) => Err(format!("chunk unpacked to {written} bytes, not {size}")),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
@@ -337,41 +342,19 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
 
             let data = if compressed {
-                match decompress_chunk(&payload) {
+                let unpacked = decompress_chunk(&payload);
+                match unpacked {
                     Ok(d) => d,
                     Err(e) => {
                         tracing::error!("Failed to decompress file chunk: {}", e);
-                        let reason = "decompression failed".to_string();
-                        {
-                            let mut mgr = shared.file_transfers.lock().await;
-                            mgr.cancel_inbound(&transfer_id, &reason);
-                        }
-                        // Tell the sender, or it keeps sending into a dead transfer.
-                        let _ = ctx
-                            .outbox_tx
-                            .send(AppMessage::FileTransferCancel {
-                                transfer_id,
-                                reason: reason.clone(),
-                            })
-                            .await;
-                        let _ = ctx
-                            .outbox_tx
-                            .send(AppMessage::FileTransferCompleteAck {
-                                transfer_id,
-                                success: false,
-                                error: Some(reason.clone()),
-                            })
-                            .await;
-                        let _ = shared
-                            .event_tx
-                            .send(EngineEvent::FileTransferFailed {
-                                in_folder: false,
-                                transfer_id,
-                                from_device: peer_id,
-                                reason,
-                            })
-                            .await;
-                        pump_transfer_queue(shared).await;
+                        fail_inbound_transfer(
+                            shared,
+                            &ctx.outbox_tx,
+                            peer_id,
+                            transfer_id,
+                            "decompression failed".to_string(),
+                        )
+                        .await;
                         return Flow::Continue;
                     }
                 }
@@ -379,6 +362,10 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 payload
             };
 
+            // Whether a chunk that fails validation breaks the transfer: only
+            // when it is running and the chunk is its own. One for a transfer
+            // that is gone, waiting to resume or another device's is dropped.
+            let mut breaks_transfer = false;
             let validation = {
                 let mut mgr = shared.file_transfers.lock().await;
                 if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
@@ -394,6 +381,8 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                         );
                         return Flow::Continue;
                     } else {
+                        breaks_transfer = transfer.status
+                            == crate::file_transfer::TransferStatus::Transferring;
                         transfer.validate_chunk(chunk_index, data.len())
                     }
                 } else {
@@ -448,6 +437,19 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 }
                 Err(e) => {
                     tracing::error!("Failed to validate chunk: {:?}", e);
+                    // A gap or a wrong size can't be repaired: every later
+                    // chunk is out of order too. Stop now instead of letting
+                    // the sender send the whole file to fail at the end.
+                    if breaks_transfer {
+                        fail_inbound_transfer(
+                            shared,
+                            &ctx.outbox_tx,
+                            peer_id,
+                            transfer_id,
+                            format!("a part of the file arrived wrong: {e}"),
+                        )
+                        .await;
+                    }
                 }
             };
         }

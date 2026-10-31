@@ -75,6 +75,45 @@ impl InboundCtx {
     }
 }
 
+/// Ends an inbound transfer that can't go on: drops it and its partial
+/// file, then tells the sender and the UI, or both wait forever.
+pub(super) async fn fail_inbound_transfer(
+    shared: &EngineShared,
+    outbox_tx: &mpsc::Sender<AppMessage>,
+    peer_id: Uuid,
+    transfer_id: [u8; 16],
+    reason: String,
+) {
+    shared
+        .file_transfers
+        .lock()
+        .await
+        .cancel_inbound(&transfer_id, &reason);
+    let _ = outbox_tx
+        .send(AppMessage::FileTransferCancel {
+            transfer_id,
+            reason: reason.clone(),
+        })
+        .await;
+    let _ = outbox_tx
+        .send(AppMessage::FileTransferCompleteAck {
+            transfer_id,
+            success: false,
+            error: Some(reason.clone()),
+        })
+        .await;
+    let _ = shared
+        .event_tx
+        .send(EngineEvent::FileTransferFailed {
+            in_folder: false,
+            transfer_id,
+            from_device: peer_id,
+            reason,
+        })
+        .await;
+    pump_transfer_queue(shared).await;
+}
+
 /// Whether the session keeps reading after a message.
 pub(super) enum Flow {
     Continue,
@@ -510,43 +549,28 @@ pub(super) fn register_session(
                                 }
                                 Err(e) => {
                                     tracing::error!("Disk I/O error: {}", e);
-                                    let reason = format!("disk i/o error: {e}");
-                                    dw_shared
-                                        .file_transfers
-                                        .lock()
-                                        .await
-                                        .cancel_inbound(&transfer_id, &reason);
-                                    // Tell the sender and the UI, or both wait forever.
-                                    let _ = dw_outbox_tx
-                                        .send(AppMessage::FileTransferCancel {
-                                            transfer_id,
-                                            reason: reason.clone(),
-                                        })
-                                        .await;
-                                    let _ = dw_outbox_tx
-                                        .send(AppMessage::FileTransferCompleteAck {
-                                            transfer_id,
-                                            success: false,
-                                            error: Some(reason.clone()),
-                                        })
-                                        .await;
-                                    let _ = dw_event_tx
-                                        .send(EngineEvent::FileTransferFailed {
-                                            in_folder: false,
-                                            transfer_id,
-                                            from_device: dw_peer_id,
-                                            reason,
-                                        })
-                                        .await;
-                                    pump_transfer_queue(&dw_shared).await;
+                                    fail_inbound_transfer(
+                                        &dw_shared,
+                                        &dw_outbox_tx,
+                                        dw_peer_id,
+                                        transfer_id,
+                                        format!("disk i/o error: {e}"),
+                                    )
+                                    .await;
                                 }
                             }
                         } else {
-                            tracing::error!(
-                                "Missing io_ctx for chunk {} of transfer {:?}",
-                                chunk_index,
-                                transfer_id
-                            );
+                            // The chunk was accepted but there is no open file
+                            // to write it to. Dropping it left a gap, the sender
+                            // went on to the end, and the transfer failed.
+                            fail_inbound_transfer(
+                                &dw_shared,
+                                &dw_outbox_tx,
+                                dw_peer_id,
+                                transfer_id,
+                                "transfer has no file to write to".to_string(),
+                            )
+                            .await;
                         }
                     }
                     DiskTaskMsg::Complete {
