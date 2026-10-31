@@ -689,6 +689,8 @@ pub(super) fn register_session(
             loop {
                 let msg = match sess_rx.recv().await {
                     Ok(msg) => msg,
+                    // One a newer Link All added: skip it, keep the link.
+                    Err(err) if err.is::<network::UnknownMessage>() => continue,
                     Err(err) => break err.to_string(),
                 };
                 if let Flow::Disconnect(reason) = dispatch_inbound(&ctx, msg).await {
@@ -696,6 +698,12 @@ pub(super) fn register_session(
                 }
             }
         });
+
+        // What the peer said it runs, to keep back messages it can't read.
+        let peer_app_version = shared
+            .peer_manager
+            .get(peer_id)
+            .and_then(|p| p.app_version);
 
         let mut last_tick_millis = crate::network::now_millis();
         // When this session last pinged. Kept apart from `ping_sent_at`,
@@ -811,6 +819,10 @@ pub(super) fn register_session(
                     }
                 }
                 Some(mut msg) = outbox_rx.recv() => {
+                    if !peer_can_read(peer_app_version.as_deref(), &msg) {
+                        tracing::debug!(peer_id = %peer_id, "not sending a message this peer's version can't read");
+                        continue;
+                    }
                     if let Err(err) = write_within(write_limit, &bytes_written, sess_tx.send(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
@@ -1199,3 +1211,35 @@ mod write_within_tests {
         );
     }
 }
+
+/// Whether a peer running `app_version` knows `msg`; see
+/// `AppMessage::min_app_version`.
+fn peer_can_read(app_version: Option<&str>, msg: &AppMessage) -> bool {
+    msg.min_app_version()
+        .is_none_or(|min| crate::device_choice::at_least(app_version, min))
+}
+
+#[cfg(test)]
+mod peer_can_read_tests {
+    use super::*;
+
+    #[test]
+    fn newer_messages_are_kept_from_older_peers() {
+        let note = AppMessage::ScratchpadNote {
+            id: Uuid::nil(),
+            text: String::new(),
+            pinned: false,
+            updated_at_ms: 0,
+            deleted: false,
+        };
+        for old in [None, Some(""), Some("2.0.2"), Some("1.3.4")] {
+            assert!(!peer_can_read(old, &note), "{old:?}");
+            assert!(!peer_can_read(old, &AppMessage::EdgeEnd), "{old:?}");
+            // What every build knows still goes out.
+            assert!(peer_can_read(old, &AppMessage::Bye), "{old:?}");
+        }
+        assert!(peer_can_read(Some("2.1.0"), &note));
+        assert!(peer_can_read(Some("2.2.0"), &AppMessage::EdgeEnd));
+    }
+}
+

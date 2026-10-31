@@ -335,6 +335,21 @@ async fn send_encrypted_no_flush(
     Ok(())
 }
 
+/// A frame arrived whole and decrypted, but holds a message this build
+/// can't read: one a newer Link All added. The stream is still in step
+/// (every frame is sealed on its own), so the reader skips it and goes on.
+/// Treating it as fatal made every new message disconnect older devices.
+#[derive(Debug)]
+pub struct UnknownMessage;
+
+impl std::fmt::Display for UnknownMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("message from a newer Link All that this one can't read")
+    }
+}
+
+impl std::error::Error for UnknownMessage {}
+
 async fn recv_encrypted(
     stream: &mut (impl AsyncReadExt + Unpin),
     session: &mut SessionKey,
@@ -371,7 +386,10 @@ async fn recv_encrypted(
     }
     let msg_res: Result<AppMessage, _> = postcard::from_bytes(&cipher_buffer);
     return_buffer(cipher_buffer); // Return metadata buffer immediately
-    let mut msg = msg_res.context("deserializing AppMessage")?;
+    let mut msg = msg_res.map_err(|e| {
+        tracing::debug!(error = %e, "received a message this build can't read");
+        anyhow::Error::new(UnknownMessage)
+    })?;
 
     if msg.expects_raw_payload() {
         let mut p_len_buf = [0u8; 4];
@@ -1007,6 +1025,32 @@ fn dual_stack_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn a_message_from_a_newer_build_is_skipped_and_the_stream_stays_in_step() {
+        let (a, b) = (EphemeralKeypair::generate(), EphemeralKeypair::generate());
+        let (mut tx_key, _, _) = a.derive_session_key(b.public_bytes, true).unwrap();
+        let (mut rx_key, _, _) = b.derive_session_key(a.public_bytes, false).unwrap();
+        let (mut tx, mut rx) = tokio::io::duplex(1 << 16);
+
+        // A message kind no build has: sealed and framed like any other.
+        let unknown = postcard::to_allocvec(&9999u32).unwrap();
+        let sealed = tx_key.encrypt(&unknown).unwrap();
+        tx.write_all(&(sealed.len() as u32).to_le_bytes())
+            .await
+            .unwrap();
+        tx.write_all(&sealed).await.unwrap();
+        send_encrypted(&mut tx, &mut tx_key, &mut AppMessage::Bye)
+            .await
+            .unwrap();
+
+        let err = recv_encrypted(&mut rx, &mut rx_key).await.unwrap_err();
+        assert!(err.is::<UnknownMessage>(), "{err:#}");
+        assert!(matches!(
+            recv_encrypted(&mut rx, &mut rx_key).await.unwrap(),
+            AppMessage::Bye
+        ));
+    }
 
     /// The engine listens on [::]. Devices dial it over IPv4 as well, which
     /// Windows refused while the socket was left IPv6-only.

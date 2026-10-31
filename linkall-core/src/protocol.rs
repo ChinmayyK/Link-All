@@ -741,6 +741,40 @@ impl AppMessage {
         }
     }
 
+    /// The first app version (major, minor) that knows this message; None
+    /// for the ones every 2.x build has. A build drops its connection on a
+    /// message it can't read (up to 2.1.0), so a newer message must never be
+    /// sent to an older peer: 2.1.0 sent its notes and what was playing to
+    /// every device as it connected, and a 2.0 device disconnected each time.
+    /// A new message goes on this list with the version that introduces it.
+    pub fn min_app_version(&self) -> Option<(u32, u32)> {
+        use AppMessage as M;
+        match self {
+            M::RemoteControl { .. }
+            | M::RemoteControlAck { .. }
+            | M::FindDevice { .. }
+            | M::FindDeviceAck { .. }
+            | M::RemotePointerMove { .. }
+            | M::RemotePointerButton { .. }
+            | M::RemotePointerScroll { .. }
+            | M::RemoteTypeText { .. }
+            | M::RemoteKeyPress { .. }
+            | M::DialNumber { .. }
+            | M::ScratchpadNote { .. }
+            | M::CaptureRequest { .. }
+            | M::RemoteShortcut { .. }
+            | M::RemoteModifier { .. }
+            | M::NowPlaying { .. }
+            | M::MediaCommand { .. }
+            | M::EdgeEnter { .. }
+            | M::EdgeReply { .. }
+            | M::EdgeLeave { .. }
+            | M::EdgeEnd
+            | M::RemoteKeyEvent { .. } => Some((2, 1)),
+            _ => None,
+        }
+    }
+
     pub fn expects_raw_payload(&self) -> bool {
         match self {
             AppMessage::FileChunk { .. } => true,
