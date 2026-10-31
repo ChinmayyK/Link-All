@@ -64,7 +64,6 @@ anyhow = "1"
 netdev = "0.45.0"
 lz4_flex = "0.13.1"
 dashmap = "5"
-memmap2 = "0.7"
 
 # sha2 has no aarch64 hardware path without `asm` (x86 uses SHA-NI already).
 # The asm is GNU assembly, which MSVC cannot build, so Windows on ARM is left out.

@@ -1392,9 +1392,8 @@ impl FileTransferManager {
                     outbound: true,
                 });
             }
-            self.cancel_outbound(&tid, "transfer timed out (zombie)");
+            self.cancel_outbound(&tid);
         }
-
         pruned
     }
 
@@ -1852,50 +1851,17 @@ fn read_file_chunk_from_file(
     let to_read = usize::try_from(remaining.min(FILE_CHUNK_SIZE as u64))
         .context("chunk size exceeds addressable memory")?;
 
+    // A plain read, not a memory map: a mapped page that fails to load (the
+    // file was cut short meanwhile, or its USB drive or network share went
+    // away) raises SIGBUS and kills the whole app, where a read only fails
+    // this transfer.
     let mut buf = crate::network::get_buffer(to_read);
-
-    // Fast path: memory map the file to avoid read syscalls
-    if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(&*file) } {
-        if let Some(slice) = mmap.get(offset as usize..(offset as usize + to_read)) {
-            buf.copy_from_slice(slice);
-            return Ok(buf);
-        }
-    }
-
-    // Fallback: standard I/O
     file.seek(SeekFrom::Start(offset))
         .with_context(|| "seeking outbound file".to_string())?;
     file.read_exact(&mut buf)
         .with_context(|| "reading outbound file chunk".to_string())?;
 
     Ok(buf)
-}
-
-pub fn checksum_file(path: &Path) -> Result<String> {
-    let mut file = File::open(path)
-        .with_context(|| format!("opening file for checksum {}", path.display()))?;
-    let mut hasher = Sha256::new();
-
-    // Fast path: memory map the entire file
-    if let Ok(mmap) = unsafe { memmap2::MmapOptions::new().map(&file) } {
-        hasher.update(&mmap);
-        return Ok(hex::encode(hasher.finalize()));
-    }
-
-    // Fallback: standard I/O
-    let mut buf = crate::network::get_buffer(1024 * 1024);
-    loop {
-        let read = file
-            .read(&mut buf)
-            .with_context(|| format!("reading file for checksum {}", path.display()))?;
-        if read == 0 {
-            break;
-        }
-        hasher.update(&buf[..read]);
-    }
-    crate::network::return_buffer(buf);
-
-    Ok(hex::encode(hasher.finalize()))
 }
 
 #[cfg(test)]
@@ -1955,6 +1921,29 @@ mod tests {
             }]
         );
         assert!(mgr.get_outbound(&stalled).is_none());
+    }
+
+    #[test]
+    fn a_file_cut_short_mid_send_fails_the_chunk_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("growing.log");
+        std::fs::write(&path, vec![7u8; FILE_CHUNK_SIZE + 1000]).unwrap();
+        let mut file = File::open(&path).unwrap();
+        let size = (FILE_CHUNK_SIZE + 1000) as u64;
+
+        assert_eq!(
+            read_file_chunk_from_file(&mut file, 1, size).unwrap(),
+            vec![7u8; 1000]
+        );
+
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(&path)
+            .unwrap()
+            .set_len(10)
+            .unwrap();
+        assert!(read_file_chunk_from_file(&mut file, 1, size).is_err());
+        assert!(read_file_chunk_from_file(&mut file, 0, size).is_err());
     }
 
     #[test]
