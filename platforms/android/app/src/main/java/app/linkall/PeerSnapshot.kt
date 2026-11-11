@@ -56,6 +56,7 @@ data class PeerSnapshot(
         trusted || pairingRequested || outgoingPairingWaiting -> null
         pairingOutcome == "declined" -> "Declined · try again"
         pairingOutcome == "expired" -> "No answer · try again"
+        pairingOutcome == "unreachable" -> "Couldn't reach it · same Wi-Fi?"
         pairingOutcome == "cancelled" -> "Request withdrawn"
         pairingOutcome == "update_needed" -> "Update Link All on it, then try again"
         else -> null

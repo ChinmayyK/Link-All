@@ -250,6 +250,31 @@ impl Engine {
             .set_outgoing_pairing_waiting(target_device, true);
         arm_pairing_expiry(&self.shared, target_device);
 
+        // Said before the request goes out, so a dial that fails at once
+        // can't be reported ahead of it.
+        let peer = self.shared.peer_manager.get(target_device);
+        let started = peer.as_ref().and_then(|p| p.pairing_started_at);
+        let addrs = peer
+            .as_ref()
+            .map(|p| p.socket_addrs())
+            .unwrap_or_default();
+        let pin = peer
+            .as_ref()
+            .and_then(|p| p.pairing_pin.clone())
+            .unwrap_or_else(|| "------".to_string());
+        let device_name = peer
+            .map(|p| p.friendly_name)
+            .unwrap_or_else(|| "Unknown device".to_string());
+        let _ = self
+            .shared
+            .event_tx
+            .send(EngineEvent::OutgoingPairingWaiting {
+                device_id: target_device,
+                device_name,
+                pin,
+            })
+            .await;
+
         let live_tx = self
             .shared
             .peer_manager
@@ -272,45 +297,27 @@ impl Engine {
                 // up some other way (e.g. the peer dialed us). The request is
                 // delivered by register_session as soon as any session with
                 // this peer goes live, since outgoing_pairing_waiting is set.
-                if let Some(peer) = self.shared.peer_manager.get(target_device) {
-                    let addrs = peer.socket_addrs();
-                    if !addrs.is_empty() {
-                        let shared = self.shared.clone();
-                        tokio::spawn(async move {
-                            if let Err(err) = connect_loop_ext(
-                                shared,
-                                addrs,
-                                Some(target_device),
-                                DiscoverySource::Manual,
-                                true,
-                            )
-                            .await
-                            {
-                                warn!(peer_id = %target_device, error = %err, "pairing connect failed");
-                            }
-                        });
+                let shared = self.shared.clone();
+                tokio::spawn(async move {
+                    let dialled = if addrs.is_empty() {
+                        Err(anyhow!("no address is known for this device"))
+                    } else {
+                        connect_loop_ext(
+                            shared.clone(),
+                            addrs,
+                            Some(target_device),
+                            DiscoverySource::Manual,
+                            true,
+                        )
+                        .await
+                    };
+                    if let Err(err) = dialled {
+                        warn!(peer_id = %target_device, error = %err, "pairing connect failed");
+                        pairing_unreachable(&shared, target_device, started).await;
                     }
-                }
+                });
             }
         }
-
-        let peer = self.shared.peer_manager.get(target_device);
-        let pin = peer
-            .as_ref()
-            .and_then(|p| p.pairing_pin.clone())
-            .unwrap_or_else(|| "------".to_string());
-        let device_name = peer
-            .map(|p| p.friendly_name)
-            .unwrap_or_else(|| "Unknown device".to_string());
-        let _ = self
-            .shared
-            .event_tx
-            .send(EngineEvent::OutgoingPairingWaiting {
-                device_id: target_device,
-                device_name,
-                pin,
-            })
-            .await;
     }
 
     pub async fn initiate_pairing(&self, target_device: Uuid) -> Result<()> {
@@ -486,6 +493,25 @@ pub(super) async fn notify_pairing_changed(shared: &EngineShared, peer_id: Uuid)
         .event_tx
         .send(EngineEvent::PairingChanged { device_id: peer_id })
         .await;
+}
+
+/// The dial for our pairing request failed: end the request now and say the
+/// device couldn't be reached. It used to stay on "waiting" for the full
+/// timeout and then read "no answer", as if its user had ignored it.
+/// `started` is the request the dial was for; a newer one is left alone, and
+/// so is one whose session came up some other way (the peer dialled us).
+async fn pairing_unreachable(shared: &EngineShared, peer_id: Uuid, started: Option<u64>) {
+    let still_ours = shared
+        .peer_manager
+        .get(peer_id)
+        .is_some_and(|p| p.outgoing_pairing_waiting && p.pairing_started_at == started);
+    if !still_ours || shared.peer_manager.sender(peer_id).is_some() {
+        return;
+    }
+    let _ = shared
+        .peer_manager
+        .end_pairing(peer_id, Some(PairingOutcome::Unreachable));
+    notify_pairing_changed(shared, peer_id).await;
 }
 
 /// Whether `peer_id` may open a new incoming pairing request (see

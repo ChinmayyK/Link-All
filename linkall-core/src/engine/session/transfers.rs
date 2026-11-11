@@ -15,7 +15,12 @@ fn decompress_chunk(payload: &[u8]) -> Result<Vec<u8>, String> {
     if size > max {
         return Err(format!("declared chunk size {size} exceeds limit"));
     }
-    lz4_flex::block::decompress(&payload[4..], size).map_err(|e| e.to_string())
+    let mut out = crate::network::get_buffer(size);
+    match lz4_flex::block::decompress_into(&payload[4..], &mut out) {
+        Ok(written) if written == size => Ok(out),
+        Ok(written) => Err(format!("chunk unpacked to {written} bytes, not {size}")),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
@@ -226,97 +231,13 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     .peer_manager
                     .file_sender(peer_id)
                     .unwrap_or(ctx.outbox_tx.clone());
-                let bg_shared = shared.clone();
-                let bg_event_tx = shared.event_tx.clone();
-                let bg_transfer_id = transfer_id;
-                let bg_peer_id = peer_id;
-                let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
-                    std::collections::HashMap::new();
-                tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 4;
-                    'outer: loop {
-                        let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
-                            let mut mgr = bg_shared.file_transfers.lock().await;
-                            if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                (
-                                    t.next_chunk,
-                                    t.last_acked_chunk.unwrap_or(0),
-                                    t.total_chunks,
-                                )
-                            } else {
-                                break 'outer;
-                            }
-                        };
-                        if next_chunk >= total_chunks {
-                            break 'outer;
-                        }
-
-                        let (batch, progs) = match read_outbound_chunks(
-                            bg_shared.clone(),
-                            bg_transfer_id,
-                            BATCH_SIZE,
-                            bg_send_run,
-                        )
-                        .await
-                        {
-                            Some((batch, progs)) => (batch, progs),
-                            None => break 'outer,
-                        };
-
-                        if let Some((prog, fname)) = progs.last() {
-                            let now = std::time::Instant::now();
-                            let should_emit = match bg_last_prog_emit.get(&bg_transfer_id) {
-                                None => true,
-                                Some(&last) => {
-                                    now.duration_since(last).as_millis() >= 100
-                                        || prog.percent == 100
-                                }
-                            };
-                            if should_emit {
-                                bg_last_prog_emit.insert(bg_transfer_id, now);
-                                let _ = bg_event_tx.try_send(EngineEvent::FileTransferProgress {
-                                    transfer_id: bg_transfer_id,
-                                    from_device: bg_peer_id,
-                                    file_name: fname.clone(),
-                                    percent: prog.percent,
-                                    bytes_received: prog.bytes_received,
-                                    total_bytes: prog.total_bytes,
-                                    speed_bps: prog.speed_bps,
-                                    eta_secs: prog.eta_secs,
-                                    outbound: true,
-                                });
-                            }
-                        }
-
-                        if batch.is_empty() {
-                            break;
-                        }
-                        for wire_msg in batch {
-                            if bg_outbox.send(wire_msg).await.is_err() {
-                                break 'outer;
-                            }
-                        }
-                    }
-
-                    let final_checksum = {
-                        let mut mgr = bg_shared.file_transfers.lock().await;
-                        mgr.get_outbound_mut(&bg_transfer_id).and_then(|transfer| {
-                            if transfer.is_all_sent() {
-                                Some(transfer.finalize_checksum())
-                            } else {
-                                None
-                            }
-                        })
-                    };
-                    if let Some(sha256_checksum) = final_checksum {
-                        let _ = bg_outbox
-                            .send(AppMessage::FileTransferComplete {
-                                transfer_id: bg_transfer_id,
-                                sha256_checksum,
-                            })
-                            .await;
-                    }
-                });
+                crate::engine::file_ops::spawn_send_loop(
+                    shared.clone(),
+                    transfer_id,
+                    peer_id,
+                    bg_outbox,
+                    bg_send_run,
+                );
             }
         }
         AppMessage::FileChunk {
@@ -337,41 +258,20 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             }
 
             let data = if compressed {
-                match decompress_chunk(&payload) {
+                let unpacked = decompress_chunk(&payload);
+                crate::network::return_buffer(payload);
+                match unpacked {
                     Ok(d) => d,
                     Err(e) => {
                         tracing::error!("Failed to decompress file chunk: {}", e);
-                        let reason = "decompression failed".to_string();
-                        {
-                            let mut mgr = shared.file_transfers.lock().await;
-                            mgr.cancel_inbound(&transfer_id, &reason);
-                        }
-                        // Tell the sender, or it keeps sending into a dead transfer.
-                        let _ = ctx
-                            .outbox_tx
-                            .send(AppMessage::FileTransferCancel {
-                                transfer_id,
-                                reason: reason.clone(),
-                            })
-                            .await;
-                        let _ = ctx
-                            .outbox_tx
-                            .send(AppMessage::FileTransferCompleteAck {
-                                transfer_id,
-                                success: false,
-                                error: Some(reason.clone()),
-                            })
-                            .await;
-                        let _ = shared
-                            .event_tx
-                            .send(EngineEvent::FileTransferFailed {
-                                in_folder: false,
-                                transfer_id,
-                                from_device: peer_id,
-                                reason,
-                            })
-                            .await;
-                        pump_transfer_queue(shared).await;
+                        fail_inbound_transfer(
+                            shared,
+                            &ctx.outbox_tx,
+                            peer_id,
+                            transfer_id,
+                            "decompression failed".to_string(),
+                        )
+                        .await;
                         return Flow::Continue;
                     }
                 }
@@ -379,6 +279,10 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 payload
             };
 
+            // Whether a chunk that fails validation breaks the transfer: only
+            // when it is running and the chunk is its own. One for a transfer
+            // that is gone, waiting to resume or another device's is dropped.
+            let mut breaks_transfer = false;
             let validation = {
                 let mut mgr = shared.file_transfers.lock().await;
                 if let Some(transfer) = mgr.get_inbound_mut(&transfer_id) {
@@ -394,6 +298,8 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                         );
                         return Flow::Continue;
                     } else {
+                        breaks_transfer = transfer.status
+                            == crate::file_transfer::TransferStatus::Transferring;
                         transfer.validate_chunk(chunk_index, data.len())
                     }
                 } else {
@@ -448,6 +354,19 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 }
                 Err(e) => {
                     tracing::error!("Failed to validate chunk: {:?}", e);
+                    // A gap or a wrong size can't be repaired: every later
+                    // chunk is out of order too. Stop now instead of letting
+                    // the sender send the whole file to fail at the end.
+                    if breaks_transfer {
+                        fail_inbound_transfer(
+                            shared,
+                            &ctx.outbox_tx,
+                            peer_id,
+                            transfer_id,
+                            format!("a part of the file arrived wrong: {e}"),
+                        )
+                        .await;
+                    }
                 }
             };
         }
@@ -474,20 +393,16 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     transfer.on_chunk_ack(last_confirmed_chunk);
                     let prog = transfer.progress();
                     let fname = transfer.meta.file_name.clone();
-                    let event_tx = shared.event_tx.clone();
-                    let tid = transfer_id;
-                    tokio::spawn(async move {
-                        let _ = event_tx.try_send(EngineEvent::FileTransferProgress {
-                            transfer_id: tid,
-                            from_device: peer_id,
-                            file_name: fname,
-                            percent: prog.percent,
-                            bytes_received: prog.bytes_received,
-                            total_bytes: prog.total_bytes,
-                            speed_bps: prog.speed_bps,
-                            eta_secs: prog.eta_secs,
-                            outbound: true,
-                        });
+                    let _ = shared.event_tx.try_send(EngineEvent::FileTransferProgress {
+                        transfer_id,
+                        from_device: peer_id,
+                        file_name: fname,
+                        percent: prog.percent,
+                        bytes_received: prog.bytes_received,
+                        total_bytes: prog.total_bytes,
+                        speed_bps: prog.speed_bps,
+                        eta_secs: prog.eta_secs,
+                        outbound: true,
                     });
                 }
             }
@@ -696,99 +611,13 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                     .peer_manager
                     .file_sender(peer_id)
                     .unwrap_or(ctx.outbox_tx.clone());
-                let bg_shared = shared.clone();
-                let bg_transfer_id = transfer_id;
-                let bg_event_tx = shared.event_tx.clone();
-                let bg_peer_id = peer_id;
-                let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
-                    std::collections::HashMap::new();
-                tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 4;
-                    'outer: loop {
-                        let (next_chunk, _last_acked, total_chunks): (u32, u32, u32) = {
-                            let mut mgr = bg_shared.file_transfers.lock().await;
-                            if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                (
-                                    t.next_chunk,
-                                    t.last_acked_chunk.unwrap_or(0),
-                                    t.total_chunks,
-                                )
-                            } else {
-                                break 'outer;
-                            }
-                        };
-                        if next_chunk >= total_chunks {
-                            break 'outer;
-                        }
-
-                        let (batch, progs) = match read_outbound_chunks(
-                            bg_shared.clone(),
-                            bg_transfer_id,
-                            BATCH_SIZE,
-                            bg_send_run,
-                        )
-                        .await
-                        {
-                            Some((batch, progs)) => (batch, progs),
-                            None => break 'outer,
-                        };
-
-                        if let Some((prog, fname)) = progs.last() {
-                            let now = std::time::Instant::now();
-                            let should_emit = match bg_last_prog_emit.get(&bg_transfer_id) {
-                                None => true,
-                                Some(&last) => {
-                                    now.duration_since(last).as_millis() >= 100
-                                        || prog.percent == 100
-                                }
-                            };
-                            if should_emit {
-                                bg_last_prog_emit.insert(bg_transfer_id, now);
-                                let _ = bg_event_tx.try_send(EngineEvent::FileTransferProgress {
-                                    transfer_id: bg_transfer_id,
-                                    from_device: bg_peer_id,
-                                    file_name: fname.clone(),
-                                    percent: prog.percent,
-                                    bytes_received: prog.bytes_received,
-                                    total_bytes: prog.total_bytes,
-                                    speed_bps: prog.speed_bps,
-                                    eta_secs: prog.eta_secs,
-                                    outbound: true,
-                                });
-                            }
-                        }
-
-                        if batch.is_empty() {
-                            break 'outer;
-                        }
-
-                        // Send the batch
-                        for wire_msg in batch {
-                            if bg_outbox.send(wire_msg).await.is_err() {
-                                break 'outer;
-                            }
-                        }
-                    }
-
-                    let final_checksum = {
-                        let mut mgr = bg_shared.file_transfers.lock().await;
-                        mgr.get_outbound_mut(&bg_transfer_id).and_then(|transfer| {
-                            if transfer.is_all_sent() {
-                                Some(transfer.finalize_checksum())
-                            } else {
-                                None
-                            }
-                        })
-                    };
-                    if let Some(sha256_checksum) = final_checksum {
-                        let _ = bg_outbox
-                            .send(AppMessage::FileTransferComplete {
-                                transfer_id: bg_transfer_id,
-                                sha256_checksum,
-                            })
-                            .await;
-                    }
-                });
+                crate::engine::file_ops::spawn_send_loop(
+                    shared.clone(),
+                    transfer_id,
+                    peer_id,
+                    bg_outbox,
+                    bg_send_run,
+                );
             }
         }
         _ => unreachable!("dispatch_inbound routed a non-transfers message here"),

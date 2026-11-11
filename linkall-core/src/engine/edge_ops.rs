@@ -342,6 +342,9 @@ fn refusal(shared: &EngineShared, peer: Uuid) -> Option<String> {
                 .to_string(),
         );
     }
+    if !remote_input::input_permitted() {
+        return Some(remote_input::NOT_PERMITTED.to_string());
+    }
     match *shared.edge.lock().unwrap_or_else(|e| e.into_inner()) {
         EdgeState::Idle => None,
         EdgeState::Controlled { peer: p, .. } if p == peer => None,

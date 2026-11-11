@@ -75,6 +75,45 @@ impl InboundCtx {
     }
 }
 
+/// Ends an inbound transfer that can't go on: drops it and its partial
+/// file, then tells the sender and the UI, or both wait forever.
+pub(super) async fn fail_inbound_transfer(
+    shared: &EngineShared,
+    outbox_tx: &mpsc::Sender<AppMessage>,
+    peer_id: Uuid,
+    transfer_id: [u8; 16],
+    reason: String,
+) {
+    shared
+        .file_transfers
+        .lock()
+        .await
+        .cancel_inbound(&transfer_id, &reason);
+    let _ = outbox_tx
+        .send(AppMessage::FileTransferCancel {
+            transfer_id,
+            reason: reason.clone(),
+        })
+        .await;
+    let _ = outbox_tx
+        .send(AppMessage::FileTransferCompleteAck {
+            transfer_id,
+            success: false,
+            error: Some(reason.clone()),
+        })
+        .await;
+    let _ = shared
+        .event_tx
+        .send(EngineEvent::FileTransferFailed {
+            in_folder: false,
+            transfer_id,
+            from_device: peer_id,
+            reason,
+        })
+        .await;
+    pump_transfer_queue(shared).await;
+}
+
 /// Whether the session keeps reading after a message.
 pub(super) enum Flow {
     Continue,
@@ -442,6 +481,9 @@ pub(super) fn register_session(
                                     hasher.update(vec![0u8; padding]);
                                 }
                                 let new_offset = offset + data.len() as u64;
+                                // Back to the pool the socket reader draws from,
+                                // or every chunk costs a fresh 4 MB allocation.
+                                crate::network::return_buffer(data);
                                 Ok::<_, anyhow::Error>((file, hasher, new_offset))
                             })
                             .await
@@ -510,43 +552,34 @@ pub(super) fn register_session(
                                 }
                                 Err(e) => {
                                     tracing::error!("Disk I/O error: {}", e);
-                                    let reason = format!("disk i/o error: {e}");
-                                    dw_shared
-                                        .file_transfers
-                                        .lock()
-                                        .await
-                                        .cancel_inbound(&transfer_id, &reason);
-                                    // Tell the sender and the UI, or both wait forever.
-                                    let _ = dw_outbox_tx
-                                        .send(AppMessage::FileTransferCancel {
-                                            transfer_id,
-                                            reason: reason.clone(),
-                                        })
-                                        .await;
-                                    let _ = dw_outbox_tx
-                                        .send(AppMessage::FileTransferCompleteAck {
-                                            transfer_id,
-                                            success: false,
-                                            error: Some(reason.clone()),
-                                        })
-                                        .await;
-                                    let _ = dw_event_tx
-                                        .send(EngineEvent::FileTransferFailed {
-                                            in_folder: false,
-                                            transfer_id,
-                                            from_device: dw_peer_id,
-                                            reason,
-                                        })
-                                        .await;
-                                    pump_transfer_queue(&dw_shared).await;
+                                    fail_inbound_transfer(
+                                        &dw_shared,
+                                        &dw_outbox_tx,
+                                        dw_peer_id,
+                                        transfer_id,
+                                        format!("disk i/o error: {e}"),
+                                    )
+                                    .await;
                                 }
                             }
                         } else {
+                            // The chunk was accepted but there is no open file
+                            // to write it to. Dropping it left a gap, the sender
+                            // went on to send the whole file, and it failed only
+                            // at the end on "missing chunks".
                             tracing::error!(
                                 "Missing io_ctx for chunk {} of transfer {:?}",
                                 chunk_index,
                                 transfer_id
                             );
+                            fail_inbound_transfer(
+                                &dw_shared,
+                                &dw_outbox_tx,
+                                dw_peer_id,
+                                transfer_id,
+                                "the file being received was no longer open".to_string(),
+                            )
+                            .await;
                         }
                     }
                     DiskTaskMsg::Complete {
@@ -689,6 +722,8 @@ pub(super) fn register_session(
             loop {
                 let msg = match sess_rx.recv().await {
                     Ok(msg) => msg,
+                    // One a newer Link All added: skip it, keep the link.
+                    Err(err) if err.is::<network::UnknownMessage>() => continue,
                     Err(err) => break err.to_string(),
                 };
                 if let Flow::Disconnect(reason) = dispatch_inbound(&ctx, msg).await {
@@ -696,6 +731,12 @@ pub(super) fn register_session(
                 }
             }
         });
+
+        // What the peer said it runs, to keep back messages it can't read.
+        let peer_app_version = shared
+            .peer_manager
+            .get(peer_id)
+            .and_then(|p| p.app_version);
 
         let mut last_tick_millis = crate::network::now_millis();
         // When this session last pinged. Kept apart from `ping_sent_at`,
@@ -792,7 +833,8 @@ pub(super) fn register_session(
                         }
                     }
 
-                    shared.file_transfers.lock().await.prune_stale_transfers();
+                    let pruned = shared.file_transfers.lock().await.prune_stale_transfers();
+                    report_pruned_transfers(&shared, pruned);
 
                     // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
                     // Asleep, a ping a minute: rare enough for the radio to
@@ -811,6 +853,10 @@ pub(super) fn register_session(
                     }
                 }
                 Some(mut msg) = outbox_rx.recv() => {
+                    if !peer_can_read(peer_app_version.as_deref(), &msg) {
+                        tracing::debug!(peer_id = %peer_id, "not sending a message this peer's version can't read");
+                        continue;
+                    }
                     if let Err(err) = write_within(write_limit, &bytes_written, sess_tx.send(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
@@ -1041,6 +1087,39 @@ pub(super) fn register_session(
     Ok(())
 }
 
+/// Tells the user and the other device about transfers that were given up
+/// on. Nothing here waits: this runs inside a session's heartbeat.
+fn report_pruned_transfers(
+    shared: &EngineShared,
+    pruned: Vec<crate::file_transfer::PrunedTransfer>,
+) {
+    if pruned.is_empty() {
+        return;
+    }
+    let reason = "Transfer timed out: nothing arrived for 5 minutes".to_string();
+    let mut freed_inbound = false;
+    for t in pruned {
+        freed_inbound |= !t.outbound;
+        if let Some(tx) = t.peer.and_then(|peer| shared.peer_manager.sender(peer)) {
+            let _ = tx.try_send(AppMessage::FileTransferCancel {
+                transfer_id: t.transfer_id,
+                reason: reason.clone(),
+            });
+        }
+        let _ = shared.event_tx.try_send(EngineEvent::FileTransferFailed {
+            in_folder: false,
+            transfer_id: t.transfer_id,
+            from_device: t.peer.unwrap_or_default(),
+            reason: reason.clone(),
+        });
+    }
+    // A dropped inbound transfer leaves room for a queued one.
+    if freed_inbound {
+        let shared = shared.clone();
+        tokio::spawn(async move { pump_transfer_queue(&shared).await });
+    }
+}
+
 /// How long a clipboard stays worth sending to a device that missed it.
 const CLIPBOARD_CATCH_UP_WINDOW_MS: u64 = 30 * 60 * 1000;
 
@@ -1067,6 +1146,37 @@ fn clipboard_to_catch_up(
         .get(peer_id)
         .is_some_and(|peer| peer.is_sync_eligible() && peer.remote_sync_enabled);
     (fresh && missed && newer_than_theirs && !came_from_them && wants_it).then_some(latest)
+}
+
+/// Whether a peer running `app_version` knows `msg`; see
+/// `AppMessage::min_app_version`.
+fn peer_can_read(app_version: Option<&str>, msg: &AppMessage) -> bool {
+    msg.min_app_version()
+        .is_none_or(|min| crate::device_choice::at_least(app_version, min))
+}
+
+#[cfg(test)]
+mod peer_can_read_tests {
+    use super::*;
+
+    #[test]
+    fn newer_messages_are_kept_from_older_peers() {
+        let note = AppMessage::ScratchpadNote {
+            id: Uuid::nil(),
+            text: String::new(),
+            pinned: false,
+            updated_at_ms: 0,
+            deleted: false,
+        };
+        for old in [None, Some(""), Some("2.0.2"), Some("1.3.4")] {
+            assert!(!peer_can_read(old, &note), "{old:?}");
+            assert!(!peer_can_read(old, &AppMessage::EdgeEnd), "{old:?}");
+            // What every build knows still goes out.
+            assert!(peer_can_read(old, &AppMessage::Bye), "{old:?}");
+        }
+        assert!(peer_can_read(Some("2.1.0"), &note));
+        assert!(peer_can_read(Some("2.2.0"), &AppMessage::EdgeEnd));
+    }
 }
 
 /// How often a session pings while either side is asleep.

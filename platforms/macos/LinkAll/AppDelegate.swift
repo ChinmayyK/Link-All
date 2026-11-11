@@ -82,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ])
         store.start()
         startMacScreenshotObserver()
+        EdgeControlService.shared.onNote = { [weak self] note in
+            self?.store.showToast(
+                title: "Keyboard & Mouse", body: note,
+                tint: CRTheme.accentOrange, systemImage: "keyboard", ttl: 8.0)
+        }
         EdgeControlService.shared.reload()
         
         // Prevent App Nap to ensure background daemon and network sync stay responsive

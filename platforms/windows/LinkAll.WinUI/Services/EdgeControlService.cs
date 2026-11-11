@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -56,6 +57,8 @@ namespace LinkAll.WinUI.Services
         private readonly AutoResetEvent _wake = new(false);
         private int _failures;
         private long _overSince;
+        private string? _lastRefusal;
+        private long _lastRefusalAt;
 
         private Thread? _hookThread;
         private Thread? _senderThread;
@@ -340,9 +343,9 @@ namespace LinkAll.WinUI.Services
                     if (id == null || handle == IntPtr.Zero ||
                         NativeCore.linkall_edge_begin(handle, id, (byte)edge, (ushort)pos) != 0)
                     {
-                        TraceLog.Write($"Edge control: the computer on the {EdgeNames[edge]} did not take the keyboard and mouse");
                         _cooldownUntil = Environment.TickCount64 + 3000;
                         Volatile.Write(ref _mode, (int)Mode.Idle);
+                        ReportRefusal(edge, id);
                         return;
                     }
                     // Sharing may have been turned off, or this edge relinked,
@@ -387,6 +390,36 @@ namespace LinkAll.WinUI.Services
                     Volatile.Write(ref _mode, (int)Mode.Idle);
                 }
             });
+        }
+
+        /// <summary>
+        /// Says why the other computer didn't take the keyboard and mouse. The
+        /// pointer just stopping at the edge, with the reason only in the log,
+        /// looked like the feature was broken.
+        /// </summary>
+        private void ReportRefusal(int edge, string? id)
+        {
+            string? reason = null;
+            try
+            {
+                using var doc = DaemonClient.EdgeStatus(peek: true);
+                if (doc != null && doc.RootElement.TryGetProperty("data", out var data)
+                    && data.ValueKind == JsonValueKind.Object
+                    && data.TryGetProperty("refused_target", out var target) && target.GetString() == id
+                    && data.TryGetProperty("refused_reason", out var why) && why.ValueKind == JsonValueKind.String)
+                    reason = why.GetString();
+            }
+            catch (Exception ex) { App.HandleError(ex); }
+
+            TraceLog.Write($"Edge control: the computer on the {EdgeNames[edge]} did not take the keyboard and mouse: {reason ?? "no reason given"}");
+            // No reason means it was only busy with a hand-off already under way.
+            if (string.IsNullOrEmpty(reason)) return;
+            // Pushing at the edge again repeats the refusal: say it once a minute.
+            long now = Environment.TickCount64;
+            if (reason == _lastRefusal && now - _lastRefusalAt < 60_000) return;
+            _lastRefusal = reason;
+            _lastRefusalAt = now;
+            NotificationHelper.ShowToast("Keyboard and mouse weren't shared", reason);
         }
 
         /// <summary>The engine reports the pointer came back over the edge it left by.</summary>

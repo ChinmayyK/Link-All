@@ -161,6 +161,7 @@ namespace LinkAll.WinUI.Services
                         "declined" => $"{peer.DisplayName} declined.",
                         "expired" => $"No answer from {peer.DisplayName}. Check Link All is open there.",
                         "cancelled" => $"{peer.DisplayName} withdrew its request.",
+                        "unreachable" => $"Couldn't reach {peer.DisplayName}. Check both devices are on the same Wi-Fi and Link All is open there.",
                         "update_needed" => $"{peer.DisplayName} runs an older Link All that turns pairing requests down on its own. Update it, then try again.",
                         _ => "Request closed.",
                     };

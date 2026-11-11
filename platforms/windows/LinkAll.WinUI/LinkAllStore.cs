@@ -475,7 +475,7 @@ namespace LinkAll.WinUI
         private ulong? _pairingExpiresInSecs;
         [JsonPropertyName("pairing_expires_in_secs")]
         public ulong? pairingExpiresInSecs { get => _pairingExpiresInSecs; set => SetProperty(ref _pairingExpiresInSecs, value); }
-        // How the last request ended: "accepted", "declined", "cancelled", "expired" or "update_needed".
+        // How the last request ended: "accepted", "declined", "cancelled", "expired", "unreachable" or "update_needed".
         private string? _pairingOutcome;
         [JsonPropertyName("pairing_outcome")]
         public string? pairingOutcome { get => _pairingOutcome; set { if (SetProperty(ref _pairingOutcome, value)) NotifyPeerStateProperties(); } }
@@ -483,6 +483,7 @@ namespace LinkAll.WinUI
         {
             "declined" => "Declined - try again",
             "expired" => "No answer - try again",
+            "unreachable" => "Couldn't reach it - same Wi-Fi?",
             "cancelled" => "Request withdrawn",
             "update_needed" => "Update Link All on it, then try again",
             _ => null,
