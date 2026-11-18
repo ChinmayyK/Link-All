@@ -835,6 +835,24 @@ pub fn socket_path() -> PathBuf {
     }
 }
 
+/// True when a process accepts connections on `path`. A socket file left
+/// behind by a crash refuses them, so it reads as not listening.
+#[cfg(unix)]
+pub async fn is_listening(path: &std::path::Path) -> bool {
+    tokio::time::timeout(
+        std::time::Duration::from_millis(500),
+        tokio::net::UnixStream::connect(path),
+    )
+    .await
+    .is_ok_and(|connected| connected.is_ok())
+}
+
+/// True when another daemon already owns the IPC socket.
+#[cfg(unix)]
+pub async fn daemon_is_listening() -> bool {
+    is_listening(&socket_path()).await
+}
+
 // ── Server (runs inside the daemon) ──────────────────────────────────────────
 
 #[cfg(unix)]
@@ -853,6 +871,12 @@ pub mod server {
         Fut: std::future::Future<Output = IpcResponse> + Send + 'static,
     {
         let path = socket_path();
+
+        // A live socket belongs to another daemon. Deleting it would leave
+        // that daemon running but unreachable, and both fighting for peers.
+        if is_listening(&path).await {
+            anyhow::bail!("another Link All daemon is already listening at {path:?}");
+        }
 
         // Remove stale socket from previous run.
         // MED-01 FIX: Refuse to follow symlinks — an attacker could plant a

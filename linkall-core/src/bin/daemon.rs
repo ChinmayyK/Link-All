@@ -88,6 +88,15 @@ async fn run() -> Result<()> {
         ..Default::default()
     };
 
+    // An app that found the daemon slow may start a second one. Leave the
+    // running one alone: two engines with one identity fight over every peer.
+    // Exit cleanly so systemd's Restart=on-failure does not retry.
+    #[cfg(unix)]
+    if linkall_core::ipc::daemon_is_listening().await {
+        tracing::info!("another Link All daemon is already running; exiting");
+        return Ok(());
+    }
+
     let (event_tx, mut event_rx) = mpsc::channel(256);
     let engine = Arc::new(Engine::start(config, event_tx).await?);
     engine.apply_settings(initial_settings.clone()).await;
