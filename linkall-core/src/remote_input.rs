@@ -369,7 +369,7 @@ static HELD: Mutex<Held> = Mutex::new(Held {
 /// Lets go of every held modifier that has been down too long.
 fn release_stale() {
     let stale: Vec<Modifier> = {
-        let mut held = HELD.lock().unwrap();
+        let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
         if held.since.is_some_and(|t| t.elapsed() > HOLD_LIMIT) {
             held.since = None;
             Modifier::ALL
@@ -388,7 +388,7 @@ fn release_stale() {
 /// Presses or releases a modifier and keeps it held until released.
 pub fn set_modifier(modifier: Modifier, down: bool) -> Result<(), String> {
     {
-        let mut held = HELD.lock().unwrap();
+        let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
         held.down[modifier.index()] = down;
         held.since = held.down.iter().any(|d| *d).then(Instant::now);
     }
@@ -397,7 +397,7 @@ pub fn set_modifier(modifier: Modifier, down: bool) -> Result<(), String> {
 
 /// Presses and releases `code` with `mods` held for that moment.
 fn chord(mods: &[Modifier], code: Code) -> Result<(), String> {
-    let held = HELD.lock().unwrap().down;
+    let held = HELD.lock().unwrap_or_else(|e| e.into_inner()).down;
     // Only press the modifiers that aren't already held.
     let extra: Vec<Modifier> = mods.iter().copied().filter(|m| !held[m.index()]).collect();
     for m in &extra {
@@ -515,15 +515,15 @@ pub mod testing {
     static BACKEND: Mutex<Option<Arc<dyn Backend>>> = Mutex::new(None);
 
     pub fn install(backend: Arc<dyn Backend>) {
-        *BACKEND.lock().unwrap() = Some(backend);
+        *BACKEND.lock().unwrap_or_else(|e| e.into_inner()) = Some(backend);
     }
 
     pub fn uninstall() {
-        *BACKEND.lock().unwrap() = None;
+        *BACKEND.lock().unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     pub(super) fn backend() -> Option<Arc<dyn Backend>> {
-        BACKEND.lock().unwrap().clone()
+        BACKEND.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 }
 
@@ -668,7 +668,7 @@ pub fn raw_key(scancode: u16, down: bool) -> Result<(), String> {
     // Held across the key itself, so a repeat can't land after its release.
     let mut repeat = repeat_state();
     let again = {
-        let mut held = HELD_RAW.lock().unwrap();
+        let mut held = HELD_RAW.lock().unwrap_or_else(|e| e.into_inner());
         let again = held.keys.contains(&scancode);
         held.keys.retain(|k| *k != scancode);
         if down {
@@ -862,7 +862,7 @@ fn repeat_timing() -> (Duration, Duration) {
 
 /// Remembers which buttons a hand-off holds. Called for every button change.
 fn note_button(button: Button, down: bool) {
-    let mut held = HELD_RAW.lock().unwrap();
+    let mut held = HELD_RAW.lock().unwrap_or_else(|e| e.into_inner());
     held.buttons.retain(|b| *b != button);
     if down {
         held.buttons.push(button);
@@ -877,7 +877,7 @@ pub fn release_all() {
         repeat
     };
     let (keys, buttons) = {
-        let mut held = HELD_RAW.lock().unwrap();
+        let mut held = HELD_RAW.lock().unwrap_or_else(|e| e.into_inner());
         (
             std::mem::take(&mut held.keys),
             std::mem::take(&mut held.buttons),
@@ -896,7 +896,7 @@ pub fn release_all() {
         };
     }
     let stale_modifiers: Vec<Modifier> = {
-        let mut held = HELD.lock().unwrap();
+        let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
         held.since = None;
         Modifier::ALL
             .into_iter()
@@ -1426,7 +1426,7 @@ mod edge_imp {
     static X11: Mutex<Option<X>> = Mutex::new(None);
 
     fn with_x<T>(f: impl FnOnce(&X) -> T) -> Result<T, String> {
-        let mut guard = X11.lock().unwrap();
+        let mut guard = X11.lock().unwrap_or_else(|e| e.into_inner());
         if guard.is_none() {
             let lib = Xlib::open().map_err(|_| "this computer has no X11 library".to_string())?;
             let display = unsafe { (lib.XOpenDisplay)(std::ptr::null()) };
@@ -1620,7 +1620,7 @@ mod imp {
             y: at.y + f64::from(dy),
         };
         // A move with a button held is a drag, or apps won't follow it.
-        let held = STATE.lock().unwrap().down;
+        let held = STATE.lock().unwrap_or_else(|e| e.into_inner()).down;
         let (kind, button) = if held[0] {
             (6, 0)
         } else if held[1] {
@@ -1648,7 +1648,7 @@ mod imp {
             (Button::Forward, false) => (26, 4),
         };
         let clicks = {
-            let mut st = STATE.lock().unwrap();
+            let mut st = STATE.lock().unwrap_or_else(|e| e.into_inner());
             st.down[i] = down;
             if down {
                 let now = Instant::now();
@@ -2083,7 +2083,7 @@ mod imp {
     }
 
     fn with_device(f: impl FnOnce(&mut Device) -> Result<(), String>) -> Result<(), String> {
-        let mut guard = DEVICE.lock().unwrap();
+        let mut guard = DEVICE.lock().unwrap_or_else(|e| e.into_inner());
         if guard.is_none() {
             *guard = Some(create()?);
         }
@@ -2603,12 +2603,12 @@ mod keymap_tests {
     #[test]
     fn release_all_clears_held_keys_and_modifiers() {
         {
-            let mut held_raw = HELD_RAW.lock().unwrap();
+            let mut held_raw = HELD_RAW.lock().unwrap_or_else(|e| e.into_inner());
             held_raw.keys.push(0x1E);
             held_raw.buttons.push(Button::Left);
         }
         {
-            let mut held = HELD.lock().unwrap();
+            let mut held = HELD.lock().unwrap_or_else(|e| e.into_inner());
             held.down[Modifier::Shift.index()] = true;
             held.since = Some(Instant::now());
         }
@@ -2616,12 +2616,12 @@ mod keymap_tests {
         release_all();
 
         {
-            let held_raw = HELD_RAW.lock().unwrap();
+            let held_raw = HELD_RAW.lock().unwrap_or_else(|e| e.into_inner());
             assert!(held_raw.keys.is_empty());
             assert!(held_raw.buttons.is_empty());
         }
         {
-            let held = HELD.lock().unwrap();
+            let held = HELD.lock().unwrap_or_else(|e| e.into_inner());
             assert!(held.down.iter().all(|&d| !d));
             assert!(held.since.is_none());
         }

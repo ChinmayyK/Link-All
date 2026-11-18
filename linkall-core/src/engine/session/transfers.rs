@@ -81,7 +81,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 .get(peer_id)
                 .map(|p| p.trusted)
                 .unwrap_or(false);
-            let settings = shared.settings.lock().unwrap().clone();
+            let settings = shared
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             let mut auto_accept = (is_trusted && settings.auto_accept_file_transfers)
                 && (settings.auto_accept_max_bytes == 0
                     || file_bytes <= settings.auto_accept_max_bytes);
@@ -91,7 +95,7 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
             // declined without asking again.
             if let Some((batch_id, folder_name, total)) = &folder {
                 let decision = {
-                    let mut folders = shared.folders.lock().unwrap();
+                    let mut folders = shared.folders.lock().unwrap_or_else(|e| e.into_inner());
                     let decision = folders.decision(batch_id);
                     if decision != Some(false) {
                         folders.track(
@@ -199,7 +203,11 @@ pub(super) async fn handle(ctx: &InboundCtx, msg: AppMessage) -> Flow {
                 let mut mgr = shared.file_transfers.lock().await;
                 // The receiver declined a folder: send none of the rest.
                 if let Some(batch_id) = mgr.folder_of(&transfer_id) {
-                    shared.folders.lock().unwrap().stop_sending(&batch_id);
+                    shared
+                        .folders
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .stop_sending(&batch_id);
                 }
                 mgr.cancel_outbound(&transfer_id);
                 drop(mgr);

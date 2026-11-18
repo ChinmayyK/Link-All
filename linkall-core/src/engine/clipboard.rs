@@ -66,7 +66,12 @@ impl crate::engine::Engine {
         }
 
         // Optionally compress images before sending.
-        let compress_enabled = self.shared.settings.lock().unwrap().sync_images;
+        let compress_enabled = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .sync_images;
         let content = if matches!(content, ClipboardContent::Image { .. }) && compress_enabled {
             let (compressed, stats) = crate::compress::compress_image(content, true).await;
             if let Some(ref s) = stats {
@@ -516,7 +521,11 @@ impl crate::engine::Engine {
         text: String,
         description: String,
     ) -> Result<()> {
-        let mut settings = self.shared.settings.lock().unwrap();
+        let mut settings = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(t) = settings
             .clipboard_templates
             .iter_mut()
@@ -537,7 +546,11 @@ impl crate::engine::Engine {
     }
 
     pub async fn template_remove(&self, name: String) -> Result<bool> {
-        let mut settings = self.shared.settings.lock().unwrap();
+        let mut settings = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let before = settings.clipboard_templates.len();
         settings.clipboard_templates.retain(|t| t.name != name);
         Ok(settings.clipboard_templates.len() < before)
@@ -565,7 +578,12 @@ impl crate::engine::Engine {
     /// Record a local text entry in history without syncing it to peers.
     pub async fn remember_text(&self, text: String) -> Result<()> {
         let device_name = self.shared.config.device_name.clone();
-        let max_bytes = self.shared.settings.lock().unwrap().max_history_text_bytes;
+        let max_bytes = self
+            .shared
+            .settings
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .max_history_text_bytes;
         let content = crate::protocol::ClipboardContent::Text(text);
         self.shared
             .history

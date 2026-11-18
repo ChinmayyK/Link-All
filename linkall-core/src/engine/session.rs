@@ -279,13 +279,21 @@ pub(super) fn register_session(
         let outbox = outbox_tx.clone();
         let sh = shared.clone();
         tokio::spawn(async move {
-            let sharing_on = sh.settings.lock().unwrap().sync_enabled;
+            let sharing_on = sh
+                .settings
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .sync_enabled;
             if !sharing_on {
                 let _ = outbox
                     .send(AppMessage::DeviceSyncState { enabled: false })
                     .await;
             }
-            let battery_val = *sh.device_status.local_battery.lock().unwrap();
+            let battery_val = *sh
+                .device_status
+                .local_battery
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some((level, charging)) = battery_val {
                 let _ = outbox
                     .send(AppMessage::BatteryStatus {
@@ -296,7 +304,12 @@ pub(super) fn register_session(
                     })
                     .await;
             }
-            let net_val = sh.device_status.local_network.lock().unwrap().clone();
+            let net_val = sh
+                .device_status
+                .local_network
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone();
             if let Some(net) = net_val {
                 let _ = outbox
                     .send(AppMessage::NetworkStatus {
@@ -306,7 +319,11 @@ pub(super) fn register_session(
                     })
                     .await;
             }
-            let storage_val = *sh.device_status.local_storage.lock().unwrap();
+            let storage_val = *sh
+                .device_status
+                .local_storage
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some((images, videos, apps, free, total)) = storage_val {
                 let _ = outbox
                     .send(AppMessage::StorageStatus {
