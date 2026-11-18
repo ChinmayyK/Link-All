@@ -356,21 +356,31 @@ impl SessionKey {
     /// Decrypt a frame in-place. The first 12 bytes of the buffer must be the nonce,
     /// followed by the ciphertext. Upon success, the buffer is shrunk to just the plaintext.
     pub fn decrypt_in_place(&mut self, buffer: &mut Vec<u8>) -> Result<()> {
-        use aes_gcm::aead::AeadInPlace;
         anyhow::ensure!(
             buffer.len() >= 12 + 16,
             "frame too short (must have nonce and tag)"
         );
-
         let mut nonce_bytes = [0u8; 12];
         nonce_bytes.copy_from_slice(&buffer[..12]);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        buffer.drain(..12);
+        self.decrypt_body_in_place(&nonce_bytes, buffer)
+    }
 
-        let counter = u64::from_be_bytes(
-            nonce_bytes[..8]
-                .try_into()
-                .expect("nonce slice is exactly 8 bytes"),
-        );
+    /// Decrypts `body` (ciphertext followed by its 16-byte tag) in place,
+    /// given the frame's nonce apart from it. A reader that takes the nonce
+    /// off the wire on its own spares `decrypt_in_place` moving the whole
+    /// body (4 MB for a file chunk) down by 12 bytes.
+    pub fn decrypt_body_in_place(
+        &mut self,
+        nonce_bytes: &[u8; 12],
+        body: &mut Vec<u8>,
+    ) -> Result<()> {
+        use aes_gcm::aead::AeadInPlace;
+        anyhow::ensure!(body.len() >= 16, "frame too short (must have a tag)");
+
+        let mut counter_bytes = [0u8; 8];
+        counter_bytes.copy_from_slice(&nonce_bytes[..8]);
+        let counter = u64::from_be_bytes(counter_bytes);
         anyhow::ensure!(
             counter == self.recv_counter,
             "replayed or out-of-order frame: got counter {}, expected {}",
@@ -382,11 +392,8 @@ impl SessionKey {
             .checked_add(1)
             .context("recv counter overflow")?;
 
-        // Remove the 12-byte nonce from the beginning of the buffer.
-        buffer.drain(..12);
-
         self.recv_cipher
-            .decrypt_in_place(nonce, &[], buffer)
+            .decrypt_in_place(Nonce::from_slice(nonce_bytes), &[], body)
             .map_err(|e| anyhow::anyhow!("decrypt: {:?}", e))?;
 
         // FIX: Update counter only on successful decryption.

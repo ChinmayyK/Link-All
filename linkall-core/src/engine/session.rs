@@ -75,6 +75,45 @@ impl InboundCtx {
     }
 }
 
+/// Ends an inbound transfer that can't go on: drops it and its partial
+/// file, then tells the sender and the UI, or both wait forever.
+pub(super) async fn fail_inbound_transfer(
+    shared: &EngineShared,
+    outbox_tx: &mpsc::Sender<AppMessage>,
+    peer_id: Uuid,
+    transfer_id: [u8; 16],
+    reason: String,
+) {
+    shared
+        .file_transfers
+        .lock()
+        .await
+        .cancel_inbound(&transfer_id, &reason);
+    let _ = outbox_tx
+        .send(AppMessage::FileTransferCancel {
+            transfer_id,
+            reason: reason.clone(),
+        })
+        .await;
+    let _ = outbox_tx
+        .send(AppMessage::FileTransferCompleteAck {
+            transfer_id,
+            success: false,
+            error: Some(reason.clone()),
+        })
+        .await;
+    let _ = shared
+        .event_tx
+        .send(EngineEvent::FileTransferFailed {
+            in_folder: false,
+            transfer_id,
+            from_device: peer_id,
+            reason,
+        })
+        .await;
+    pump_transfer_queue(shared).await;
+}
+
 /// Whether the session keeps reading after a message.
 pub(super) enum Flow {
     Continue,
@@ -146,6 +185,8 @@ async fn dispatch_inbound(ctx: &InboundCtx, msg: AppMessage) -> Flow {
         m @ (M::NowPlaying { .. } | M::MediaCommand { .. }) => remote::handle(ctx, m).await,
         // Handshake messages; once the session is up they carry nothing.
         M::Hello { .. } | M::HelloAck { .. } => Flow::Continue,
+        // Put back together by the reader before dispatch (`ChunkAssembly`).
+        M::FileChunkPart { .. } => Flow::Continue,
         // Sent only by older builds that had the camera stream.
         M::RetiredCameraStreamRequest { .. }
         | M::RetiredCameraStreamAccept { .. }
@@ -442,6 +483,9 @@ pub(super) fn register_session(
                                     hasher.update(vec![0u8; padding]);
                                 }
                                 let new_offset = offset + data.len() as u64;
+                                // Back to the pool the socket reader draws from,
+                                // or every chunk costs a fresh 4 MB allocation.
+                                crate::network::return_buffer(data);
                                 Ok::<_, anyhow::Error>((file, hasher, new_offset))
                             })
                             .await
@@ -510,43 +554,34 @@ pub(super) fn register_session(
                                 }
                                 Err(e) => {
                                     tracing::error!("Disk I/O error: {}", e);
-                                    let reason = format!("disk i/o error: {e}");
-                                    dw_shared
-                                        .file_transfers
-                                        .lock()
-                                        .await
-                                        .cancel_inbound(&transfer_id, &reason);
-                                    // Tell the sender and the UI, or both wait forever.
-                                    let _ = dw_outbox_tx
-                                        .send(AppMessage::FileTransferCancel {
-                                            transfer_id,
-                                            reason: reason.clone(),
-                                        })
-                                        .await;
-                                    let _ = dw_outbox_tx
-                                        .send(AppMessage::FileTransferCompleteAck {
-                                            transfer_id,
-                                            success: false,
-                                            error: Some(reason.clone()),
-                                        })
-                                        .await;
-                                    let _ = dw_event_tx
-                                        .send(EngineEvent::FileTransferFailed {
-                                            in_folder: false,
-                                            transfer_id,
-                                            from_device: dw_peer_id,
-                                            reason,
-                                        })
-                                        .await;
-                                    pump_transfer_queue(&dw_shared).await;
+                                    fail_inbound_transfer(
+                                        &dw_shared,
+                                        &dw_outbox_tx,
+                                        dw_peer_id,
+                                        transfer_id,
+                                        format!("disk i/o error: {e}"),
+                                    )
+                                    .await;
                                 }
                             }
                         } else {
+                            // The chunk was accepted but there is no open file
+                            // to write it to. Dropping it left a gap, the sender
+                            // went on to send the whole file, and it failed only
+                            // at the end on "missing chunks".
                             tracing::error!(
                                 "Missing io_ctx for chunk {} of transfer {:?}",
                                 chunk_index,
                                 transfer_id
                             );
+                            fail_inbound_transfer(
+                                &dw_shared,
+                                &dw_outbox_tx,
+                                dw_peer_id,
+                                transfer_id,
+                                "the file being received was no longer open".to_string(),
+                            )
+                            .await;
                         }
                     }
                     DiskTaskMsg::Complete {
@@ -555,18 +590,18 @@ pub(super) fn register_session(
                     } => {
                         let file_handle = {
                             let mut mgr = dw_shared.file_transfers.lock().await;
-                            mgr.get_inbound_mut(&transfer_id)
-                                .and_then(|t| t.file_handle.take())
+                            mgr.get_inbound_mut(&transfer_id).and_then(|t| {
+                                let size = t.meta.size_bytes;
+                                t.file_handle.take().map(|file| (file, size))
+                            })
                         };
 
                         // A failed final flush (disk full) must fail the transfer,
                         // not rename a short file and ack success.
                         let mut flush_err: Option<String> = None;
-                        if let Some(mut file) = file_handle {
+                        if let Some((mut file, size)) = file_handle {
                             let res = tokio::task::spawn_blocking(move || {
-                                use std::io::Write;
-                                file.flush()?;
-                                file.get_ref().sync_all()
+                                crate::file_transfer::finish_writing(&mut file, size)
                             })
                             .await;
                             flush_err = match res {
@@ -686,16 +721,34 @@ pub(super) fn register_session(
             last_seen: rx_last_seen,
         };
         let mut rx_task = tokio::spawn(async move {
+            let mut assembly = ChunkAssembly::default();
             loop {
                 let msg = match sess_rx.recv().await {
                     Ok(msg) => msg,
+                    // One a newer Link All added: skip it, keep the link.
+                    Err(err) if err.is::<network::UnknownMessage>() => continue,
                     Err(err) => break err.to_string(),
+                };
+                // A chunk that came in parts is handled once it is whole.
+                let msg = match msg {
+                    part @ AppMessage::FileChunkPart { .. } => match assembly.add(part) {
+                        Some(chunk) => chunk,
+                        None => continue,
+                    },
+                    other => other,
                 };
                 if let Flow::Disconnect(reason) = dispatch_inbound(&ctx, msg).await {
                     break reason;
                 }
             }
         });
+
+        let peer_takes_parts = shared
+            .peer_manager
+            .get(peer_id)
+            .is_some_and(|p| p.chunk_parts);
+        // What the peer said it runs, to keep back messages it can't read.
+        let peer_app_version = shared.peer_manager.get(peer_id).and_then(|p| p.app_version);
 
         let mut last_tick_millis = crate::network::now_millis();
         // When this session last pinged. Kept apart from `ping_sent_at`,
@@ -792,7 +845,8 @@ pub(super) fn register_session(
                         }
                     }
 
-                    shared.file_transfers.lock().await.prune_stale_transfers();
+                    let pruned = shared.file_transfers.lock().await.prune_stale_transfers();
+                    report_pruned_transfers(&shared, pruned);
 
                     // Only send a ping if awake, OR if asleep and we haven't seen them for 5 minutes
                     // Asleep, a ping a minute: rare enough for the radio to
@@ -811,6 +865,10 @@ pub(super) fn register_session(
                     }
                 }
                 Some(mut msg) = outbox_rx.recv() => {
+                    if !peer_can_read(peer_app_version.as_deref(), &msg) {
+                        tracing::debug!(peer_id = %peer_id, "not sending a message this peer's version can't read");
+                        continue;
+                    }
                     if let Err(err) = write_within(write_limit, &bytes_written, sess_tx.send(&mut msg)).await {
                         break format!("send failed: {err}");
                     }
@@ -830,8 +888,8 @@ pub(super) fn register_session(
                         }
                     }
                 }
-                Some(mut msg) = file_outbox_rx.recv() => {
-                    if let Err(err) = write_within(write_limit, &bytes_written, sess_tx.send_no_flush(&mut msg)).await {
+                Some(msg) = file_outbox_rx.recv() => {
+                    if let Err(err) = send_file_message(&mut sess_tx, &mut outbox_rx, msg, peer_takes_parts, peer_app_version.as_deref(), write_limit, &bytes_written).await {
                         break format!("send failed: {err}");
                     }
                     // Write a few queued chunks per flush, then go back to the
@@ -840,8 +898,8 @@ pub(super) fn register_session(
                     let mut batch_err = None;
                     for _ in 0..3 {
                         match file_outbox_rx.try_recv() {
-                            Ok(mut next_msg) => {
-                                if let Err(err) = write_within(write_limit, &bytes_written, sess_tx.send_no_flush(&mut next_msg)).await {
+                            Ok(next_msg) => {
+                                if let Err(err) = send_file_message(&mut sess_tx, &mut outbox_rx, next_msg, peer_takes_parts, peer_app_version.as_deref(), write_limit, &bytes_written).await {
                                     batch_err = Some(err);
                                     break;
                                 }
@@ -1041,6 +1099,39 @@ pub(super) fn register_session(
     Ok(())
 }
 
+/// Tells the user and the other device about transfers that were given up
+/// on. Nothing here waits: this runs inside a session's heartbeat.
+fn report_pruned_transfers(
+    shared: &EngineShared,
+    pruned: Vec<crate::file_transfer::PrunedTransfer>,
+) {
+    if pruned.is_empty() {
+        return;
+    }
+    let reason = "Transfer timed out: nothing arrived for 5 minutes".to_string();
+    let mut freed_inbound = false;
+    for t in pruned {
+        freed_inbound |= !t.outbound;
+        if let Some(tx) = t.peer.and_then(|peer| shared.peer_manager.sender(peer)) {
+            let _ = tx.try_send(AppMessage::FileTransferCancel {
+                transfer_id: t.transfer_id,
+                reason: reason.clone(),
+            });
+        }
+        let _ = shared.event_tx.try_send(EngineEvent::FileTransferFailed {
+            in_folder: false,
+            transfer_id: t.transfer_id,
+            from_device: t.peer.unwrap_or_default(),
+            reason: reason.clone(),
+        });
+    }
+    // A dropped inbound transfer leaves room for a queued one.
+    if freed_inbound {
+        let shared = shared.clone();
+        tokio::spawn(async move { pump_transfer_queue(&shared).await });
+    }
+}
+
 /// How long a clipboard stays worth sending to a device that missed it.
 const CLIPBOARD_CATCH_UP_WINDOW_MS: u64 = 30 * 60 * 1000;
 
@@ -1067,6 +1158,312 @@ fn clipboard_to_catch_up(
         .get(peer_id)
         .is_some_and(|peer| peer.is_sync_eligible() && peer.remote_sync_enabled);
     (fresh && missed && newer_than_theirs && !came_from_them && wants_it).then_some(latest)
+}
+
+/// How much of a file chunk goes out at a time to a peer that reads parts:
+/// the longest a waiting message is held up by file data, in bytes.
+const FILE_PART_SIZE: usize = 128 * 1024;
+
+/// Writes one message from the file queue. A file chunk for a peer that
+/// reads parts goes out in pieces of `FILE_PART_SIZE`, and whatever is
+/// waiting in `outbox_rx` (clipboard, keyboard and mouse, acks) is sent
+/// between them instead of after the whole chunk.
+async fn send_file_message(
+    sess_tx: &mut network::PeerSessionTx,
+    outbox_rx: &mut mpsc::Receiver<AppMessage>,
+    mut msg: AppMessage,
+    peer_takes_parts: bool,
+    peer_app_version: Option<&str>,
+    write_limit: std::time::Duration,
+    bytes_written: &std::sync::atomic::AtomicU64,
+) -> Result<(), String> {
+    let (transfer_id, chunk_index, total_chunks, compressed, data) = match msg {
+        AppMessage::FileChunk {
+            transfer_id,
+            chunk_index,
+            total_chunks,
+            compressed,
+            data,
+        } if peer_takes_parts && data.len() > FILE_PART_SIZE => {
+            (transfer_id, chunk_index, total_chunks, compressed, data)
+        }
+        _ => {
+            return write_within(write_limit, bytes_written, sess_tx.send_no_flush(&mut msg)).await
+        }
+    };
+    let parts = data.len().div_ceil(FILE_PART_SIZE);
+    for (part, piece) in data.chunks(FILE_PART_SIZE).enumerate() {
+        sess_tx
+            .wait_until_little_unsent(
+                write_limit,
+                MIN_WRITE_BYTES_PER_SEC * write_limit.as_secs().max(1),
+            )
+            .await?;
+        let mut buf = network::get_buffer(piece.len());
+        buf.copy_from_slice(piece);
+        let mut part_msg = AppMessage::FileChunkPart {
+            transfer_id,
+            chunk_index,
+            total_chunks,
+            compressed,
+            part: part as u16,
+            last: part + 1 == parts,
+            data: buf,
+        };
+        write_within(
+            write_limit,
+            bytes_written,
+            sess_tx.send_no_flush(&mut part_msg),
+        )
+        .await?;
+        while let Ok(mut waiting) = outbox_rx.try_recv() {
+            if peer_can_read(peer_app_version, &waiting) {
+                write_within(write_limit, bytes_written, sess_tx.send(&mut waiting)).await?;
+            }
+        }
+    }
+    network::return_buffer(data);
+    Ok(())
+}
+
+/// A file chunk arriving in parts (`AppMessage::FileChunkPart`), until its
+/// last part makes it whole. One per session: the sender finishes a chunk's
+/// parts before starting the next chunk.
+#[derive(Default)]
+struct ChunkAssembly {
+    /// The chunk being put together: its transfer, its index, the part
+    /// expected next, and the bytes so far.
+    current: Option<([u8; 16], u32, u16, Vec<u8>)>,
+}
+
+impl ChunkAssembly {
+    /// Takes one part. Returns the whole chunk, as the `FileChunk` it stands
+    /// for, when `part` was its last. A part out of turn drops what was
+    /// gathered: the transfer then sees the gap and fails cleanly.
+    fn add(&mut self, part: AppMessage) -> Option<AppMessage> {
+        let AppMessage::FileChunkPart {
+            transfer_id,
+            chunk_index,
+            total_chunks,
+            compressed,
+            part,
+            last,
+            data,
+        } = part
+        else {
+            return None;
+        };
+        let limit = crate::file_transfer::FILE_CHUNK_SIZE + 1024;
+        let mut whole = match self.current.take() {
+            Some((tid, index, expected, whole))
+                if tid == transfer_id && index == chunk_index && expected == part =>
+            {
+                whole
+            }
+            stale => {
+                if let Some((.., buf)) = stale {
+                    network::return_buffer(buf);
+                }
+                if part != 0 {
+                    tracing::warn!(chunk_index, part, "file chunk part out of turn; dropped");
+                    network::return_buffer(data);
+                    return None;
+                }
+                let mut buf = network::get_buffer(crate::file_transfer::FILE_CHUNK_SIZE);
+                buf.clear();
+                buf
+            }
+        };
+        if whole.len() + data.len() > limit {
+            tracing::warn!(chunk_index, "file chunk parts exceed a chunk; dropped");
+            network::return_buffer(whole);
+            network::return_buffer(data);
+            return None;
+        }
+        whole.extend_from_slice(&data);
+        network::return_buffer(data);
+        if !last {
+            self.current = Some((transfer_id, chunk_index, part.wrapping_add(1), whole));
+            return None;
+        }
+        Some(AppMessage::FileChunk {
+            transfer_id,
+            chunk_index,
+            total_chunks,
+            data: whole,
+            compressed,
+        })
+    }
+}
+
+#[cfg(test)]
+mod chunk_part_tests {
+    use super::*;
+    use crate::crypto::EphemeralKeypair;
+    use std::sync::atomic::AtomicU64;
+
+    /// A sender and a receiver joined by a real socket, as a session's are.
+    async fn linked() -> (network::PeerSessionTx, network::PeerSessionRx) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let dialled = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (accepted, _) = listener.accept().await.unwrap();
+        let (a, b) = (EphemeralKeypair::generate(), EphemeralKeypair::generate());
+        let (a_key, _, _) = a.derive_session_key(b.public_bytes, true).unwrap();
+        let (b_key, _, _) = b.derive_session_key(a.public_bytes, false).unwrap();
+        let session = |stream, session| PeerSession {
+            stream,
+            session,
+            peer_device_id: Uuid::nil(),
+            peer_device_name: String::new(),
+        };
+        let (tx, _) = session(dialled, a_key).split(Default::default(), Default::default());
+        let (_, rx) = session(accepted, b_key).split(Default::default(), Default::default());
+        (tx, rx)
+    }
+
+    fn chunk(data: Vec<u8>) -> AppMessage {
+        AppMessage::FileChunk {
+            transfer_id: [7; 16],
+            chunk_index: 3,
+            total_chunks: 9,
+            data,
+            compressed: false,
+        }
+    }
+
+    /// Sends one chunk, with a clipboard acknowledgement waiting, and
+    /// returns what the receiver reads: the messages in order.
+    async fn sent_as(parts: bool, data: Vec<u8>) -> Vec<AppMessage> {
+        let (mut tx, mut rx) = linked().await;
+        let (outbox_tx, mut outbox_rx) = mpsc::channel(8);
+        outbox_tx.send(AppMessage::Bye).await.unwrap();
+        let written = AtomicU64::new(0);
+        send_file_message(
+            &mut tx,
+            &mut outbox_rx,
+            chunk(data),
+            parts,
+            Some("2.1.0"),
+            Duration::from_secs(5),
+            &written,
+        )
+        .await
+        .unwrap();
+        tx.send(&mut AppMessage::EdgeEnd).await.unwrap();
+        let mut got = Vec::new();
+        loop {
+            let msg = rx.recv().await.unwrap();
+            let done = matches!(msg, AppMessage::EdgeEnd);
+            got.push(msg);
+            if done {
+                return got;
+            }
+        }
+    }
+
+    fn payload() -> Vec<u8> {
+        (0..3 * FILE_PART_SIZE + 99)
+            .map(|i| (i % 251) as u8)
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn a_peer_that_does_not_read_parts_gets_the_chunk_whole() {
+        let got = sent_as(false, payload()).await;
+        // The chunk, then the end marker; the waiting message was left alone.
+        assert_eq!(got.len(), 2);
+        assert!(matches!(&got[0], AppMessage::FileChunk { data, .. } if *data == payload()));
+    }
+
+    #[tokio::test]
+    async fn a_chunk_in_parts_lets_a_waiting_message_through_and_arrives_whole() {
+        let got = sent_as(true, payload()).await;
+        // First part, the waiting message, three more parts, the end marker.
+        assert_eq!(got.len(), 6);
+        assert!(
+            matches!(got[1], AppMessage::Bye),
+            "the waiting message was not sent after the first part"
+        );
+
+        let mut assembly = ChunkAssembly::default();
+        let mut whole = None;
+        for msg in got {
+            if matches!(msg, AppMessage::FileChunkPart { .. }) {
+                assert!(whole.is_none(), "a part after the last one");
+                whole = assembly.add(msg);
+            }
+        }
+        let Some(AppMessage::FileChunk {
+            transfer_id,
+            chunk_index,
+            total_chunks,
+            data,
+            compressed,
+        }) = whole
+        else {
+            panic!("the parts did not make a chunk");
+        };
+        assert_eq!(
+            (transfer_id, chunk_index, total_chunks, compressed),
+            ([7; 16], 3, 9, false)
+        );
+        assert!(data == payload());
+    }
+
+    #[test]
+    fn a_part_out_of_turn_is_dropped_and_the_next_chunk_still_assembles() {
+        let part = |chunk_index, part, last, data: &[u8]| AppMessage::FileChunkPart {
+            transfer_id: [1; 16],
+            chunk_index,
+            total_chunks: 4,
+            compressed: false,
+            part,
+            last,
+            data: data.to_vec(),
+        };
+        let mut assembly = ChunkAssembly::default();
+        assert!(assembly.add(part(0, 0, false, b"ab")).is_none());
+        // Part 1 is missing.
+        assert!(assembly.add(part(0, 2, true, b"ef")).is_none());
+        assert!(assembly.add(part(1, 0, false, b"gh")).is_none());
+        let whole = assembly.add(part(1, 1, true, b"ij")).expect("chunk 1");
+        assert!(
+            matches!(whole, AppMessage::FileChunk { chunk_index: 1, data, .. } if data == b"ghij")
+        );
+    }
+}
+
+/// Whether a peer running `app_version` knows `msg`; see
+/// `AppMessage::min_app_version`.
+fn peer_can_read(app_version: Option<&str>, msg: &AppMessage) -> bool {
+    msg.min_app_version()
+        .is_none_or(|min| crate::device_choice::at_least(app_version, min))
+}
+
+#[cfg(test)]
+mod peer_can_read_tests {
+    use super::*;
+
+    #[test]
+    fn newer_messages_are_kept_from_older_peers() {
+        let note = AppMessage::ScratchpadNote {
+            id: Uuid::nil(),
+            text: String::new(),
+            pinned: false,
+            updated_at_ms: 0,
+            deleted: false,
+        };
+        for old in [None, Some(""), Some("2.0.2"), Some("1.3.4")] {
+            assert!(!peer_can_read(old, &note), "{old:?}");
+            assert!(!peer_can_read(old, &AppMessage::EdgeEnd), "{old:?}");
+            // What every build knows still goes out.
+            assert!(peer_can_read(old, &AppMessage::Bye), "{old:?}");
+        }
+        assert!(peer_can_read(Some("2.1.0"), &note));
+        assert!(peer_can_read(Some("2.2.0"), &AppMessage::EdgeEnd));
+    }
 }
 
 /// How often a session pings while either side is asleep.

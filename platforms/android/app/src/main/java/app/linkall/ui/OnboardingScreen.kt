@@ -226,6 +226,8 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onRetry: () -> Unit, onBac
     val timedOut = ended && peer.pairingOutcome == "expired"
     val declined = ended && peer.pairingOutcome == "declined"
     val outdated = ended && peer.pairingOutcome == "update_needed"
+    val unreachable = ended && peer.pairingOutcome == "unreachable"
+    val withdrawn = ended && peer.pairingOutcome == "cancelled"
     val pin = peer.pairingPin.takeIf { peer.outgoingPairingWaiting }
 
     Column(
@@ -240,6 +242,8 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onRetry: () -> Unit, onBac
                 declined -> "${peer.name} declined"
                 outdated -> "Update Link All on ${peer.name}"
                 timedOut -> "No answer from ${peer.name}"
+                unreachable -> "Couldn't reach ${peer.name}"
+                withdrawn -> "Request withdrawn"
                 pin != null -> "Check the code"
                 else -> "Connecting to ${peer.name}"
             },
@@ -252,6 +256,8 @@ private fun PairStep(c: DdColors, peer: PeerSnapshot, onRetry: () -> Unit, onBac
                 declined -> "Ask again if that was a mistake."
                 outdated -> "It runs an older Link All that turns pairing requests down on its own. Update it, then try again."
                 timedOut -> "Make sure Link All is open on it and both devices are on the same Wi-Fi."
+                withdrawn -> "The pairing request was cancelled. Try again when both devices are ready."
+                unreachable -> "This phone couldn't connect to it. Make sure Link All is open on it and both devices are on the same Wi-Fi, not a guest network."
                 pin != null -> "${peer.name} shows a pairing request with a code. Accept it there if it matches this one."
                 else -> "A pairing request will appear on ${peer.name} in a moment."
             },

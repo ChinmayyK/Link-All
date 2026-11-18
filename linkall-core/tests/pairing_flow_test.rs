@@ -514,3 +514,33 @@ async fn cancel_crossing_an_accept_pairs_neither_side() {
         "A cancelled, so no pairing"
     );
 }
+
+/// A device that can't be dialled ends the request as unreachable, well
+/// before the minute a request waits for an answer: "no answer" after a
+/// full minute blamed the other device's user for a network problem.
+#[tokio::test]
+async fn pairing_with_a_device_that_cannot_be_dialled_ends_as_unreachable() {
+    let tmp = TempDir::new().unwrap();
+    let (a, _b) = start_pair(&tmp, false, false).await;
+    // A port nothing listens on: bound, then released.
+    let dead_port = {
+        let socket = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        socket.local_addr().unwrap().port()
+    };
+    let ghost = Uuid::new_v4();
+    a.engine
+        .report_discovered_peer(ghost, "Ghost".into(), "127.0.0.1".into(), dead_port)
+        .await
+        .unwrap();
+
+    a.engine.send_pairing_request(ghost).await;
+    assert!(peer(&a, ghost).await.outgoing_pairing_waiting);
+
+    common::eventually_within(
+        Duration::from_secs(45),
+        "the request ends as unreachable",
+        async || peer(&a, ghost).await.pairing_outcome == Some(PairingOutcome::Unreachable),
+    )
+    .await;
+    assert!(!peer(&a, ghost).await.outgoing_pairing_waiting);
+}

@@ -110,7 +110,7 @@ async fn setup_pair(
 }
 
 /// Loopback throughput benchmark for file transfer. Ignored by default;
-/// run with `cargo test --release --test transfer_bench -- --ignored --nocapture`.
+/// run with `cargo test --profile perf --test transfer_bench loopback -- --ignored --nocapture`.
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
 async fn loopback_file_transfer_throughput() {
@@ -277,4 +277,140 @@ async fn transfer_resumes_after_reconnect() {
         "the transfer finished before the disconnect was injected"
     );
     assert_eq!(std::fs::read(dest).unwrap(), data);
+}
+
+/// How fast each stage of a file transfer runs on its own, per 4 MB chunk,
+/// to show which one bounds the whole. Ignored by default; run with
+/// `cargo test --profile perf --test transfer_bench stage -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn stage_throughput() {
+    use linkall_core::crypto::EphemeralKeypair;
+    use sha2::{Digest, Sha256};
+    use std::io::{Read, Seek, SeekFrom, Write};
+    use std::time::Instant;
+
+    const CHUNK: usize = 4 * 1024 * 1024;
+    const ROUNDS: usize = 64;
+    let mut state: u64 = 0x9E3779B97F4A7C15;
+    let chunk: Vec<u8> = (0..CHUNK)
+        .map(|_| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state as u8
+        })
+        .collect();
+    let rate = |label: &str, started: Instant| {
+        let mb = (ROUNDS * CHUNK) as f64 / 1048576.0;
+        println!(
+            "{label:<28} {:>8.0} MB/s",
+            mb / started.elapsed().as_secs_f64()
+        );
+    };
+
+    let t = Instant::now();
+    let mut hasher = Sha256::new();
+    for _ in 0..ROUNDS {
+        hasher.update(&chunk);
+    }
+    std::hint::black_box(hasher.finalize());
+    rate("sha-256", t);
+
+    let (a, b) = (EphemeralKeypair::generate(), EphemeralKeypair::generate());
+    let (mut tx_key, _, _) = a.derive_session_key(b.public_bytes, true).unwrap();
+    let (mut rx_key, _, _) = b.derive_session_key(a.public_bytes, false).unwrap();
+    let mut sealed = Vec::with_capacity(ROUNDS);
+    let t = Instant::now();
+    for _ in 0..ROUNDS {
+        let mut buf = Vec::with_capacity(CHUNK + 32);
+        buf.extend_from_slice(&chunk);
+        let nonce = tx_key.encrypt_in_place(&mut buf).unwrap();
+        sealed.push((nonce, buf));
+    }
+    rate("copy + aes-gcm encrypt", t);
+
+    let t = Instant::now();
+    for (nonce, buf) in &mut sealed {
+        let nonce: [u8; 12] = nonce.as_slice().try_into().unwrap();
+        rx_key.decrypt_body_in_place(&nonce, buf).unwrap();
+    }
+    rate("aes-gcm decrypt", t);
+
+    let t = Instant::now();
+    for _ in 0..ROUNDS {
+        std::hint::black_box(lz4_flex::block::compress(&chunk[..4096]));
+    }
+    rate("lz4 sample (per chunk)", t);
+
+    let dir = TempDir::new().unwrap();
+    let path = dir.path().join("stage.bin");
+    let mut file = std::fs::File::create(&path).unwrap();
+    let t = Instant::now();
+    for _ in 0..ROUNDS {
+        file.write_all(&chunk).unwrap();
+    }
+    rate("file write (page cache)", t);
+    let t2 = Instant::now();
+    file.sync_all().unwrap();
+    println!(
+        "{:<28} {:>8.0} ms",
+        "fsync of it all",
+        t2.elapsed().as_millis()
+    );
+
+    let mut file = std::fs::File::open(&path).unwrap();
+    file.seek(SeekFrom::Start(0)).unwrap();
+    let mut buf = vec![0u8; CHUNK];
+    let t = Instant::now();
+    for _ in 0..ROUNDS {
+        file.read_exact(&mut buf).unwrap();
+    }
+    rate("file read (page cache)", t);
+}
+
+/// How long a folder of many small files takes: the per-file cost (announce,
+/// accept, create, verify, rename), not the bytes. Ignored by default; run
+/// with `cargo test --profile perf --test transfer_bench folder -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+#[ignore]
+async fn folder_of_small_files_throughput() {
+    let (engine_a, _dev_a, mut rx_a, _engine_b, dev_b, mut rx_b, tmp) = setup_pair(true).await;
+    let files: usize = std::env::var("BENCH_FILES")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(2000);
+    let root = tmp.path().join("Photos");
+    for i in 0..files {
+        let dir = root.join(format!("album {}", i % 20));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(format!("img_{i}.jpg")),
+            vec![(i % 251) as u8; 20_000],
+        )
+        .unwrap();
+    }
+    tokio::spawn(async move { while rx_a.recv().await.is_some() {} });
+
+    let t0 = std::time::Instant::now();
+    engine_a.send_folder(root, Some(dev_b)).await.unwrap();
+    loop {
+        match tokio::time::timeout(Duration::from_secs(300), rx_b.recv()).await {
+            Ok(Some(EngineEvent::FolderTransferComplete {
+                file_count,
+                failed_count,
+                ..
+            })) => {
+                assert_eq!((file_count as usize, failed_count), (files, 0));
+                break;
+            }
+            Ok(Some(_)) => {}
+            other => panic!("no folder result: {:?}", other.map(|o| o.is_some())),
+        }
+    }
+    let el = t0.elapsed();
+    println!(
+        "{files} files of 20 KB in {el:?} = {:.0} files/s",
+        files as f64 / el.as_secs_f64()
+    );
 }

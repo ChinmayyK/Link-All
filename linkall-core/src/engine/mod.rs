@@ -67,7 +67,6 @@ mod walk_away;
 use connection::*;
 pub use drop_folder::drop_folder_path;
 pub use edge_ops::EdgeEvent;
-pub(crate) use file_ops::*;
 pub use folder_ops::{FolderItem, FolderProgress, FolderSend};
 pub use health::HealthIssue;
 use listener::*;
@@ -155,6 +154,21 @@ impl Engine {
         for notice in crate::settings::take_aside_notices() {
             let _ = event_tx.try_send(EngineEvent::Warning(notice));
         }
+        // Looked up now, in the background, so the first handshake has it.
+        if !cfg!(target_os = "android") {
+            crate::wol::cached_local_mac();
+        }
+
+        // Reads the records of transfers an earlier run left unfinished.
+        let file_transfers = FileTransferManager::with_resume_dir(
+            config
+                .file_save_dir
+                .clone()
+                .unwrap_or_else(default_save_dir),
+            config.data_dir.join("resume"),
+        );
+        let resumable_partials = file_transfers.resumable_partials();
+
         let shared = EngineShared {
             config: config.clone(),
             trust,
@@ -175,12 +189,7 @@ impl Engine {
             ))),
             activity: Arc::new(Mutex::new(ActivityFeed::new(200))),
             folders: Arc::default(),
-            file_transfers: Arc::new(Mutex::new(FileTransferManager::new(
-                config
-                    .file_save_dir
-                    .clone()
-                    .unwrap_or_else(default_save_dir),
-            ))),
+            file_transfers: Arc::new(Mutex::new(file_transfers)),
             speed_tests: Arc::new(Mutex::new(std::collections::HashMap::new())),
             apply_policy: Arc::new(Mutex::new(ClipboardApplyPolicy::default())),
             settings: Arc::new(std::sync::Mutex::new(Settings::default())),
@@ -223,7 +232,7 @@ impl Engine {
             host_event_tx,
         );
 
-        // Nothing can resume a partial download from before this start.
+        // Partial downloads from before this start that nothing can resume.
         let save_dir = config
             .file_save_dir
             .clone()
@@ -232,6 +241,7 @@ impl Engine {
             let removed = crate::file_transfer::remove_orphaned_partials(
                 &save_dir,
                 std::time::Duration::from_secs(3600),
+                &resumable_partials,
             );
             if removed > 0 {
                 info!(removed, dir = %save_dir.display(), "removed unfinished downloads from earlier runs");

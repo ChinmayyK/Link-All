@@ -525,6 +525,9 @@ async fn input(ctx: &InboundCtx, run: impl FnOnce() -> Result<(), String> + Send
             "Remote control is off on this computer. Turn it on in Link All's settings."
                 .to_string(),
         )
+    } else if !crate::remote_input::input_permitted() {
+        // The phone's trackpad and keys would do nothing, with no error.
+        Some(crate::remote_input::NOT_PERMITTED.to_string())
     } else {
         match tokio::task::spawn_blocking(run).await {
             Ok(Ok(())) => None,

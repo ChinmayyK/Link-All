@@ -264,6 +264,7 @@ struct ManagedDevice: Identifiable {
         switch pairingOutcome {
         case "declined": return "Declined · try again"
         case "expired": return "No answer · try again"
+        case "unreachable": return "Couldn't reach it · same Wi-Fi?"
         case "cancelled": return "Request withdrawn"
         case "update_needed": return "Update Link All on it, then try again"
         default: return nil

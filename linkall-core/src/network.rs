@@ -24,40 +24,104 @@ use tokio::net::{TcpListener, TcpStream};
 use tracing::{debug, info, warn};
 use uuid::Uuid;
 
-static BUFFER_POOL: std::sync::OnceLock<std::sync::Mutex<Vec<Vec<u8>>>> =
-    std::sync::OnceLock::new();
+/// Buffers for frames and file chunks, reused so a transfer doesn't
+/// allocate 4 MB per chunk.
+struct BufferPool {
+    buffers: Vec<Vec<u8>>,
+    /// When a large buffer was last asked for: a transfer is running.
+    last_large: Option<std::time::Instant>,
+}
 
-pub fn get_buffer(capacity: usize) -> Vec<u8> {
-    let mut pool = BUFFER_POOL
-        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
-        .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    if let Some(mut buf) = pool.pop() {
-        if buf.capacity() < capacity {
-            buf.reserve(capacity - buf.capacity());
+/// Room left after a buffer's contents for an AEAD tag, so encrypting a
+/// full buffer in place never reallocates (and copies) it.
+const BUFFER_TAG_ROOM: usize = 32;
+/// The most buffers kept. Chunk buffers are 4 MB, so a bigger pool keeps a
+/// lot of memory pinned during a transfer.
+const POOLED_BUFFERS: usize = 16;
+/// From this size a buffer is a file chunk's (or an image's), not a message's.
+const LARGE_BUFFER: usize = 256 * 1024;
+/// How long after the last large request the large buffers are kept. The
+/// pool held up to 16 of them (64 MB, more after big images) for as long as
+/// the app ran once a single file had gone through, which a phone notices.
+const LARGE_BUFFER_IDLE: Duration = Duration::from_secs(30);
+
+impl BufferPool {
+    const fn new() -> Self {
+        Self {
+            buffers: Vec::new(),
+            last_large: None,
         }
-        buf.resize(capacity, 0);
+    }
+
+    fn get(&mut self, len: usize, now: std::time::Instant) -> Vec<u8> {
+        if len >= LARGE_BUFFER {
+            self.last_large = Some(now);
+        }
+        let mut buf = self.buffers.pop().unwrap_or_default();
+        if buf.capacity() < len + BUFFER_TAG_ROOM {
+            // Nothing in it is worth copying to the new allocation.
+            buf.clear();
+            buf.reserve_exact(len + BUFFER_TAG_ROOM);
+        }
+        buf.resize(len, 0);
         buf
-    } else {
-        vec![0u8; capacity]
+    }
+
+    fn put(&mut self, buf: Vec<u8>, now: std::time::Instant) {
+        self.trim_idle(now);
+        // Don't pool huge ones (e.g., > MAX_FRAME_SIZE).
+        if buf.capacity() == 0 || buf.capacity() > MAX_FRAME_SIZE as usize {
+            return;
+        }
+        if buf.capacity() >= LARGE_BUFFER && !self.transfer_running(now) {
+            return;
+        }
+        if self.buffers.len() < POOLED_BUFFERS {
+            self.buffers.push(buf);
+        }
+    }
+
+    fn transfer_running(&self, now: std::time::Instant) -> bool {
+        self.last_large
+            .is_some_and(|at| now.saturating_duration_since(at) < LARGE_BUFFER_IDLE)
+    }
+
+    /// Frees the large buffers once no transfer has needed one for a while.
+    fn trim_idle(&mut self, now: std::time::Instant) {
+        if self.last_large.is_some() && !self.transfer_running(now) {
+            self.last_large = None;
+            self.buffers.retain(|b| b.capacity() < LARGE_BUFFER);
+        }
     }
 }
 
-pub fn return_buffer(mut buf: Vec<u8>) {
-    // Only pool up to 16 buffers, and don't pool huge ones (e.g., > MAX_FRAME_SIZE).
-    // Chunk buffers are 4 MB, so a bigger pool keeps a lot of memory pinned
-    // after a transfer.
-    if buf.capacity() > MAX_FRAME_SIZE as usize {
-        return;
-    }
-    let mut pool = BUFFER_POOL
-        .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
+static BUFFER_POOL: std::sync::Mutex<BufferPool> = std::sync::Mutex::new(BufferPool::new());
+
+/// A buffer of `len` bytes from the pool. Its contents are whatever the last
+/// user left: every caller overwrites all of it (a socket or file read, or a
+/// frame it builds), and zeroing 4 MB per file chunk first was wasted work.
+pub fn get_buffer(len: usize) -> Vec<u8> {
+    BUFFER_POOL
         .lock()
-        .unwrap_or_else(|e| e.into_inner());
-    if pool.len() < 16 {
-        buf.clear();
-        pool.push(buf);
-    }
+        .unwrap_or_else(|e| e.into_inner())
+        .get(len, std::time::Instant::now())
+}
+
+pub fn return_buffer(buf: Vec<u8>) {
+    BUFFER_POOL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .put(buf, std::time::Instant::now());
+}
+
+/// Frees the pool's large buffers if no transfer has run for a while. Any
+/// message does this as it returns its buffer; this is for an engine with no
+/// traffic at all.
+pub fn trim_idle_buffers() {
+    BUFFER_POOL
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .trim_idle(std::time::Instant::now());
 }
 
 const MAX_FRAME_SIZE: u32 = 40 * 1024 * 1024; // 40 MB limit for safety (to accommodate 32MB images)
@@ -122,6 +186,48 @@ pub fn optimize_stream(stream: &TcpStream, label: &'static str) {
     if let Err(err) = apply_keepalive(stream) {
         debug!(error = %err, %label, "TCP keepalive unavailable");
     }
+
+    if let Err(err) = apply_unsent_limit(stream) {
+        debug!(error = %err, %label, "unsent-data limit unavailable");
+    }
+}
+
+/// The most file data the system may hold that it has not yet put on the
+/// wire. The send buffer is 16 MB so a fast link stays busy, but a write
+/// "succeeds" as soon as its bytes are in that buffer: 16 MB of file could
+/// sit ahead of a clipboard or a mouse move (half a second on good Wi-Fi,
+/// far longer on a slow link). With this limit a write only goes ahead once
+/// little is waiting, so what is sent next follows closely. Data on the wire
+/// but not yet acknowledged does not count, so a fast link is not slowed.
+const UNSENT_LIMIT: u32 = 256 * 1024;
+
+/// Sets `UNSENT_LIMIT` (TCP_NOTSENT_LOWAT). Linux, Android and Apple
+/// systems have it; Windows does not.
+fn apply_unsent_limit(stream: &TcpStream) -> Result<()> {
+    #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+    {
+        use std::os::fd::AsRawFd;
+        #[cfg(target_vendor = "apple")]
+        const TCP_NOTSENT_LOWAT: libc::c_int = 0x201;
+        #[cfg(not(target_vendor = "apple"))]
+        const TCP_NOTSENT_LOWAT: libc::c_int = libc::TCP_NOTSENT_LOWAT;
+        let limit = UNSENT_LIMIT as libc::c_int;
+        let ret = unsafe {
+            libc::setsockopt(
+                stream.as_raw_fd(),
+                libc::IPPROTO_TCP,
+                TCP_NOTSENT_LOWAT,
+                &limit as *const libc::c_int as *const libc::c_void,
+                std::mem::size_of::<libc::c_int>() as libc::socklen_t,
+            )
+        };
+        if ret != 0 {
+            return Err(std::io::Error::last_os_error()).context("setting TCP_NOTSENT_LOWAT");
+        }
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+    let _ = stream;
+    Ok(())
 }
 
 fn apply_socket_buffers(stream: &TcpStream) -> Result<()> {
@@ -254,39 +360,7 @@ async fn send_encrypted(
     session: &mut SessionKey,
     msg: &mut AppMessage,
 ) -> Result<()> {
-    let payload = msg.take_raw_payload();
-
-    let serialized = postcard::to_allocvec(msg).context("serializing AppMessage")?;
-    let serialized_len = serialized.len();
-
-    let mut buffer = get_buffer(16 + serialized_len + 16); // Header (16) + body + tag (16)
-    buffer[16..16 + serialized_len].copy_from_slice(&serialized);
-
-    let (nonce, tag) = session.encrypt_slice_in_place(&mut buffer[16..16 + serialized_len])?;
-    buffer[16 + serialized_len..16 + serialized_len + 16].copy_from_slice(&tag);
-    let total_ct_len = serialized_len + 16;
-    let len = (12 + total_ct_len) as u32;
-
-    buffer[0..4].copy_from_slice(&len.to_le_bytes());
-    buffer[4..16].copy_from_slice(&nonce);
-
-    use bytes::Buf;
-    if let Some(mut p) = payload {
-        let p_nonce = session
-            .encrypt_in_place(&mut p)
-            .context("encrypting payload")?;
-        let p_len = (12 + p.len()) as u32;
-        let p_len_bytes = p_len.to_le_bytes();
-        let mut chained = Buf::chain(&buffer[..16 + total_ct_len], &p_len_bytes[..])
-            .chain(&p_nonce[..])
-            .chain(&p[..]);
-        stream.write_all_buf(&mut chained).await?;
-        return_buffer(p);
-    } else {
-        stream.write_all(&buffer[..16 + total_ct_len]).await?;
-    }
-    return_buffer(buffer);
-
+    send_encrypted_no_flush(stream, session, msg).await?;
     stream.flush().await?;
     Ok(())
 }
@@ -335,6 +409,56 @@ async fn send_encrypted_no_flush(
     Ok(())
 }
 
+/// A frame arrived whole and decrypted, but holds a message this build
+/// can't read: one a newer Link All added. The stream is still in step
+/// (every frame is sealed on its own), so the reader skips it and goes on.
+/// Treating it as fatal made every new message disconnect older devices.
+#[derive(Debug)]
+pub struct UnknownMessage;
+
+impl std::fmt::Display for UnknownMessage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("message from a newer Link All that this one can't read")
+    }
+}
+
+impl std::error::Error for UnknownMessage {}
+
+/// How long the rest of a frame may take once its first bytes are in.
+const FRAME_BODY_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// Reads one sealed frame's nonce and body (`len` bytes together) and
+/// decrypts the body into a pooled buffer.
+async fn read_sealed(
+    stream: &mut (impl AsyncReadExt + Unpin),
+    session: &mut SessionKey,
+    len: u32,
+) -> Result<Vec<u8>> {
+    anyhow::ensure!(
+        (12 + 16..=MAX_FRAME_SIZE).contains(&len),
+        "encrypted frame length invalid: {len}"
+    );
+    let mut nonce = [0u8; 12];
+    let mut body = get_buffer(len as usize - 12);
+    let read = tokio::time::timeout(FRAME_BODY_TIMEOUT, async {
+        stream.read_exact(&mut nonce).await?;
+        stream.read_exact(&mut body).await
+    })
+    .await;
+    let res = match read {
+        Ok(Ok(_)) => session.decrypt_body_in_place(&nonce, &mut body),
+        Ok(Err(e)) => Err(anyhow::Error::new(e).context("reading encrypted frame body")),
+        Err(_) => Err(anyhow::anyhow!("timeout waiting for encrypted frame body")),
+    };
+    match res {
+        Ok(()) => Ok(body),
+        Err(e) => {
+            return_buffer(body);
+            Err(e)
+        }
+    }
+}
+
 async fn recv_encrypted(
     stream: &mut (impl AsyncReadExt + Unpin),
     session: &mut SessionKey,
@@ -349,68 +473,25 @@ async fn recv_encrypted(
         .await
         .context("reading encrypted frame length")?;
 
-    let len = u32::from_le_bytes(len_buf);
-    anyhow::ensure!(
-        (16..=MAX_FRAME_SIZE).contains(&len),
-        "encrypted frame length invalid: {len}"
-    );
-
-    let mut cipher_buffer = get_buffer(len as usize);
-    tokio::time::timeout(
-        Duration::from_secs(30),
-        stream.read_exact(&mut cipher_buffer),
-    )
-    .await
-    .context("timeout waiting for encrypted frame body")?
-    .context("reading encrypted frame body")?;
-
-    let decrypt_res = session.decrypt_in_place(&mut cipher_buffer);
-    if let Err(e) = decrypt_res {
-        return_buffer(cipher_buffer);
-        return Err(e).context("decrypting");
-    }
-    let msg_res: Result<AppMessage, _> = postcard::from_bytes(&cipher_buffer);
-    return_buffer(cipher_buffer); // Return metadata buffer immediately
-    let mut msg = msg_res.context("deserializing AppMessage")?;
+    let plain = read_sealed(stream, session, u32::from_le_bytes(len_buf)).await?;
+    let msg_res: Result<AppMessage, _> = postcard::from_bytes(&plain);
+    return_buffer(plain); // Return metadata buffer immediately
+    let mut msg = msg_res.map_err(|e| {
+        tracing::debug!(error = %e, "received a message this build can't read");
+        anyhow::Error::new(UnknownMessage)
+    })?;
 
     if msg.expects_raw_payload() {
         let mut p_len_buf = [0u8; 4];
-        tokio::time::timeout(Duration::from_secs(30), stream.read_exact(&mut p_len_buf))
+        tokio::time::timeout(FRAME_BODY_TIMEOUT, stream.read_exact(&mut p_len_buf))
             .await
             .context("timeout waiting for payload frame length")?
             .context("reading payload frame length")?;
 
-        let p_len = u32::from_le_bytes(p_len_buf);
-        anyhow::ensure!(
-            (16..=MAX_FRAME_SIZE).contains(&p_len),
-            "payload frame length invalid: {p_len}"
-        );
-
-        let mut p_cipher_buffer = get_buffer(p_len as usize);
-        let read_res = tokio::time::timeout(
-            Duration::from_secs(30),
-            stream.read_exact(&mut p_cipher_buffer),
-        )
-        .await;
-        match read_res {
-            Ok(Ok(_)) => {}
-            Ok(Err(e)) => {
-                return_buffer(p_cipher_buffer);
-                return Err(e).context("reading payload frame body");
-            }
-            Err(elapsed) => {
-                return_buffer(p_cipher_buffer);
-                return Err(anyhow::anyhow!(
-                    "timeout waiting for payload frame body: {elapsed}"
-                ));
-            }
-        }
-
-        if let Err(e) = session.decrypt_in_place(&mut p_cipher_buffer) {
-            return_buffer(p_cipher_buffer);
-            return Err(e).context("decrypting payload");
-        }
-        msg.set_raw_payload(p_cipher_buffer);
+        let payload = read_sealed(stream, session, u32::from_le_bytes(p_len_buf))
+            .await
+            .context("receiving payload frame")?;
+        msg.set_raw_payload(payload);
     }
 
     Ok(msg)
@@ -439,6 +520,8 @@ pub struct HandshakeResult {
     pub peer_clipboard_at: Option<u64>,
     /// The peer's network card address, when it is a computer that said so.
     pub peer_mac: Option<String>,
+    /// The peer reads `AppMessage::FileChunkPart`.
+    pub peer_chunk_parts: bool,
 }
 
 /// The OS this build runs on, as peers show it.
@@ -463,11 +546,12 @@ pub struct Announce {
     pub clipboard_at: Option<u64>,
 }
 
-fn my_metadata_json(
+async fn my_metadata_json(
     device_name: &str,
     is_manual_reconnect: bool,
     announce: Announce,
 ) -> Option<String> {
+    let mac_address = own_mac().await;
     serde_json::to_string(&crate::protocol::DeviceMetadata {
         device_name: device_name.to_string(),
         app_version: crate::protocol::APP_VERSION.to_string(),
@@ -476,7 +560,8 @@ fn my_metadata_json(
         listen_port: announce.listen_port,
         background_restricted: announce.background_restricted,
         clipboard_at: announce.clipboard_at,
-        mac_address: own_mac(),
+        mac_address,
+        chunk_parts: Some(true),
         ..Default::default()
     })
     .ok()
@@ -484,11 +569,13 @@ fn my_metadata_json(
 
 /// Our network card's address for a computer's peers, who may wake us with
 /// it. A phone has nothing to wake, and its address is not readable anyway.
-fn own_mac() -> Option<String> {
+/// Known at once except just after the app starts, when it is waited for
+/// briefly: well inside the 5 s the other side allows each handshake step.
+async fn own_mac() -> Option<String> {
     if cfg!(target_os = "android") {
         None
     } else {
-        crate::wol::local_mac()
+        crate::wol::local_mac_within(Duration::from_secs(2)).await
     }
 }
 
@@ -547,7 +634,7 @@ pub async fn handshake_initiator(
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ack_ecdh.ecdh_pubkey, &session_salt);
 
-    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect, announce);
+    let metadata_json = my_metadata_json(my_device_name, is_manual_reconnect, announce).await;
 
     let mut hello = AppMessage::Hello {
         device_id: my_device_id,
@@ -630,6 +717,7 @@ pub async fn handshake_initiator(
         peer_background_restricted: ack_metadata.background_restricted,
         peer_clipboard_at: ack_metadata.clipboard_at,
         peer_mac: ack_metadata.mac_address,
+        peer_chunk_parts: ack_metadata.chunk_parts.unwrap_or(false),
     })
 }
 
@@ -711,6 +799,16 @@ where
         .unwrap_or_else(|e| e.into_inner())
         .compute_proof(&ecdh.ecdh_pubkey, &session_salt);
 
+    let ack_metadata_json = my_metadata_json(
+        &my_device_name,
+        false,
+        Announce {
+            listen_port: None,
+            ..announce
+        },
+    )
+    .await;
+
     let mut ack = AppMessage::HelloAck {
         device_id: my_device_id,
         device_name: name_to_send,
@@ -721,14 +819,7 @@ where
         nonce_response,
         identity_proof,
         trusted: peer_is_trusted,
-        metadata_json: my_metadata_json(
-            &my_device_name,
-            false,
-            Announce {
-                listen_port: None,
-                ..announce
-            },
-        ),
+        metadata_json: ack_metadata_json,
     };
 
     send_encrypted(stream, &mut session, &mut ack)
@@ -749,6 +840,7 @@ where
         peer_background_restricted: peer_metadata.background_restricted,
         peer_clipboard_at: peer_metadata.clipboard_at,
         peer_mac: peer_metadata.mac_address,
+        peer_chunk_parts: peer_metadata.chunk_parts.unwrap_or(false),
     })
 }
 
@@ -933,6 +1025,77 @@ impl PeerSessionTx {
             .context("flush to peer timed out")?
             .context("flushing stream")
     }
+
+    /// Waits until the socket holds less than `UNSENT_LIMIT` of unsent data,
+    /// so the next piece sent goes into the queue right after it. Fails if
+    /// the unsent queue shrinks by less than `min_bytes` over `window`:
+    /// the link is gone. A write would notice that only once the whole send
+    /// buffer had filled, and waiting here would hide it from the caller.
+    pub async fn wait_until_little_unsent(
+        &self,
+        window: Duration,
+        min_bytes: u64,
+    ) -> std::result::Result<(), String> {
+        #[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+        {
+            use std::os::fd::AsRawFd;
+            let fd = self.stream.inner.as_ref().as_raw_fd();
+            let mut window_started = tokio::time::Instant::now();
+            let mut queued_then = queued_bytes(fd);
+            loop {
+                // With TCP_NOTSENT_LOWAT set, the socket only reports
+                // writable while less than the limit is unsent.
+                let mut poll = libc::pollfd {
+                    fd,
+                    events: libc::POLLOUT,
+                    revents: 0,
+                };
+                if unsafe { libc::poll(&mut poll, 1, 0) } != 0 {
+                    return Ok(());
+                }
+                if window_started.elapsed() >= window {
+                    let (Some(then), Some(now)) = (queued_then, queued_bytes(fd)) else {
+                        // Can't tell: let the write and its own check decide.
+                        return Ok(());
+                    };
+                    if then.saturating_sub(now) < min_bytes {
+                        return Err(format!("write stalled for {} s", window.as_secs()));
+                    }
+                    window_started = tokio::time::Instant::now();
+                    queued_then = Some(now);
+                }
+                tokio::time::sleep(Duration::from_millis(2)).await;
+            }
+        }
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_vendor = "apple")))]
+        {
+            let _ = (window, min_bytes);
+            Ok(())
+        }
+    }
+}
+
+/// Bytes in the socket's send buffer: unsent, and sent but not acknowledged.
+#[cfg(any(target_os = "linux", target_os = "android", target_vendor = "apple"))]
+fn queued_bytes(fd: std::os::fd::RawFd) -> Option<u64> {
+    let mut queued: libc::c_int = 0;
+    #[cfg(target_vendor = "apple")]
+    let ret = {
+        const SO_NWRITE: libc::c_int = 0x1024;
+        let mut len = std::mem::size_of::<libc::c_int>() as libc::socklen_t;
+        unsafe {
+            libc::getsockopt(
+                fd,
+                libc::SOL_SOCKET,
+                SO_NWRITE,
+                &mut queued as *mut libc::c_int as *mut libc::c_void,
+                &mut len,
+            )
+        }
+    };
+    #[cfg(not(target_vendor = "apple"))]
+    let ret = unsafe { libc::ioctl(fd, libc::TIOCOUTQ as _, &mut queued) };
+    (ret == 0).then_some(queued.max(0) as u64)
 }
 
 impl PeerSessionRx {
@@ -1007,6 +1170,58 @@ fn dual_stack_listener(addr: SocketAddr) -> std::io::Result<TcpListener> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn large_buffers_are_reused_during_a_transfer_and_freed_after_it() {
+        let mut pool = BufferPool::new();
+        let start = std::time::Instant::now();
+        let chunk = 4 * 1024 * 1024;
+
+        let buf = pool.get(chunk, start);
+        let address = buf.as_ptr();
+        pool.put(buf, start);
+        let again = pool.get(chunk, start + Duration::from_secs(1));
+        assert_eq!(again.as_ptr(), address, "the chunk buffer was not reused");
+        pool.put(again, start + Duration::from_secs(1));
+
+        // Small messages go on (pings); the transfer is long over.
+        let later = start + Duration::from_secs(1) + LARGE_BUFFER_IDLE;
+        let ping = pool.get(64, later);
+        pool.put(ping, later);
+        assert!(
+            pool.buffers.iter().all(|b| b.capacity() < LARGE_BUFFER),
+            "a chunk buffer is still held after the transfer"
+        );
+        // A late chunk buffer coming back with no transfer running is not kept.
+        pool.put(Vec::with_capacity(chunk), later);
+        assert!(pool.buffers.iter().all(|b| b.capacity() < LARGE_BUFFER));
+    }
+
+    #[tokio::test]
+    async fn a_message_from_a_newer_build_is_skipped_and_the_stream_stays_in_step() {
+        let (a, b) = (EphemeralKeypair::generate(), EphemeralKeypair::generate());
+        let (mut tx_key, _, _) = a.derive_session_key(b.public_bytes, true).unwrap();
+        let (mut rx_key, _, _) = b.derive_session_key(a.public_bytes, false).unwrap();
+        let (mut tx, mut rx) = tokio::io::duplex(1 << 16);
+
+        // A message kind no build has: sealed and framed like any other.
+        let unknown = postcard::to_allocvec(&9999u32).unwrap();
+        let sealed = tx_key.encrypt(&unknown).unwrap();
+        tx.write_all(&(sealed.len() as u32).to_le_bytes())
+            .await
+            .unwrap();
+        tx.write_all(&sealed).await.unwrap();
+        send_encrypted(&mut tx, &mut tx_key, &mut AppMessage::Bye)
+            .await
+            .unwrap();
+
+        let err = recv_encrypted(&mut rx, &mut rx_key).await.unwrap_err();
+        assert!(err.is::<UnknownMessage>(), "{err:#}");
+        assert!(matches!(
+            recv_encrypted(&mut rx, &mut rx_key).await.unwrap(),
+            AppMessage::Bye
+        ));
+    }
 
     /// The engine listens on [::]. Devices dial it over IPv4 as well, which
     /// Windows refused while the socket was left IPv6-only.
@@ -1227,10 +1442,7 @@ mod buffer_pool_poison_tests {
     #[test]
     fn pool_survives_a_panic_while_locked() {
         let _ = std::thread::spawn(|| {
-            let _guard = BUFFER_POOL
-                .get_or_init(|| std::sync::Mutex::new(Vec::with_capacity(64)))
-                .lock()
-                .unwrap();
+            let _guard = BUFFER_POOL.lock().unwrap();
             panic!("poison the pool");
         })
         .join();

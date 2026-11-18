@@ -45,6 +45,7 @@ pub fn pairing_outcome(p: &Value) -> Option<&'static str> {
     match p["pairing_outcome"].as_str()? {
         "declined" => Some("Declined, try again"),
         "expired" => Some("No answer, try again"),
+        "unreachable" => Some("Couldn't reach it, same Wi-Fi?"),
         "cancelled" => Some("Request withdrawn"),
         "update_needed" => Some("Update Link All on it, then try again"),
         _ => None,

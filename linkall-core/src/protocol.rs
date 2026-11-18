@@ -218,6 +218,10 @@ pub struct DeviceMetadata {
     /// device can wake it with Wake-on-LAN when it sleeps. Not sent by phones.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mac_address: Option<String>,
+    /// This build reads `AppMessage::FileChunkPart`. Said here, not judged
+    /// from the version, so the feature and the version number stay apart.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chunk_parts: Option<bool>,
 }
 
 // ── File transfer metadata ────────────────────────────────────────────────────
@@ -713,12 +717,31 @@ pub enum AppMessage {
         scancode: u16,
         down: bool,
     },
+    /// A piece of a `FileChunk`, sent in its place to a peer that said it
+    /// reads these (`DeviceMetadata::chunk_parts`). A 4 MB chunk goes out as
+    /// one frame, and nothing else can be sent until all of it has: on a slow
+    /// link a clipboard or a key press waited many seconds behind it. Parts
+    /// are small, and waiting messages go between them. `part` counts from 0
+    /// within the chunk; `last` ends it. The receiver puts the pieces back
+    /// together and handles the chunk as if it had come whole.
+    FileChunkPart {
+        transfer_id: [u8; 16],
+        chunk_index: u32,
+        total_chunks: u32,
+        compressed: bool,
+        part: u16,
+        last: bool,
+        #[serde(skip)]
+        data: Vec<u8>,
+    },
 }
 
 impl AppMessage {
     pub fn take_raw_payload(&mut self) -> Option<Vec<u8>> {
         match self {
-            AppMessage::FileChunk { data, .. } => Some(std::mem::take(data)),
+            AppMessage::FileChunk { data, .. } | AppMessage::FileChunkPart { data, .. } => {
+                Some(std::mem::take(data))
+            }
             AppMessage::ClipboardPush { content, .. } => {
                 if let Some(c) = std::sync::Arc::get_mut(content) {
                     match c {
@@ -741,9 +764,45 @@ impl AppMessage {
         }
     }
 
+    /// The first app version (major, minor) that knows this message; None
+    /// for the ones every 2.x build has. A build drops its connection on a
+    /// message it can't read (up to 2.1.0), so a newer message must never be
+    /// sent to an older peer: 2.1.0 sent its notes and what was playing to
+    /// every device as it connected, and a 2.0 device disconnected each time.
+    /// A new message goes on this list with the version that introduces it,
+    /// unless, like `FileChunkPart`, it is only sent to a peer whose
+    /// handshake said it reads it.
+    pub fn min_app_version(&self) -> Option<(u32, u32)> {
+        use AppMessage as M;
+        match self {
+            M::RemoteControl { .. }
+            | M::RemoteControlAck { .. }
+            | M::FindDevice { .. }
+            | M::FindDeviceAck { .. }
+            | M::RemotePointerMove { .. }
+            | M::RemotePointerButton { .. }
+            | M::RemotePointerScroll { .. }
+            | M::RemoteTypeText { .. }
+            | M::RemoteKeyPress { .. }
+            | M::DialNumber { .. }
+            | M::ScratchpadNote { .. }
+            | M::CaptureRequest { .. }
+            | M::RemoteShortcut { .. }
+            | M::RemoteModifier { .. }
+            | M::NowPlaying { .. }
+            | M::MediaCommand { .. }
+            | M::EdgeEnter { .. }
+            | M::EdgeReply { .. }
+            | M::EdgeLeave { .. }
+            | M::EdgeEnd
+            | M::RemoteKeyEvent { .. } => Some((2, 1)),
+            _ => None,
+        }
+    }
+
     pub fn expects_raw_payload(&self) -> bool {
         match self {
-            AppMessage::FileChunk { .. } => true,
+            AppMessage::FileChunk { .. } | AppMessage::FileChunkPart { .. } => true,
             AppMessage::ClipboardPush { content, .. } => matches!(
                 **content,
                 ClipboardContent::Image { .. } | ClipboardContent::File { .. }
@@ -756,7 +815,9 @@ impl AppMessage {
 
     pub fn set_raw_payload(&mut self, payload: Vec<u8>) {
         match self {
-            AppMessage::FileChunk { data, .. } => *data = payload,
+            AppMessage::FileChunk { data, .. } | AppMessage::FileChunkPart { data, .. } => {
+                *data = payload
+            }
             AppMessage::ClipboardPush { content, .. } => {
                 if let Some(c) = std::sync::Arc::get_mut(content) {
                     match c {

@@ -324,103 +324,13 @@ impl Engine {
                     .peer_manager
                     .file_sender(peer_id)
                     .unwrap_or(tx.clone());
-                let bg_shared = self.shared.clone();
-                let bg_event_tx = self.shared.event_tx.clone();
-                let bg_transfer_id = transfer_id;
-                let bg_peer_id = peer_id;
-                let mut bg_last_prog_emit: std::collections::HashMap<[u8; 16], std::time::Instant> =
-                    std::collections::HashMap::new();
-                tokio::spawn(async move {
-                    const BATCH_SIZE: usize = 4;
-                    'outer: loop {
-                        let (next_chunk, _last_acked, total_chunks, is_paused): (
-                            u32,
-                            u32,
-                            u32,
-                            bool,
-                        ) = {
-                            let mut mgr = bg_shared.file_transfers.lock().await;
-                            if let Some(t) = mgr.get_outbound_mut(&bg_transfer_id) {
-                                (
-                                    t.next_chunk,
-                                    t.last_acked_chunk.unwrap_or(0),
-                                    t.total_chunks,
-                                    t.paused,
-                                )
-                            } else {
-                                break 'outer;
-                            }
-                        };
-                        if is_paused || next_chunk >= total_chunks {
-                            break 'outer;
-                        }
-
-                        let (batch, progs) = match read_outbound_chunks(
-                            bg_shared.clone(),
-                            bg_transfer_id,
-                            BATCH_SIZE,
-                            bg_send_run,
-                        )
-                        .await
-                        {
-                            Some((batch, progs)) => (batch, progs),
-                            None => break 'outer,
-                        };
-
-                        if let Some((prog, fname)) = progs.last() {
-                            let now = std::time::Instant::now();
-                            let should_emit = match bg_last_prog_emit.get(&bg_transfer_id) {
-                                None => true,
-                                Some(&last) => {
-                                    now.duration_since(last).as_millis() >= 100
-                                        || prog.percent == 100
-                                }
-                            };
-                            if should_emit {
-                                bg_last_prog_emit.insert(bg_transfer_id, now);
-                                let _ = bg_event_tx.try_send(EngineEvent::FileTransferProgress {
-                                    transfer_id: bg_transfer_id,
-                                    from_device: bg_peer_id,
-                                    file_name: fname.clone(),
-                                    percent: prog.percent,
-                                    bytes_received: prog.bytes_received,
-                                    total_bytes: prog.total_bytes,
-                                    speed_bps: prog.speed_bps,
-                                    eta_secs: prog.eta_secs,
-                                    outbound: true,
-                                });
-                            }
-                        }
-
-                        if batch.is_empty() {
-                            break;
-                        }
-                        for wire_msg in batch {
-                            if bg_outbox.send(wire_msg).await.is_err() {
-                                break 'outer;
-                            }
-                        }
-                    }
-
-                    let final_checksum = {
-                        let mut mgr = bg_shared.file_transfers.lock().await;
-                        mgr.get_outbound_mut(&bg_transfer_id).and_then(|transfer| {
-                            if transfer.is_all_sent() {
-                                Some(transfer.finalize_checksum())
-                            } else {
-                                None
-                            }
-                        })
-                    };
-                    if let Some(sha256_checksum) = final_checksum {
-                        let _ = bg_outbox
-                            .send(AppMessage::FileTransferComplete {
-                                transfer_id: bg_transfer_id,
-                                sha256_checksum,
-                            })
-                            .await;
-                    }
-                });
+                super::file_ops::spawn_send_loop(
+                    self.shared.clone(),
+                    transfer_id,
+                    peer_id,
+                    bg_outbox,
+                    bg_send_run,
+                );
             }
         }
 

@@ -396,6 +396,7 @@ impl Engine {
             interval.tick().await; // skip the first immediate tick
             loop {
                 interval.tick().await;
+                crate::network::trim_idle_buffers();
                 peer_manager.prune_stale_peers();
 
                 // Also prune stale trust records (Untrusted/Rejected not seen in 7 days)

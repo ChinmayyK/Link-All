@@ -215,6 +215,9 @@ pub(super) async fn handle_incoming(
         hs.peer_background_restricted,
         hs.peer_mac,
     );
+    shared
+        .peer_manager
+        .set_chunk_parts(hs.peer_device_id, hs.peer_chunk_parts);
 
     register_session(
         shared,
@@ -546,6 +549,9 @@ pub(super) async fn connect_once(
         hs.peer_background_restricted,
         hs.peer_mac,
     );
+    shared
+        .peer_manager
+        .set_chunk_parts(hs.peer_device_id, hs.peer_chunk_parts);
 
     let answered_by = hs.peer_device_id;
     register_session(

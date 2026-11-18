@@ -20,6 +20,15 @@ codegen-units = 1
 strip = true
 panic = "abort"
 
+# For tests that need release speed (the transfer benchmarks):
+# `cargo test --profile perf`. With `--release`, cargo builds linkall-core
+# twice, with panic=abort for the daemon and unwinding for the tests, into
+# the same file name (a cdylib's has no hash), and now and then the daemon
+# was linked against the wrong one and failed on undefined symbols.
+[profile.perf]
+inherits = "release"
+panic = "unwind"
+
 [profile.bench]
 [profile.dev.package.sha2]
 opt-level = 3

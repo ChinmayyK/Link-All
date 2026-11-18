@@ -78,6 +78,69 @@ pub fn local_mac() -> Option<String> {
         .map(format_mac)
 }
 
+struct MacLookup {
+    found: Option<String>,
+    looked_at: Option<std::time::Instant>,
+    looking: bool,
+}
+
+static MAC_LOOKUP: std::sync::Mutex<MacLookup> = std::sync::Mutex::new(MacLookup {
+    found: None,
+    looked_at: None,
+    looking: false,
+});
+
+/// How long a looked-up address is used before looking again (the computer
+/// may have moved from Wi-Fi to a cable).
+const MAC_FRESH_FOR: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// `local_mac` without the wait: what the last look found, with a new look
+/// started in the background when that one is old. None until the first
+/// look finishes.
+///
+/// Every handshake sends this address. Listing the network cards took 1.6 s
+/// the first time on a Mac (it can take longer on Windows), inside a
+/// handshake whose steps time out after 5 s, on a thread the rest of the
+/// engine needed. A device that hears no address keeps the one it knew.
+pub fn cached_local_mac() -> Option<String> {
+    let mut lookup = MAC_LOOKUP.lock().unwrap_or_else(|e| e.into_inner());
+    let stale = lookup
+        .looked_at
+        .is_none_or(|at| at.elapsed() >= MAC_FRESH_FOR);
+    if stale && !lookup.looking {
+        lookup.looking = true;
+        std::thread::spawn(|| {
+            let found = local_mac();
+            let mut lookup = MAC_LOOKUP.lock().unwrap_or_else(|e| e.into_inner());
+            lookup.found = found;
+            lookup.looked_at = Some(std::time::Instant::now());
+            lookup.looking = false;
+        });
+    }
+    lookup.found.clone()
+}
+
+/// `cached_local_mac`, waiting up to `limit` for the very first look to
+/// finish. A handshake uses this: right after the app starts it would
+/// otherwise say no address, and a device meeting this computer for the
+/// first time would not learn it until the next connection. The wait holds
+/// no thread, and later calls return at once.
+pub async fn local_mac_within(limit: std::time::Duration) -> Option<String> {
+    let deadline = tokio::time::Instant::now() + limit;
+    loop {
+        let found = cached_local_mac();
+        let looked = MAC_LOOKUP
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .looked_at
+            .is_some();
+        if looked || tokio::time::Instant::now() >= deadline {
+            return found;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
 /// Where a magic packet should be sent from and to: for each IPv4 network this
 /// computer is on, that network's broadcast address, sent from that network's
 /// own address so it leaves by the right card. The limited broadcast address is

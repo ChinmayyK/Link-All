@@ -160,6 +160,10 @@ struct RetiredRecord {
     retired_at: u64,
 }
 
+/// How far "last seen" may run ahead of what is on disk. It decides when an
+/// unpaired device is forgotten (after days), so an hour is exact enough.
+const LAST_SEEN_SAVE_SECS: u64 = 60 * 60;
+
 /// How long a retired entry can come back before it is forgotten for good.
 const RETIRED_KEEP_SECS: u64 = 30 * 24 * 60 * 60;
 
@@ -336,6 +340,14 @@ impl TrustStore {
             );
         }
 
+        // A paired device reconnects many times a day (a phone waking, Wi-Fi
+        // coming back), and each time only "last seen" moves. Writing the
+        // store for that forced it to the disk inside every handshake, on a
+        // thread the engine needed; the time is only read to the day.
+        let worth_saving = record.device_name != device_name
+            || record.public_key != *public_key
+            || record.key_fingerprint != fingerprint
+            || now.saturating_sub(record.last_seen) >= LAST_SEEN_SAVE_SECS;
         record.device_name = device_name;
         record.public_key = *public_key;
         record.key_fingerprint = fingerprint;
@@ -345,7 +357,7 @@ impl TrustStore {
         // kept in memory only (capped), so a flood can neither grow trust.json nor
         // cost an fsync per handshake; a record is stored once it is trusted,
         // rejected or revoked.
-        if snapshot.state != TrustState::Untrusted {
+        if snapshot.state != TrustState::Untrusted && worth_saving {
             self.save()?;
         }
         Ok(snapshot)

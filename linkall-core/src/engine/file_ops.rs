@@ -1,5 +1,65 @@
 use super::*;
 
+/// Sends the rest of an accepted transfer to `outbox` in the background:
+/// its chunks from where it stands, then its checksum. One loop per accept
+/// or resume, each with the `send_run` it claimed; a loop a newer one has
+/// replaced stops at its next read.
+pub(crate) fn spawn_send_loop(
+    shared: crate::engine::EngineShared,
+    transfer_id: [u8; 16],
+    peer_id: uuid::Uuid,
+    outbox: tokio::sync::mpsc::Sender<AppMessage>,
+    send_run: u32,
+) {
+    const BATCH_SIZE: usize = 4;
+    tokio::spawn(async move {
+        let mut last_progress_at: Option<std::time::Instant> = None;
+        // None once nothing is left to read, or the transfer is paused,
+        // gone, or owned by a newer loop.
+        'send: while let Some((batch, progs)) =
+            read_outbound_chunks(shared.clone(), transfer_id, BATCH_SIZE, send_run).await
+        {
+            if let Some((prog, file_name)) = progs.last() {
+                let due = last_progress_at.is_none_or(|at| at.elapsed().as_millis() >= 100);
+                if due || prog.percent == 100 {
+                    last_progress_at = Some(std::time::Instant::now());
+                    let _ = shared.event_tx.try_send(EngineEvent::FileTransferProgress {
+                        transfer_id,
+                        from_device: peer_id,
+                        file_name: file_name.clone(),
+                        percent: prog.percent,
+                        bytes_received: prog.bytes_received,
+                        total_bytes: prog.total_bytes,
+                        speed_bps: prog.speed_bps,
+                        eta_secs: prog.eta_secs,
+                        outbound: true,
+                    });
+                }
+            }
+            for wire_msg in batch {
+                if outbox.send(wire_msg).await.is_err() {
+                    break 'send;
+                }
+            }
+        }
+
+        let final_checksum = {
+            let mut mgr = shared.file_transfers.lock().await;
+            mgr.get_outbound_mut(&transfer_id)
+                .filter(|transfer| transfer.is_all_sent())
+                .map(|transfer| transfer.finalize_checksum())
+        };
+        if let Some(sha256_checksum) = final_checksum {
+            let _ = outbox
+                .send(AppMessage::FileTransferComplete {
+                    transfer_id,
+                    sha256_checksum,
+                })
+                .await;
+        }
+    });
+}
+
 pub(crate) async fn read_outbound_chunks(
     shared: crate::engine::EngineShared,
     transfer_id: [u8; 16],

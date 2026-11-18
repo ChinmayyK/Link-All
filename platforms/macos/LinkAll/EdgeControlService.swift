@@ -131,9 +131,24 @@ final class EdgeControlService {
     private static let silenceLimit: TimeInterval = 1.5
     private var failures = 0
 
-    /// Why the last hand-off ended, for the app to show once.
-    private(set) var lastNote: String?
-    func takeNote() -> String? { defer { lastNote = nil }; return lastNote }
+    /// Why the last hand-off ended or didn't start. Nothing ever read this,
+    /// so the reasons (no Accessibility permission, the other computer
+    /// refused, the link dropped) were never seen: `onNote` shows them.
+    private(set) var lastNote: String? {
+        didSet {
+            guard let note = lastNote else { return }
+            // Pushing at the edge again repeats a refusal: say it once a minute.
+            let now = Date()
+            if note == shownNote, now.timeIntervalSince(shownNoteAt) < 60 { return }
+            shownNote = note
+            shownNoteAt = now
+            DispatchQueue.main.async { self.onNote?(note) }
+        }
+    }
+    private var shownNote: String?
+    private var shownNoteAt = Date.distantPast
+    /// Shows a note to the user; set once by the app at launch.
+    var onNote: ((String) -> Void)?
 
     private var enabled: Bool { UserDefaults.standard.bool(forKey: Self.enabledKey) }
     private func link(_ edge: Int) -> String? {
@@ -293,6 +308,10 @@ final class EdgeControlService {
                 }
                 self.startRemote(edge: edge)
             } catch {
+                // The pointer stopping at the edge with no reason looked
+                // like the feature was broken. Being busy is not a refusal.
+                let why = error.localizedDescription
+                if !why.hasPrefix("The keyboard and mouse are already") { self.lastNote = why }
                 self.cooldownUntil = Date().addingTimeInterval(3)
                 self.mode = .idle
                 self.batch = EdgeBatch()
