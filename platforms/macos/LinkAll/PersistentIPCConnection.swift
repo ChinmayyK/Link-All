@@ -25,11 +25,16 @@ private final class ResumeGuard: @unchecked Sendable {
 actor PersistentIPCConnection {
     private var connection: NWConnection?
     private let socketPath: String
+    /// Longest a request may wait for its reply. The slowest commands wait on
+    /// another device (a remote files query gives up after 10 s), so this only
+    /// trips when the daemon itself has stopped answering.
+    private let requestTimeout: TimeInterval
     private var requestQueue: [CheckedContinuation<Void, Never>] = []
     private var isExecutingRequest = false
     
-    init(socketPath: String) {
+    init(socketPath: String, requestTimeout: TimeInterval = 30) {
         self.socketPath = socketPath
+        self.requestTimeout = requestTimeout
     }
     
     private func acquireLock() async {
@@ -101,8 +106,20 @@ actor PersistentIPCConnection {
         await acquireLock()
         defer { releaseLock() }
         
+        // A daemon that accepts but never answers would otherwise hold this
+        // request, and every one queued behind it, forever. Cancelling the
+        // connection fails the pending send or receive.
+        let timedOut = ResumeGuard()
+        var timer: DispatchWorkItem?
+        defer { timer?.cancel() }
+
         do {
             let conn = try await ensureConnection()
+            let deadline = DispatchWorkItem {
+                if timedOut.tryResume() { conn.cancel() }
+            }
+            timer = deadline
+            DispatchQueue.global().asyncAfter(deadline: .now() + requestTimeout, execute: deadline)
             let payload = try JSONSerialization.data(withJSONObject: cmd) + Data("\n".utf8)
             
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -119,6 +136,8 @@ actor PersistentIPCConnection {
         } catch {
             connection?.cancel()
             connection = nil
+            // Once the deadline has fired, any error here came from cancelling.
+            if !timedOut.tryResume() { throw LinkAllIPCError.timedOut }
             throw error
         }
     }

@@ -596,7 +596,8 @@ final class LinkAllStore: ObservableObject {
                 ? "Daemon not running"
                 : "Reconnecting to daemon…")
             set(\.dashboardStatus, nil)
-            if case LinkAllIPCError.connectionFailed = error {
+            // A daemon that stopped answering is restarted like one that is gone.
+            if let error = error as? LinkAllIPCError, error == .connectionFailed || error == .timedOut {
                 NotificationCenter.default.post(name: .linkallEnsureDaemon, object: nil)
             }
         }
